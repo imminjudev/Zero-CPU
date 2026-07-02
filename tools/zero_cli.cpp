@@ -1,4 +1,5 @@
-#include "zero_cpu/core/CPUState.hpp"
+#include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/Opcode.hpp"
 #include "zero_cpu/isa/Operand.hpp"
@@ -9,83 +10,90 @@
 int main() {
     using namespace zero_cpu;
 
-    std::cout << "=== Zero-CPU Initial State ===\n";
-
-    CPUState state;
-
-    std::cout << state.summary() << "\n";
-
-    std::cout << "=== Manual CPU State Test ===\n";
-
-    state.registers().set(RegisterName::R1, 10);
-    state.registers().set(RegisterName::R2, 20);
-
-    const auto result =
-        state.registers().get(RegisterName::R1)
-        + state.registers().get(RegisterName::R2);
-
-    state.registers().set(RegisterName::R1, result);
-    state.flags().updateZeroAndSign(result);
-    state.advancePc();
-
-    state.memory().write(100, result);
-
-    std::cout << state.summary();
-    std::cout << "Memory: " << state.memory().dumpRange(96, 8) << "\n\n";
-
-    std::cout << "=== ISA Instruction Model Test ===\n";
-
-    const Instruction movR1(
-        Opcode::MOV,
-        Operand::registerOperand(RegisterName::R1),
-        Operand::immediate(10)
-    );
-
-    const Instruction movR2(
-        Opcode::MOV,
-        Operand::registerOperand(RegisterName::R2),
-        Operand::immediate(20)
-    );
-
-    const Instruction add(
-        Opcode::ADD,
-        Operand::registerOperand(RegisterName::R1),
-        Operand::registerOperand(RegisterName::R2)
-    );
-
-    const Instruction store(
-        Opcode::STORE,
-        Operand::memoryAddress(100),
-        Operand::registerOperand(RegisterName::R1)
-    );
-
-    const Instruction halt(Opcode::HALT);
-
     std::vector<Instruction> program = {
-        movR1,
-        movR2,
-        add,
-        store,
-        halt
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(10)
+        ),
+
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::immediate(20)
+        ),
+
+        Instruction(
+            Opcode::ADD,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::registerOperand(RegisterName::R2)
+        ),
+
+        Instruction(
+            Opcode::SUB,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(5)
+        ),
+
+        Instruction(Opcode::HALT)
     };
 
-    for (std::size_t i = 0; i < program.size(); ++i) {
+    CPU cpu;
+    cpu.loadProgram(program);
+
+    std::cout << "=== Zero-CPU Program ===\n";
+
+    const auto& loadedProgram = cpu.program();
+
+    for (std::size_t i = 0; i < loadedProgram.size(); ++i) {
         std::cout << "[" << i << "] "
-                  << program[i].toString()
+                  << loadedProgram[i].toString()
                   << "\n";
     }
 
     std::cout << "\n";
 
-    std::cout << "=== Opcode Parse Test ===\n";
+    std::cout << "=== Initial CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
 
-    const auto parsedAdd = opcodeFromString("add");
-    const auto parsedJump = opcodeFromString("JMP");
-    const auto parsedInvalid = opcodeFromString("hello");
+    std::cout << "=== Step Execution ===\n";
 
-    std::cout << "add   -> " << opcodeToString(parsedAdd) << "\n";
-    std::cout << "JMP   -> " << opcodeToString(parsedJump) << "\n";
-    std::cout << "hello -> " << opcodeToString(parsedInvalid) << "\n";
+    std::size_t stepCount = 0;
+
+    while (!cpu.state().halted()) {
+        const std::size_t pcBefore = cpu.state().pc();
+
+        if (pcBefore >= cpu.program().size()) {
+            std::cout << "PC out of program range.\n";
+            break;
+        }
+
+        const Instruction& instruction = cpu.program()[pcBefore];
+
+        std::cout << "Step " << stepCount
+                  << " | PC=" << pcBefore
+                  << " | " << instruction.toString()
+                  << "\n";
+
+        cpu.step();
+
+        std::cout << cpu.state().summary() << "\n";
+
+        ++stepCount;
+    }
+
+    std::cout << "=== Final CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
+
+    if (cpu.state().hasError()) {
+        std::cout << "Execution failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+
+        return 1;
+    }
+
+    std::cout << "Execution finished successfully.\n";
 
     return 0;
 }
