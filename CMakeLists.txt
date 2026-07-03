@@ -21,11 +21,16 @@ add_library(zero_cpu_core
     src/isa/Opcode.cpp
     src/isa/Operand.cpp
     src/isa/Instruction.cpp
+    src/isa/InstructionEncoder.cpp
+    src/isa/InstructionDecoder.cpp
 
     src/trace/TraceEvent.cpp
     src/trace/TraceLogger.cpp
 
     src/assembler/Assembler.cpp
+
+    src/binary/BinaryWriter.cpp
+    src/binary/BinaryReader.cpp
 )
 
 target_include_directories(zero_cpu_core
