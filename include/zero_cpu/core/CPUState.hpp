@@ -11,7 +11,7 @@ namespace zero_cpu {
 
 class CPUState {
 public:
-    static constexpr std::size_t kDefaultStackBase = 256;
+    static constexpr std::size_t kDefaultStackBase = 2048;
 
     CPUState();
 

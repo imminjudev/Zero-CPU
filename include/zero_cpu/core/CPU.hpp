@@ -13,6 +13,7 @@
 
 namespace zero_cpu {
 
+
 class CPU {
 public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;

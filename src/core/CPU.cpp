@@ -8,6 +8,12 @@
 
 namespace zero_cpu {
 
+namespace {
+
+constexpr std::size_t kStackSlotSize = 8;
+
+}
+
 CPU::CPU()
     : state_(),
       program_(),
@@ -375,70 +381,70 @@ void CPU::executeJl(const Instruction& instruction) {
 void CPU::executePush(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
-    if (!instruction.dst().isRegister() && !instruction.dst().isImmediate()) {
-        throw std::runtime_error("PUSH operand must be register or immediate");
-    }
+    const std::int64_t value = readOperandValue(instruction.dst());
 
     ensureStackCanPush();
 
-    const std::int64_t value = readOperandValue(instruction.dst());
-    const std::size_t address = state_.sp();
+    const std::size_t sp = state_.sp();
 
-    state_.memory().write(address, value);
-    state_.setSp(address + 1);
+    state_.memory().write(sp, value);
+    state_.setSp(sp + kStackSlotSize);
     state_.advancePc();
 }
 
 void CPU::executePop(const Instruction& instruction) {
+    requireSingleOperand(instruction);
     requireRegisterDestination(instruction);
-
-    if (instruction.hasSource()) {
-        throw std::runtime_error("POP does not accept source operand");
-    }
 
     ensureStackCanPop();
 
-    const std::size_t address = state_.sp() - 1;
-    const std::int64_t value = state_.memory().read(address);
+    const std::size_t newSp = state_.sp() - kStackSlotSize;
+    const std::int64_t value = state_.memory().read(newSp);
 
-    state_.setSp(address);
-    writeOperandValue(instruction.dst(), value);
+    state_.setSp(newSp);
+    state_.registers().set(instruction.dst().asRegister(), value);
     state_.advancePc();
 }
 
 void CPU::executeCall(const Instruction& instruction) {
-    requireLabelDestination(instruction);
+    requireSingleOperand(instruction);
+
+    const std::size_t target = resolveLabelAddress(instruction.dst());
+
     ensureStackCanPush();
 
-    const std::size_t return_address = state_.pc() + 1;
-    const std::size_t stack_address = state_.sp();
+    const std::size_t sp = state_.sp();
+    const std::size_t returnAddress = state_.pc() + 1;
 
-    state_.memory().write(stack_address, static_cast<std::int64_t>(return_address));
-    state_.setSp(stack_address + 1);
+    state_.memory().write(
+        sp,
+        static_cast<std::int64_t>(returnAddress)
+    );
 
-    branchToLabel(instruction.dst());
+    state_.setSp(sp + kStackSlotSize);
+    state_.setPc(target);
 }
 
 void CPU::executeRet(const Instruction& instruction) {
     requireNoOperand(instruction);
+
     ensureStackCanPop();
 
-    const std::size_t stack_address = state_.sp() - 1;
-    const std::int64_t raw_return_address = state_.memory().read(stack_address);
+    const std::size_t newSp = state_.sp() - kStackSlotSize;
+    const std::int64_t returnAddress = state_.memory().read(newSp);
 
-    if (raw_return_address < 0) {
-        throw std::runtime_error("Invalid negative return address");
+    if (returnAddress < 0) {
+        throw std::runtime_error("Invalid return address");
     }
 
-    const std::size_t return_address =
-        static_cast<std::size_t>(raw_return_address);
+    const auto target = static_cast<std::size_t>(returnAddress);
 
-    if (return_address >= program_.size()) {
+    if (target >= program_.size()) {
         throw std::runtime_error("Return address out of program range");
     }
 
-    state_.setSp(stack_address);
-    state_.setPc(return_address);
+    state_.setSp(newSp);
+    state_.setPc(target);
 }
 
 void CPU::branchToLabel(const Operand& operand) {
@@ -519,14 +525,26 @@ void CPU::writeOperandValue(const Operand& operand, std::int64_t value) {
 }
 
 void CPU::ensureStackCanPush() const {
-    if (state_.sp() >= state_.memory().size()) {
+    const std::size_t sp = state_.sp();
+
+    if (sp > state_.memory().size()) {
+        throw std::runtime_error("Stack pointer out of range");
+    }
+
+    if (kStackSlotSize > state_.memory().size() - sp) {
         throw std::runtime_error("Stack overflow");
     }
 }
 
 void CPU::ensureStackCanPop() const {
-    if (state_.sp() <= CPUState::kDefaultStackBase) {
+    const std::size_t sp = state_.sp();
+
+    if (sp < CPUState::kDefaultStackBase + kStackSlotSize) {
         throw std::runtime_error("Stack underflow");
+    }
+
+    if (sp > state_.memory().size()) {
+        throw std::runtime_error("Stack pointer out of range");
     }
 }
 

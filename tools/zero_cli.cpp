@@ -10,6 +10,12 @@
 
 namespace {
 
+constexpr std::size_t kDataViewStart = 96;
+constexpr std::size_t kDataViewCount = 16;
+
+constexpr std::size_t kStackViewStart = 2048;
+constexpr std::size_t kStackViewCount = 32;
+
 void printProgram(
     const std::vector<zero_cpu::Instruction>& program,
     const zero_cpu::CPU::LabelTable& labels
@@ -32,12 +38,18 @@ void printProgram(
 }
 
 void printMemoryViews(const zero_cpu::CPU& cpu) {
-    std::cout << "Memory[96..103]: "
-              << cpu.state().memory().dumpRange(96, 8)
+    std::cout << "Memory[96..111]: "
+              << cpu.state().memory().dumpRange(
+                     kDataViewStart,
+                     kDataViewCount
+                 )
               << "\n";
 
-    std::cout << "Stack[252..263]: "
-              << cpu.state().memory().dumpRange(252, 12)
+    std::cout << "Stack[2048..2079]: "
+              << cpu.state().memory().dumpRange(
+                     kStackViewStart,
+                     kStackViewCount
+                 )
               << "\n";
 }
 
@@ -126,18 +138,23 @@ int main(int argc, char* argv[]) {
         std::cout << "=== Compact Trace Log ===\n";
         std::cout << cpu.traceLogger().compactString() << "\n";
 
-        const auto finalR1 = cpu.state().registers().get(RegisterName::R1);
-        const auto finalR2 = cpu.state().registers().get(RegisterName::R2);
+        const auto finalR1 =
+            cpu.state().registers().get(RegisterName::R1);
+
+        const auto finalR2 =
+            cpu.state().registers().get(RegisterName::R2);
 
         std::cout << "Final Check:\n";
         std::cout << "R1 = " << finalR1 << "\n";
         std::cout << "R2 = " << finalR2 << "\n";
         std::cout << "SP = " << cpu.state().sp() << "\n";
+
         std::cout << "Memory[100] = "
                   << cpu.state().memory().read(100)
                   << "\n";
-        std::cout << "Memory[256] = "
-                  << cpu.state().memory().read(256)
+
+        std::cout << "Memory[2048] = "
+                  << cpu.state().memory().read(2048)
                   << "\n";
 
         std::cout << "\nExecution finished successfully.\n";
