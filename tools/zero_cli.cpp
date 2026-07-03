@@ -1,10 +1,11 @@
+#include "zero_cpu/assembler/Assembler.hpp"
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
-#include "zero_cpu/isa/Opcode.hpp"
-#include "zero_cpu/isa/Operand.hpp"
 
+#include <exception>
 #include <iostream>
+#include <string>
 #include <vector>
 
 namespace {
@@ -83,104 +84,70 @@ void runStepByStep(zero_cpu::CPU& cpu) {
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
     using namespace zero_cpu;
 
-    std::vector<Instruction> program = {
-        Instruction(
-            Opcode::MOV,
-            Operand::registerOperand(RegisterName::R1),
-            Operand::immediate(10)
-        ),
+    const std::string inputPath =
+        argc >= 2
+            ? argv[1]
+            : "examples/function_call.zasm";
 
-        Instruction(
-            Opcode::CALL,
-            Operand::label("double_value")
-        ),
+    try {
+        Assembler assembler;
+        AssembledProgram assembled = assembler.assembleFile(inputPath);
 
-        Instruction(
-            Opcode::STORE,
-            Operand::memoryAddress(100),
-            Operand::registerOperand(RegisterName::R1)
-        ),
+        CPU cpu;
+        cpu.loadProgram(assembled.instructions, assembled.labels);
 
-        Instruction(
-            Opcode::PUSH,
-            Operand::registerOperand(RegisterName::R1)
-        ),
+        std::cout << "Input file: " << inputPath << "\n\n";
 
-        Instruction(
-            Opcode::MOV,
-            Operand::registerOperand(RegisterName::R1),
-            Operand::immediate(0)
-        ),
+        printProgram(cpu.program(), cpu.labels());
 
-        Instruction(
-            Opcode::POP,
-            Operand::registerOperand(RegisterName::R2)
-        ),
+        std::cout << "=== Initial CPU State ===\n";
+        std::cout << cpu.state().summary();
+        printMemoryViews(cpu);
+        std::cout << "\n";
 
-        Instruction(Opcode::HALT),
+        runStepByStep(cpu);
 
-        Instruction(
-            Opcode::ADD,
-            Operand::registerOperand(RegisterName::R1),
-            Operand::registerOperand(RegisterName::R1)
-        ),
+        std::cout << "=== Final CPU State ===\n";
+        std::cout << cpu.state().summary();
+        printMemoryViews(cpu);
+        std::cout << "\n";
 
-        Instruction(Opcode::RET)
-    };
+        if (cpu.state().hasError()) {
+            std::cout << "Execution failed: "
+                      << cpu.state().errorMessage()
+                      << "\n";
 
-    CPU::LabelTable labels = {
-        {"double_value", 7}
-    };
+            return 1;
+        }
 
-    CPU cpu;
-    cpu.loadProgram(program, labels);
+        std::cout << "=== Compact Trace Log ===\n";
+        std::cout << cpu.traceLogger().compactString() << "\n";
 
-    printProgram(cpu.program(), cpu.labels());
+        const auto finalR1 = cpu.state().registers().get(RegisterName::R1);
+        const auto finalR2 = cpu.state().registers().get(RegisterName::R2);
 
-    std::cout << "=== Initial CPU State ===\n";
-    std::cout << cpu.state().summary();
-    printMemoryViews(cpu);
-    std::cout << "\n";
+        std::cout << "Final Check:\n";
+        std::cout << "R1 = " << finalR1 << "\n";
+        std::cout << "R2 = " << finalR2 << "\n";
+        std::cout << "SP = " << cpu.state().sp() << "\n";
+        std::cout << "Memory[100] = "
+                  << cpu.state().memory().read(100)
+                  << "\n";
+        std::cout << "Memory[256] = "
+                  << cpu.state().memory().read(256)
+                  << "\n";
 
-    runStepByStep(cpu);
+        std::cout << "\nExecution finished successfully.\n";
 
-    std::cout << "=== Final CPU State ===\n";
-    std::cout << cpu.state().summary();
-    printMemoryViews(cpu);
-    std::cout << "\n";
-
-    if (cpu.state().hasError()) {
-        std::cout << "Execution failed: "
-                  << cpu.state().errorMessage()
-                  << "\n\n";
+        return 0;
+    } catch (const std::exception& ex) {
+        std::cerr << "Assembler or execution error: "
+                  << ex.what()
+                  << "\n";
 
         return 1;
     }
-
-    std::cout << "=== Compact Trace Log ===\n";
-    std::cout << cpu.traceLogger().compactString() << "\n";
-
-    std::cout << "=== Full Trace Log ===\n";
-    std::cout << cpu.traceLogger().fullString() << "\n";
-
-    const auto finalR1 = cpu.state().registers().get(RegisterName::R1);
-    const auto finalR2 = cpu.state().registers().get(RegisterName::R2);
-
-    std::cout << "Final Check:\n";
-    std::cout << "R1 = " << finalR1 << "\n";
-    std::cout << "R2 = " << finalR2 << "\n";
-    std::cout << "SP = " << cpu.state().sp() << "\n";
-    std::cout << "Memory[100] = "
-              << cpu.state().memory().read(100)
-              << "\n";
-    std::cout << "Memory[256] = "
-              << cpu.state().memory().read(256)
-              << "\n";
-
-    std::cout << "\nExecution finished successfully.\n";
-
-    return 0;
 }

@@ -24,6 +24,8 @@ add_library(zero_cpu_core
 
     src/trace/TraceEvent.cpp
     src/trace/TraceLogger.cpp
+
+    src/assembler/Assembler.cpp
 )
 
 target_include_directories(zero_cpu_core
