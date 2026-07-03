@@ -30,6 +30,16 @@ void printProgram(
     std::cout << "\n";
 }
 
+void printMemoryViews(const zero_cpu::CPU& cpu) {
+    std::cout << "Memory[96..103]: "
+              << cpu.state().memory().dumpRange(96, 8)
+              << "\n";
+
+    std::cout << "Stack[252..263]: "
+              << cpu.state().memory().dumpRange(252, 12)
+              << "\n";
+}
+
 void runStepByStep(zero_cpu::CPU& cpu) {
     std::cout << "=== Step Execution With Trace ===\n";
 
@@ -57,6 +67,9 @@ void runStepByStep(zero_cpu::CPU& cpu) {
                       << "\n";
         }
 
+        std::cout << "Current State:\n";
+        std::cout << cpu.state().summary();
+        printMemoryViews(cpu);
         std::cout << "\n";
 
         ++stepCount;
@@ -77,30 +90,12 @@ int main() {
         Instruction(
             Opcode::MOV,
             Operand::registerOperand(RegisterName::R1),
-            Operand::immediate(0)
+            Operand::immediate(10)
         ),
 
         Instruction(
-            Opcode::MOV,
-            Operand::registerOperand(RegisterName::R2),
-            Operand::immediate(5)
-        ),
-
-        Instruction(
-            Opcode::ADD,
-            Operand::registerOperand(RegisterName::R1),
-            Operand::immediate(1)
-        ),
-
-        Instruction(
-            Opcode::CMP,
-            Operand::registerOperand(RegisterName::R1),
-            Operand::registerOperand(RegisterName::R2)
-        ),
-
-        Instruction(
-            Opcode::JL,
-            Operand::label("loop")
+            Opcode::CALL,
+            Operand::label("double_value")
         ),
 
         Instruction(
@@ -109,11 +104,35 @@ int main() {
             Operand::registerOperand(RegisterName::R1)
         ),
 
-        Instruction(Opcode::HALT)
+        Instruction(
+            Opcode::PUSH,
+            Operand::registerOperand(RegisterName::R1)
+        ),
+
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(0)
+        ),
+
+        Instruction(
+            Opcode::POP,
+            Operand::registerOperand(RegisterName::R2)
+        ),
+
+        Instruction(Opcode::HALT),
+
+        Instruction(
+            Opcode::ADD,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+
+        Instruction(Opcode::RET)
     };
 
     CPU::LabelTable labels = {
-        {"loop", 2}
+        {"double_value", 7}
     };
 
     CPU cpu;
@@ -123,31 +142,29 @@ int main() {
 
     std::cout << "=== Initial CPU State ===\n";
     std::cout << cpu.state().summary();
+    printMemoryViews(cpu);
     std::cout << "\n";
 
     runStepByStep(cpu);
 
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary();
-    std::cout << "Memory[96..103]: "
-              << cpu.state().memory().dumpRange(96, 8)
-              << "\n\n";
+    printMemoryViews(cpu);
+    std::cout << "\n";
 
     if (cpu.state().hasError()) {
         std::cout << "Execution failed: "
                   << cpu.state().errorMessage()
                   << "\n\n";
+
+        return 1;
     }
 
     std::cout << "=== Compact Trace Log ===\n";
     std::cout << cpu.traceLogger().compactString() << "\n";
 
-    std::cout << "=== Last Trace Event Full View ===\n";
-
-    if (!cpu.traceLogger().empty()) {
-        std::cout << cpu.traceLogger().last().toFullString()
-                  << "\n";
-    }
+    std::cout << "=== Full Trace Log ===\n";
+    std::cout << cpu.traceLogger().fullString() << "\n";
 
     const auto finalR1 = cpu.state().registers().get(RegisterName::R1);
     const auto finalR2 = cpu.state().registers().get(RegisterName::R2);
@@ -155,15 +172,13 @@ int main() {
     std::cout << "Final Check:\n";
     std::cout << "R1 = " << finalR1 << "\n";
     std::cout << "R2 = " << finalR2 << "\n";
-    std::cout << "ZF = " << (cpu.state().flags().zero() ? 1 : 0) << "\n";
-    std::cout << "SF = " << (cpu.state().flags().sign() ? 1 : 0) << "\n";
+    std::cout << "SP = " << cpu.state().sp() << "\n";
     std::cout << "Memory[100] = "
               << cpu.state().memory().read(100)
               << "\n";
-
-    if (cpu.state().hasError()) {
-        return 1;
-    }
+    std::cout << "Memory[256] = "
+              << cpu.state().memory().read(256)
+              << "\n";
 
     std::cout << "\nExecution finished successfully.\n";
 

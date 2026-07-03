@@ -174,6 +174,22 @@ void CPU::execute(const Instruction& instruction) {
         executeJl(instruction);
         break;
 
+    case Opcode::PUSH:
+        executePush(instruction);
+        break;
+
+    case Opcode::POP:
+        executePop(instruction);
+        break;
+
+    case Opcode::CALL:
+        executeCall(instruction);
+        break;
+
+    case Opcode::RET:
+        executeRet(instruction);
+        break;
+
     default:
         throw std::runtime_error(
             "Unsupported opcode in current CPU execution engine: "
@@ -356,6 +372,75 @@ void CPU::executeJl(const Instruction& instruction) {
     branchToLabelIf(instruction.dst(), state_.flags().sign());
 }
 
+void CPU::executePush(const Instruction& instruction) {
+    requireSingleOperand(instruction);
+
+    if (!instruction.dst().isRegister() && !instruction.dst().isImmediate()) {
+        throw std::runtime_error("PUSH operand must be register or immediate");
+    }
+
+    ensureStackCanPush();
+
+    const std::int64_t value = readOperandValue(instruction.dst());
+    const std::size_t address = state_.sp();
+
+    state_.memory().write(address, value);
+    state_.setSp(address + 1);
+    state_.advancePc();
+}
+
+void CPU::executePop(const Instruction& instruction) {
+    requireRegisterDestination(instruction);
+
+    if (instruction.hasSource()) {
+        throw std::runtime_error("POP does not accept source operand");
+    }
+
+    ensureStackCanPop();
+
+    const std::size_t address = state_.sp() - 1;
+    const std::int64_t value = state_.memory().read(address);
+
+    state_.setSp(address);
+    writeOperandValue(instruction.dst(), value);
+    state_.advancePc();
+}
+
+void CPU::executeCall(const Instruction& instruction) {
+    requireLabelDestination(instruction);
+    ensureStackCanPush();
+
+    const std::size_t return_address = state_.pc() + 1;
+    const std::size_t stack_address = state_.sp();
+
+    state_.memory().write(stack_address, static_cast<std::int64_t>(return_address));
+    state_.setSp(stack_address + 1);
+
+    branchToLabel(instruction.dst());
+}
+
+void CPU::executeRet(const Instruction& instruction) {
+    requireNoOperand(instruction);
+    ensureStackCanPop();
+
+    const std::size_t stack_address = state_.sp() - 1;
+    const std::int64_t raw_return_address = state_.memory().read(stack_address);
+
+    if (raw_return_address < 0) {
+        throw std::runtime_error("Invalid negative return address");
+    }
+
+    const std::size_t return_address =
+        static_cast<std::size_t>(raw_return_address);
+
+    if (return_address >= program_.size()) {
+        throw std::runtime_error("Return address out of program range");
+    }
+
+    state_.setSp(stack_address);
+    state_.setPc(return_address);
+}
+
 void CPU::branchToLabel(const Operand& operand) {
     const std::size_t target = resolveLabelAddress(operand);
     state_.setPc(target);
@@ -433,6 +518,18 @@ void CPU::writeOperandValue(const Operand& operand, std::int64_t value) {
     throw std::runtime_error("Cannot write to empty operand");
 }
 
+void CPU::ensureStackCanPush() const {
+    if (state_.sp() >= state_.memory().size()) {
+        throw std::runtime_error("Stack overflow");
+    }
+}
+
+void CPU::ensureStackCanPop() const {
+    if (state_.sp() <= CPUState::kDefaultStackBase) {
+        throw std::runtime_error("Stack underflow");
+    }
+}
+
 void CPU::requireNoOperand(const Instruction& instruction) const {
     if (instruction.hasDestination() || instruction.hasSource()) {
         throw std::runtime_error(
@@ -507,6 +604,17 @@ void CPU::requireLabelDestination(const Instruction& instruction) const {
         throw std::runtime_error(
             opcodeToString(instruction.opcode())
             + " requires label destination operand"
+        );
+    }
+}
+
+void CPU::requireSingleOperand(const Instruction& instruction) const {
+    requireDestination(instruction);
+
+    if (instruction.hasSource()) {
+        throw std::runtime_error(
+            opcodeToString(instruction.opcode())
+            + " accepts only one operand"
         );
     }
 }

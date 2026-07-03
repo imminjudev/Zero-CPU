@@ -66,6 +66,11 @@ private:
     void executeJg(const Instruction& instruction);
     void executeJl(const Instruction& instruction);
 
+    void executePush(const Instruction& instruction);
+    void executePop(const Instruction& instruction);
+    void executeCall(const Instruction& instruction);
+    void executeRet(const Instruction& instruction);
+
     void branchToLabel(const Operand& operand);
     void branchToLabelIf(const Operand& operand, bool condition);
 
@@ -73,6 +78,9 @@ private:
 
     std::int64_t readOperandValue(const Operand& operand) const;
     void writeOperandValue(const Operand& operand, std::int64_t value);
+
+    void ensureStackCanPush() const;
+    void ensureStackCanPop() const;
 
     void requireNoOperand(const Instruction& instruction) const;
     void requireDestination(const Instruction& instruction) const;
@@ -82,6 +90,7 @@ private:
     void requireMemoryDestination(const Instruction& instruction) const;
     void requireMemorySource(const Instruction& instruction) const;
     void requireLabelDestination(const Instruction& instruction) const;
+    void requireSingleOperand(const Instruction& instruction) const;
 };
 
 } // namespace zero_cpu
