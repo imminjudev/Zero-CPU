@@ -6,6 +6,7 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
+#include "zero_cpu/isa/InstructionEncoder.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -126,7 +128,7 @@ int runBinaryTest(const std::string& outputPath) {
     program.header.endianness = BinaryEndianness::Little;
     program.header.entry_point = 0;
 
-    program.code.resize(kInstructionSize * 2, 0);
+    program.code.resize(kInstructionSize * 2, std::uint8_t{0});
 
     // Instruction 0: NOP
     program.code[0] = 0x00;
@@ -176,6 +178,52 @@ int runBinaryTest(const std::string& outputPath) {
     printHexBytes(loaded.code);
 
     std::cout << "\nBinary writer/reader test finished successfully.\n";
+
+    return 0;
+}
+
+int assembleToBinary(
+    const std::string& inputPath,
+    const std::string& outputPath
+) {
+    using namespace zero_cpu;
+
+    Assembler assembler;
+    AssembledProgram assembled = assembler.assembleFile(inputPath);
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code = encoder.encodeProgram(
+        assembled.instructions,
+        assembled.labels
+    );
+
+    binary::BinaryProgram program;
+
+    program.header.major_version = binary::kMajorVersion;
+    program.header.minor_version = binary::kMinorVersion;
+    program.header.endianness = binary::BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size = static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    binary::BinaryWriter writer;
+    writer.writeFile(outputPath, program);
+
+    binary::BinaryReader reader;
+    const binary::BinaryProgram verified = reader.readFile(outputPath);
+
+    std::cout << "Assemble completed successfully.\n";
+    std::cout << "Input: " << inputPath << "\n";
+    std::cout << "Output: " << outputPath << "\n";
+    std::cout << "Instruction count: "
+              << assembled.instructions.size()
+              << "\n";
+    std::cout << "Code size: "
+              << verified.header.code_size
+              << " bytes\n";
+    std::cout << "Entry point: "
+              << verified.header.entry_point
+              << "\n";
 
     return 0;
 }
@@ -240,17 +288,45 @@ int runAssemblyProgram(const std::string& inputPath) {
     return 0;
 }
 
+void printUsage() {
+    std::cout << "Zero-CPU CLI\n\n";
+    std::cout << "Usage:\n";
+    std::cout << "  zero_cli\n";
+    std::cout << "  zero_cli <input.zasm>\n";
+    std::cout << "  zero_cli binary-test [output.zbin]\n";
+    std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc >= 2 && std::string(argv[1]) == "binary-test") {
-            const std::string outputPath =
-                argc >= 3
-                    ? argv[2]
-                    : "examples/binary_test.zbin";
+        if (argc >= 2) {
+            const std::string command = argv[1];
 
-            return runBinaryTest(outputPath);
+            if (command == "help" || command == "--help" || command == "-h") {
+                printUsage();
+                return 0;
+            }
+
+            if (command == "binary-test") {
+                const std::string outputPath =
+                    argc >= 3
+                        ? argv[2]
+                        : "examples/binary_test.zbin";
+
+                return runBinaryTest(outputPath);
+            }
+
+            if (command == "assemble") {
+                if (argc != 4) {
+                    std::cerr << "Invalid assemble command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return assembleToBinary(argv[2], argv[3]);
+            }
         }
 
         const std::string inputPath =
