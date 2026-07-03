@@ -5,65 +5,79 @@
 namespace zero_cpu {
 
 Flags::Flags()
-    : zero_flag_(false),
-      sign_flag_(false),
-      overflow_flag_(false),
-      carry_flag_(false) {
-}
-
-bool Flags::zero() const {
-    return zero_flag_;
-}
-
-bool Flags::sign() const {
-    return sign_flag_;
-}
-
-bool Flags::overflow() const {
-    return overflow_flag_;
-}
-
-bool Flags::carry() const {
-    return carry_flag_;
-}
-
-void Flags::setZero(bool value) {
-    zero_flag_ = value;
-}
-
-void Flags::setSign(bool value) {
-    sign_flag_ = value;
-}
-
-void Flags::setOverflow(bool value) {
-    overflow_flag_ = value;
-}
-
-void Flags::setCarry(bool value) {
-    carry_flag_ = value;
+    : bits_(0) {
 }
 
 void Flags::reset() {
-    zero_flag_ = false;
-    sign_flag_ = false;
-    overflow_flag_ = false;
-    carry_flag_ = false;
+    bits_ = 0;
+}
+
+std::uint32_t Flags::raw() const {
+    return bits_;
+}
+
+void Flags::setRaw(std::uint32_t value) {
+    bits_ = value;
+}
+
+bool Flags::carry() const {
+    return test(CF);
+}
+
+bool Flags::zero() const {
+    return test(ZF);
+}
+
+bool Flags::sign() const {
+    return test(SF);
+}
+
+bool Flags::overflow() const {
+    return test(OF);
+}
+
+void Flags::setCarry(bool value) {
+    set(CF, value);
+}
+
+void Flags::setZero(bool value) {
+    set(ZF, value);
+}
+
+void Flags::setSign(bool value) {
+    set(SF, value);
+}
+
+void Flags::setOverflow(bool value) {
+    set(OF, value);
 }
 
 void Flags::updateZeroAndSign(std::int64_t result) {
-    zero_flag_ = (result == 0);
-    sign_flag_ = (result < 0);
+    setZero(result == 0);
+    setSign(result < 0);
 }
 
 std::string Flags::toString() const {
-    std::ostringstream oss;
+    std::ostringstream out;
 
-    oss << "ZF=" << (zero_flag_ ? 1 : 0)
-        << " SF=" << (sign_flag_ ? 1 : 0)
-        << " OF=" << (overflow_flag_ ? 1 : 0)
-        << " CF=" << (carry_flag_ ? 1 : 0);
+    out << "ZF=" << (zero() ? 1 : 0)
+        << " SF=" << (sign() ? 1 : 0)
+        << " OF=" << (overflow() ? 1 : 0)
+        << " CF=" << (carry() ? 1 : 0);
 
-    return oss.str();
+    return out.str();
+}
+
+bool Flags::test(std::uint32_t mask) const {
+    return (bits_ & mask) != 0;
+}
+
+void Flags::set(std::uint32_t mask, bool value) {
+    if (value) {
+        bits_ |= mask;
+    } else {
+        bits_ &= ~mask;
+    }
 }
 
 } // namespace zero_cpu
