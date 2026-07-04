@@ -120,6 +120,39 @@ void printHexBytes(const std::vector<std::uint8_t>& bytes) {
     std::cout << std::dec << "\n";
 }
 
+void printBinaryHeader(const zero_cpu::binary::BinaryProgram& program) {
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Binary Header ===\n";
+    std::cout << "Magic: " << magicString() << "\n";
+
+    std::cout << "Version: "
+              << static_cast<int>(program.header.major_version)
+              << "."
+              << static_cast<int>(program.header.minor_version)
+              << "\n";
+
+    std::cout << "Endianness: "
+              << (
+                     program.header.endianness == BinaryEndianness::Little
+                         ? "Little"
+                         : "Big"
+                 )
+              << "\n";
+
+    std::cout << "Entry Point: "
+              << program.header.entry_point
+              << "\n";
+
+    std::cout << "Code Size: "
+              << program.header.code_size
+              << " bytes\n";
+
+    std::cout << "Instruction Count: "
+              << program.code.size() / kInstructionSize
+              << "\n";
+}
+
 void printDecodedInstruction(
     std::size_t index,
     const zero_cpu::DecodedInstruction& instruction
@@ -144,6 +177,32 @@ void printDecodedInstruction(
               << instruction.src_payload;
 
     std::cout << "\n";
+}
+
+void printDecodedInstructions(const std::vector<std::uint8_t>& code) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Decoded Instructions ===\n";
+
+    InstructionDecoder decoder;
+
+    for (
+        std::size_t offset = 0;
+        offset < code.size();
+        offset += kInstructionSize
+    ) {
+        std::vector<std::uint8_t> instructionBytes(
+            code.begin() + offset,
+            code.begin() + offset + kInstructionSize
+        );
+
+        const DecodedInstruction decoded =
+            decoder.decodeInstruction(instructionBytes);
+
+        const std::size_t index = offset / kInstructionSize;
+        printDecodedInstruction(index, decoded);
+    }
 }
 
 int runBinaryTest(const std::string& outputPath) {
@@ -178,61 +237,40 @@ int runBinaryTest(const std::string& outputPath) {
 
     std::cout << "Read binary file successfully.\n\n";
 
-    std::cout << "=== Binary Header ===\n";
-    std::cout << "Magic: " << magicString() << "\n";
-    std::cout << "Version: "
-              << static_cast<int>(loaded.header.major_version)
-              << "."
-              << static_cast<int>(loaded.header.minor_version)
-              << "\n";
-
-    std::cout << "Endianness: "
-              << (
-                     loaded.header.endianness == BinaryEndianness::Little
-                         ? "Little"
-                         : "Big"
-                 )
-              << "\n";
-
-    std::cout << "Entry Point: "
-              << loaded.header.entry_point
-              << "\n";
-
-    std::cout << "Code Size: "
-              << loaded.header.code_size
-              << " bytes\n";
-
-    std::cout << "Instruction Count: "
-              << loaded.code.size() / kInstructionSize
-              << "\n\n";
+    printBinaryHeader(loaded);
+    std::cout << "\n";
 
     std::cout << "=== Code Bytes ===\n";
     printHexBytes(loaded.code);
     std::cout << "\n";
 
-    std::cout << "=== Decoded Instructions ===\n";
-
-    InstructionDecoder decoder;
-
-    for (
-        std::size_t offset = 0;
-        offset < loaded.code.size();
-        offset += kInstructionSize
-    ) {
-        std::vector<std::uint8_t> instructionBytes(
-            loaded.code.begin() + offset,
-            loaded.code.begin() + offset + kInstructionSize
-        );
-
-        const DecodedInstruction decoded =
-            decoder.decodeInstruction(instructionBytes);
-
-        const std::size_t index = offset / kInstructionSize;
-        printDecodedInstruction(index, decoded);
-    }
-
+    printDecodedInstructions(loaded.code);
     std::cout << "\n";
+
     std::cout << "Binary encoder/writer/reader/decoder test finished successfully.\n";
+
+    return 0;
+}
+
+int dumpBinaryFile(const std::string& inputPath) {
+    using namespace zero_cpu::binary;
+
+    BinaryReader reader;
+    BinaryProgram loaded = reader.readFile(inputPath);
+
+    std::cout << "Input binary file: " << inputPath << "\n\n";
+
+    printBinaryHeader(loaded);
+    std::cout << "\n";
+
+    std::cout << "=== Code Bytes ===\n";
+    printHexBytes(loaded.code);
+    std::cout << "\n";
+
+    printDecodedInstructions(loaded.code);
+    std::cout << "\n";
+
+    std::cout << "Binary dump finished successfully.\n";
 
     return 0;
 }
@@ -350,6 +388,7 @@ void printUsage() {
     std::cout << "  zero_cli <input.zasm>\n";
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
+    std::cout << "  zero_cli dump-binary <input.zbin>\n";
 }
 
 } // namespace
@@ -381,6 +420,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 return assembleToBinary(argv[2], argv[3]);
+            }
+
+            if (command == "dump-binary") {
+                if (argc != 3) {
+                    std::cerr << "Invalid dump-binary command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return dumpBinaryFile(argv[2]);
             }
         }
 
