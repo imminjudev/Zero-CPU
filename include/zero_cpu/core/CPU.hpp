@@ -2,6 +2,7 @@
 
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/core/CPUState.hpp"
+#include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/trace/TraceLogger.hpp"
 
@@ -57,6 +58,11 @@ private:
     std::size_t binary_code_base_ = 0;
     std::size_t binary_entry_point_ = 0;
     std::size_t binary_code_size_ = 0;
+
+    void stepBinary();
+    bool isBinaryPcInCode(std::size_t pc) const;
+    void executeBinaryInstruction(const DecodedInstruction& instruction);
+    void requireNoBinaryOperands(const DecodedInstruction& instruction) const;
 
     void execute(const Instruction& instruction);
 

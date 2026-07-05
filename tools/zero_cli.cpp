@@ -385,6 +385,55 @@ int cpuLoadBinaryFile(const std::string& inputPath) {
     return 0;
 }
 
+int runBinaryFile(const std::string& inputPath) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    BinaryReader reader;
+    BinaryProgram program = reader.readFile(inputPath);
+
+    CPU cpu;
+    cpu.loadBinaryProgram(program);
+
+    std::cout << "Input binary file: " << inputPath << "\n\n";
+
+    printBinaryHeader(program);
+    std::cout << "\n";
+
+    std::cout << "=== Binary Execution ===\n";
+
+    std::size_t stepCount = 0;
+
+    while (!cpu.state().halted()) {
+        std::cout << "Step " << stepCount
+                  << " | PC=" << cpu.state().pc()
+                  << "\n";
+
+        cpu.step();
+
+        std::cout << cpu.state().summary()
+                  << "\n";
+
+        if (cpu.state().hasError()) {
+            std::cout << "Execution failed: "
+                      << cpu.state().errorMessage()
+                      << "\n";
+            return 1;
+        }
+
+        ++stepCount;
+
+        if (stepCount > 100) {
+            std::cout << "Step limit reached in binary execution.\n";
+            return 1;
+        }
+    }
+
+    std::cout << "Binary execution finished successfully.\n";
+
+    return 0;
+}
+
 int assembleToBinary(
     const std::string& inputPath,
     const std::string& outputPath
@@ -501,6 +550,7 @@ void printUsage() {
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
+    std::cout << "  zero_cli run-binary <input.zbin>\n";
 }
 
 } // namespace
@@ -562,6 +612,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 return cpuLoadBinaryFile(argv[2]);
+            }
+
+            if (command == "run-binary") {
+                if (argc != 3) {
+                    std::cerr << "Invalid run-binary command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runBinaryFile(argv[2]);
             }
         }
 

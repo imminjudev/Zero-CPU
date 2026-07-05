@@ -1,8 +1,11 @@
 #include "zero_cpu/core/CPU.hpp"
 
+#include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
+#include "zero_cpu/isa/InstructionDecoder.hpp"
 
 #include <stdexcept>
+#include <vector>
 
 namespace zero_cpu {
 
@@ -61,10 +64,12 @@ void CPU::step() {
     }
 
     if (has_binary_program_) {
-        setRuntimeError(
-            "Binary execution is not implemented yet. "
-            "Current step only supports assembled Instruction programs."
-        );
+        try {
+            stepBinary();
+        } catch (const std::exception& ex) {
+            setRuntimeError(ex.what());
+        }
+
         return;
     }
 
@@ -134,6 +139,78 @@ std::size_t CPU::binaryEntryPoint() const {
 
 std::size_t CPU::binaryCodeSize() const {
     return binary_code_size_;
+}
+
+void CPU::stepBinary() {
+    const std::size_t pc = state_.pc();
+
+    if (!isBinaryPcInCode(pc)) {
+        throw std::runtime_error("Binary PC is outside loaded code section");
+    }
+
+    const std::vector<std::uint8_t> instructionBytes =
+        state_.memory().readBytes(pc, binary::kInstructionSize);
+
+    InstructionDecoder decoder;
+    const DecodedInstruction instruction =
+        decoder.decodeInstruction(instructionBytes);
+
+    executeBinaryInstruction(instruction);
+}
+
+bool CPU::isBinaryPcInCode(std::size_t pc) const {
+    const std::size_t begin = binary_code_base_;
+    const std::size_t end = binary_code_base_ + binary_code_size_;
+
+    if (pc < begin) {
+        return false;
+    }
+
+    if (pc >= end) {
+        return false;
+    }
+
+    if (end - pc < binary::kInstructionSize) {
+        return false;
+    }
+
+    return ((pc - begin) % binary::kInstructionSize) == 0;
+}
+
+void CPU::executeBinaryInstruction(
+    const DecodedInstruction& instruction
+) {
+    switch (instruction.opcode) {
+    case Opcode::NOP:
+        requireNoBinaryOperands(instruction);
+        state_.setPc(state_.pc() + binary::kInstructionSize);
+        break;
+
+    case Opcode::HALT:
+        requireNoBinaryOperands(instruction);
+        state_.halt();
+        break;
+
+    default:
+        throw std::runtime_error(
+            "Binary execution currently supports only NOP and HALT"
+        );
+    }
+}
+
+void CPU::requireNoBinaryOperands(
+    const DecodedInstruction& instruction
+) const {
+    if (
+        instruction.dst_type != EncodedOperandType::None ||
+        instruction.src_type != EncodedOperandType::None ||
+        instruction.dst_payload != 0 ||
+        instruction.src_payload != 0
+    ) {
+        throw std::runtime_error(
+            "Binary instruction requires no operands"
+        );
+    }
 }
 
 void CPU::execute(const Instruction& instruction) {
