@@ -9,7 +9,6 @@
 
 #include <windows.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <exception>
 #include <iomanip>
@@ -37,7 +36,7 @@ constexpr std::size_t kDataViewCount = 16;
 constexpr std::size_t kStackViewStart = 2048;
 constexpr std::size_t kStackViewCount = 32;
 
-constexpr std::size_t kBinaryMemoryPreviewStart = 0;
+constexpr std::size_t kBinaryMemoryPreviewStart = 512;
 constexpr std::size_t kBinaryMemoryPreviewCount = 96;
 
 enum class StudioMode {
@@ -59,6 +58,10 @@ zero_cpu::CPU g_cpu;
 StudioMode g_mode = StudioMode::None;
 bool g_programLoaded = false;
 std::string g_loadedPath;
+
+HMENU controlId(int id) {
+    return reinterpret_cast<HMENU>(static_cast<INT_PTR>(id));
+}
 
 std::string normalizeNewlines(const std::string& text) {
     std::string result;
@@ -237,7 +240,7 @@ std::string makeMemoryView() {
     if (g_mode == StudioMode::Binary) {
         oss << "\n";
         oss << "Binary Code Memory Preview\n";
-        oss << "Memory[0..95] = "
+        oss << "Memory[512..607] = "
             << g_cpu.state().memory().dumpRange(
                    kBinaryMemoryPreviewStart,
                    kBinaryMemoryPreviewCount
@@ -325,21 +328,6 @@ void refreshStateView() {
     setEditText(g_stateEdit, makeStateView());
 }
 
-void refreshTraceView() {
-    std::ostringstream oss;
-
-    oss << "Trace / Execution Log\n";
-    oss << "---------------------\n";
-
-    if (g_cpu.traceLogger().empty()) {
-        oss << "(CPU TraceLogger empty)\n";
-    } else {
-        oss << g_cpu.traceLogger().compactString();
-    }
-
-    setEditText(g_traceEdit, oss.str());
-}
-
 bool loadAssemblyProgram(const std::string& inputPath) {
     using namespace zero_cpu;
 
@@ -413,8 +401,6 @@ bool loadBinaryProgram(const std::string& inputPath) {
         oss << "Instruction Count: "
             << program.code.size() / kInstructionSize
             << "\n";
-        oss << "\n";
-        oss << "Note: current binary execution supports only NOP and HALT.\n";
 
         setEditText(g_traceEdit, oss.str());
         refreshStateView();
@@ -602,7 +588,8 @@ void onResetClicked() {
         "Assembly:\n"
         "  examples\\function_call.zasm\n"
         "\n"
-        "Binary NOP/HALT test:\n"
+        "Binary:\n"
+        "  examples\\function_call.zbin\n"
         "  examples\\nop_halt.zbin\n"
         "\n"
         "Use [Load Assembly] or [Load Binary], then [Step] or [Run].\n"
@@ -676,7 +663,7 @@ LRESULT CALLBACK windowProc(
             520,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdInputEdit),
+            controlId(kIdInputEdit),
             nullptr,
             nullptr
         );
@@ -691,7 +678,7 @@ LRESULT CALLBACK windowProc(
             130,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdLoadAssemblyButton),
+            controlId(kIdLoadAssemblyButton),
             nullptr,
             nullptr
         );
@@ -706,7 +693,7 @@ LRESULT CALLBACK windowProc(
             120,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdLoadBinaryButton),
+            controlId(kIdLoadBinaryButton),
             nullptr,
             nullptr
         );
@@ -721,7 +708,7 @@ LRESULT CALLBACK windowProc(
             80,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdStepButton),
+            controlId(kIdStepButton),
             nullptr,
             nullptr
         );
@@ -736,7 +723,7 @@ LRESULT CALLBACK windowProc(
             80,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdRunButton),
+            controlId(kIdRunButton),
             nullptr,
             nullptr
         );
@@ -751,7 +738,7 @@ LRESULT CALLBACK windowProc(
             80,
             32,
             hwnd,
-            reinterpret_cast<HMENU>(kIdResetButton),
+            controlId(kIdResetButton),
             nullptr,
             nullptr
         );
@@ -789,7 +776,7 @@ LRESULT CALLBACK windowProc(
             580,
             580,
             hwnd,
-            reinterpret_cast<HMENU>(kIdStateEdit),
+            controlId(kIdStateEdit),
             nullptr,
             nullptr
         );
@@ -827,7 +814,7 @@ LRESULT CALLBACK windowProc(
             560,
             580,
             hwnd,
-            reinterpret_cast<HMENU>(kIdTraceEdit),
+            controlId(kIdTraceEdit),
             nullptr,
             nullptr
         );
@@ -847,29 +834,29 @@ LRESULT CALLBACK windowProc(
     }
 
     case WM_COMMAND: {
-        const int controlId = LOWORD(wParam);
+        const int controlIdValue = LOWORD(wParam);
 
-        if (controlId == kIdLoadAssemblyButton) {
+        if (controlIdValue == kIdLoadAssemblyButton) {
             onLoadAssemblyClicked();
             return 0;
         }
 
-        if (controlId == kIdLoadBinaryButton) {
+        if (controlIdValue == kIdLoadBinaryButton) {
             onLoadBinaryClicked();
             return 0;
         }
 
-        if (controlId == kIdStepButton) {
+        if (controlIdValue == kIdStepButton) {
             onStepClicked();
             return 0;
         }
 
-        if (controlId == kIdRunButton) {
+        if (controlIdValue == kIdRunButton) {
             onRunClicked();
             return 0;
         }
 
-        if (controlId == kIdResetButton) {
+        if (controlIdValue == kIdResetButton) {
             onResetClicked();
             return 0;
         }
