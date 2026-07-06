@@ -18,6 +18,8 @@ class CPU {
 public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;
 
+    static constexpr std::size_t kDefaultBinaryCodeBase = 512;
+
     CPU();
 
     void reset();
@@ -62,7 +64,48 @@ private:
     void stepBinary();
     bool isBinaryPcInCode(std::size_t pc) const;
     void executeBinaryInstruction(const DecodedInstruction& instruction);
-    void requireNoBinaryOperands(const DecodedInstruction& instruction) const;
+
+    RegisterName decodeBinaryRegister(std::int64_t payload) const;
+
+    std::int64_t readBinaryOperandValue(
+        EncodedOperandType type,
+        std::int64_t payload
+    ) const;
+
+    void writeBinaryRegisterDestination(
+        EncodedOperandType type,
+        std::int64_t payload,
+        std::int64_t value
+    );
+
+    std::size_t readBinaryMemoryAddress(
+        EncodedOperandType type,
+        std::int64_t payload
+    ) const;
+
+    std::size_t readBinaryCodeAddress(
+        EncodedOperandType type,
+        std::int64_t payload
+    ) const;
+
+    void requireNoBinaryOperands(
+        const DecodedInstruction& instruction
+    ) const;
+
+    void requireSingleBinaryOperand(
+        const DecodedInstruction& instruction
+    ) const;
+
+    void requireTwoBinaryOperands(
+        const DecodedInstruction& instruction
+    ) const;
+
+    void requireBinaryRegisterDestination(
+        EncodedOperandType type,
+        std::int64_t payload
+    ) const;
+
+    void advanceBinaryPcUnlessHalted();
 
     void execute(const Instruction& instruction);
 

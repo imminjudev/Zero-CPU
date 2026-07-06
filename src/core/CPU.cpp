@@ -48,7 +48,11 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
 
     binary::BinaryLoader loader;
     const binary::LoadedBinaryImage image =
-        loader.loadIntoMemory(program, state_.memory());
+        loader.loadIntoMemory(
+            program,
+            state_.memory(),
+            kDefaultBinaryCodeBase
+        );
 
     state_.setPc(image.entry_point);
 
@@ -183,7 +187,7 @@ void CPU::executeBinaryInstruction(
     switch (instruction.opcode) {
     case Opcode::NOP:
         requireNoBinaryOperands(instruction);
-        state_.setPc(state_.pc() + binary::kInstructionSize);
+        advanceBinaryPcUnlessHalted();
         break;
 
     case Opcode::HALT:
@@ -191,11 +195,620 @@ void CPU::executeBinaryInstruction(
         state_.halt();
         break;
 
+    case Opcode::MOV: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t value =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            value
+        );
+
+        state_.flags().updateZeroAndSign(value);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::LOAD: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::size_t address =
+            readBinaryMemoryAddress(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t value =
+            state_.memory().read(address);
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            value
+        );
+
+        state_.flags().updateZeroAndSign(value);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::STORE: {
+        requireTwoBinaryOperands(instruction);
+
+        const std::size_t address =
+            readBinaryMemoryAddress(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t value =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        state_.memory().write(address, value);
+        state_.flags().updateZeroAndSign(value);
+
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::ADD: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs + rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::SUB: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs - rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::MUL: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs * rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::DIV: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        if (rhs == 0) {
+            throw std::runtime_error("Division by zero");
+        }
+
+        const std::int64_t result = lhs / rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::CMP: {
+        requireTwoBinaryOperands(instruction);
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs - rhs;
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::TEST: {
+        requireTwoBinaryOperands(instruction);
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs & rhs;
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::JMP: {
+        requireSingleBinaryOperand(instruction);
+
+        const std::size_t target =
+            readBinaryCodeAddress(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        state_.setPc(target);
+        break;
+    }
+
+    case Opcode::JE: {
+        requireSingleBinaryOperand(instruction);
+
+        if (state_.flags().zero()) {
+            state_.setPc(
+                readBinaryCodeAddress(
+                    instruction.dst_type,
+                    instruction.dst_payload
+                )
+            );
+        } else {
+            advanceBinaryPcUnlessHalted();
+        }
+
+        break;
+    }
+
+    case Opcode::JNE: {
+        requireSingleBinaryOperand(instruction);
+
+        if (!state_.flags().zero()) {
+            state_.setPc(
+                readBinaryCodeAddress(
+                    instruction.dst_type,
+                    instruction.dst_payload
+                )
+            );
+        } else {
+            advanceBinaryPcUnlessHalted();
+        }
+
+        break;
+    }
+
+    case Opcode::JG: {
+        requireSingleBinaryOperand(instruction);
+
+        if (!state_.flags().zero() && !state_.flags().sign()) {
+            state_.setPc(
+                readBinaryCodeAddress(
+                    instruction.dst_type,
+                    instruction.dst_payload
+                )
+            );
+        } else {
+            advanceBinaryPcUnlessHalted();
+        }
+
+        break;
+    }
+
+    case Opcode::JL: {
+        requireSingleBinaryOperand(instruction);
+
+        if (state_.flags().sign()) {
+            state_.setPc(
+                readBinaryCodeAddress(
+                    instruction.dst_type,
+                    instruction.dst_payload
+                )
+            );
+        } else {
+            advanceBinaryPcUnlessHalted();
+        }
+
+        break;
+    }
+
+    case Opcode::PUSH: {
+        requireSingleBinaryOperand(instruction);
+
+        const std::int64_t value =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        pushValue(value);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::POP: {
+        requireSingleBinaryOperand(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t value = popValue();
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            value
+        );
+
+        state_.flags().updateZeroAndSign(value);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::CALL: {
+        requireSingleBinaryOperand(instruction);
+
+        const std::size_t target =
+            readBinaryCodeAddress(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::size_t returnAddress =
+            state_.pc() + binary::kInstructionSize;
+
+        pushValue(static_cast<std::int64_t>(returnAddress));
+        state_.setPc(target);
+        break;
+    }
+
+    case Opcode::RET: {
+        requireNoBinaryOperands(instruction);
+
+        const std::int64_t returnAddress = popValue();
+
+        if (returnAddress < 0) {
+            throw std::runtime_error("Negative binary return address");
+        }
+
+        state_.setPc(static_cast<std::size_t>(returnAddress));
+        break;
+    }
+
+    case Opcode::AND: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs & rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::OR: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs | rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::XOR: {
+        requireTwoBinaryOperands(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t lhs =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t rhs =
+            readBinaryOperandValue(
+                instruction.src_type,
+                instruction.src_payload
+            );
+
+        const std::int64_t result = lhs ^ rhs;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::NOT: {
+        requireSingleBinaryOperand(instruction);
+        requireBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload
+        );
+
+        const std::int64_t value =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        const std::int64_t result = ~value;
+
+        writeBinaryRegisterDestination(
+            instruction.dst_type,
+            instruction.dst_payload,
+            result
+        );
+
+        state_.flags().updateZeroAndSign(result);
+        advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::Invalid:
+    default:
+        throw std::runtime_error("Invalid binary opcode");
+    }
+}
+
+RegisterName CPU::decodeBinaryRegister(std::int64_t payload) const {
+    switch (payload) {
+    case 0:
+        return RegisterName::R0;
+    case 1:
+        return RegisterName::R1;
+    case 2:
+        return RegisterName::R2;
+    case 3:
+        return RegisterName::R3;
+    case 4:
+        return RegisterName::R4;
+    case 5:
+        return RegisterName::R5;
+    case 6:
+        return RegisterName::R6;
+    case 7:
+        return RegisterName::R7;
+    default:
+        throw std::runtime_error("Invalid binary register payload");
+    }
+}
+
+std::int64_t CPU::readBinaryOperandValue(
+    EncodedOperandType type,
+    std::int64_t payload
+) const {
+    switch (type) {
+    case EncodedOperandType::Register:
+        return state_.registers().get(decodeBinaryRegister(payload));
+
+    case EncodedOperandType::Immediate:
+        return payload;
+
+    case EncodedOperandType::MemoryAddress:
+        return state_.memory().read(
+            readBinaryMemoryAddress(type, payload)
+        );
+
     default:
         throw std::runtime_error(
-            "Binary execution currently supports only NOP and HALT"
+            "Binary operand cannot be read as a value"
         );
     }
+}
+
+void CPU::writeBinaryRegisterDestination(
+    EncodedOperandType type,
+    std::int64_t payload,
+    std::int64_t value
+) {
+    requireBinaryRegisterDestination(type, payload);
+    state_.registers().set(decodeBinaryRegister(payload), value);
+}
+
+std::size_t CPU::readBinaryMemoryAddress(
+    EncodedOperandType type,
+    std::int64_t payload
+) const {
+    if (type != EncodedOperandType::MemoryAddress) {
+        throw std::runtime_error("Binary operand must be memory address");
+    }
+
+    if (payload < 0) {
+        throw std::runtime_error("Negative binary memory address");
+    }
+
+    return static_cast<std::size_t>(payload);
+}
+
+std::size_t CPU::readBinaryCodeAddress(
+    EncodedOperandType type,
+    std::int64_t payload
+) const {
+    if (type != EncodedOperandType::CodeAddress) {
+        throw std::runtime_error("Binary operand must be code address");
+    }
+
+    if (payload < 0) {
+        throw std::runtime_error("Negative binary code address");
+    }
+
+    const std::size_t target =
+        binary_code_base_ + static_cast<std::size_t>(payload);
+
+    if (!isBinaryPcInCode(target)) {
+        throw std::runtime_error(
+            "Binary code target is outside loaded code section"
+        );
+    }
+
+    return target;
 }
 
 void CPU::requireNoBinaryOperands(
@@ -210,6 +823,52 @@ void CPU::requireNoBinaryOperands(
         throw std::runtime_error(
             "Binary instruction requires no operands"
         );
+    }
+}
+
+void CPU::requireSingleBinaryOperand(
+    const DecodedInstruction& instruction
+) const {
+    if (
+        instruction.dst_type == EncodedOperandType::None ||
+        instruction.src_type != EncodedOperandType::None ||
+        instruction.src_payload != 0
+    ) {
+        throw std::runtime_error(
+            "Binary instruction requires one operand"
+        );
+    }
+}
+
+void CPU::requireTwoBinaryOperands(
+    const DecodedInstruction& instruction
+) const {
+    if (
+        instruction.dst_type == EncodedOperandType::None ||
+        instruction.src_type == EncodedOperandType::None
+    ) {
+        throw std::runtime_error(
+            "Binary instruction requires two operands"
+        );
+    }
+}
+
+void CPU::requireBinaryRegisterDestination(
+    EncodedOperandType type,
+    std::int64_t payload
+) const {
+    if (type != EncodedOperandType::Register) {
+        throw std::runtime_error(
+            "Binary destination must be register"
+        );
+    }
+
+    decodeBinaryRegister(payload);
+}
+
+void CPU::advanceBinaryPcUnlessHalted() {
+    if (!state_.halted()) {
+        state_.setPc(state_.pc() + binary::kInstructionSize);
     }
 }
 
