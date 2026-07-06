@@ -1,11 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(
-    ZeroCPU
-    VERSION 0.1.0
-    DESCRIPTION "A virtual ISA-based CPU emulator with state transition tracing"
-    LANGUAGES CXX
-)
+project(ZeroCPU LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,14 +31,8 @@ add_library(zero_cpu_core
 
 target_include_directories(zero_cpu_core
     PUBLIC
-        ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-
-if (MSVC)
-    target_compile_options(zero_cpu_core PRIVATE /W4)
-else()
-    target_compile_options(zero_cpu_core PRIVATE -Wall -Wextra -Wpedantic)
-endif()
 
 add_executable(zero_cli
     tools/zero_cli.cpp
@@ -53,3 +42,16 @@ target_link_libraries(zero_cli
     PRIVATE
         zero_cpu_core
 )
+
+if (WIN32)
+    add_executable(zero_studio WIN32
+        studio/zero_studio.cpp
+    )
+
+    target_link_libraries(zero_studio
+        PRIVATE
+            zero_cpu_core
+            user32
+            gdi32
+    )
+endif()
