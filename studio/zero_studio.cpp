@@ -2,33 +2,39 @@
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/binary/BinaryReader.hpp"
+#include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
+#include "zero_cpu/isa/InstructionEncoder.hpp"
 
 #include <windows.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
 
-constexpr int kWindowWidth = 1240;
-constexpr int kWindowHeight = 780;
+constexpr int kWindowWidth = 1320;
+constexpr int kWindowHeight = 820;
 
 constexpr int kIdInputEdit = 1001;
-constexpr int kIdLoadAssemblyButton = 1002;
-constexpr int kIdLoadBinaryButton = 1003;
-constexpr int kIdStepButton = 1004;
-constexpr int kIdRunButton = 1005;
-constexpr int kIdResetButton = 1006;
-constexpr int kIdStateEdit = 1007;
-constexpr int kIdTraceEdit = 1008;
+constexpr int kIdOutputEdit = 1002;
+constexpr int kIdAssembleButton = 1003;
+constexpr int kIdLoadAssemblyButton = 1004;
+constexpr int kIdLoadBinaryButton = 1005;
+constexpr int kIdStepButton = 1006;
+constexpr int kIdRunButton = 1007;
+constexpr int kIdResetButton = 1008;
+constexpr int kIdStateEdit = 1009;
+constexpr int kIdTraceEdit = 1010;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -46,6 +52,8 @@ enum class StudioMode {
 };
 
 HWND g_inputEdit = nullptr;
+HWND g_outputEdit = nullptr;
+HWND g_assembleButton = nullptr;
 HWND g_loadAssemblyButton = nullptr;
 HWND g_loadBinaryButton = nullptr;
 HWND g_stepButton = nullptr;
@@ -144,6 +152,29 @@ bool endsWithZbin(const std::string& path) {
            suffix == ".ZBIN";
 }
 
+std::string makeFinalCheckView() {
+    std::ostringstream oss;
+
+    oss << "Final Check\n";
+    oss << "R1 = "
+        << g_cpu.state().registers().get(zero_cpu::RegisterName::R1)
+        << "\n";
+    oss << "R2 = "
+        << g_cpu.state().registers().get(zero_cpu::RegisterName::R2)
+        << "\n";
+    oss << "SP = "
+        << g_cpu.state().sp()
+        << "\n";
+    oss << "Memory[100] = "
+        << g_cpu.state().memory().read(100)
+        << "\n";
+    oss << "Memory[2048] = "
+        << g_cpu.state().memory().read(2048)
+        << "\n";
+
+    return oss.str();
+}
+
 std::string decodedInstructionToString(
     const zero_cpu::DecodedInstruction& instruction
 ) {
@@ -206,31 +237,6 @@ std::string makeRegisterView() {
     oss << "R5 = " << registers.get(RegisterName::R5) << "\n";
     oss << "R6 = " << registers.get(RegisterName::R6) << "\n";
     oss << "R7 = " << registers.get(RegisterName::R7) << "\n";
-
-    return oss.str();
-}
-
-std::string makeFinalCheckView() {
-    using namespace zero_cpu;
-
-    std::ostringstream oss;
-
-    oss << "Final Check\n";
-    oss << "R1 = "
-        << g_cpu.state().registers().get(RegisterName::R1)
-        << "\n";
-    oss << "R2 = "
-        << g_cpu.state().registers().get(RegisterName::R2)
-        << "\n";
-    oss << "SP = "
-        << g_cpu.state().sp()
-        << "\n";
-    oss << "Memory[100] = "
-        << g_cpu.state().memory().read(100)
-        << "\n";
-    oss << "Memory[2048] = "
-        << g_cpu.state().memory().read(2048)
-        << "\n";
 
     return oss.str();
 }
@@ -356,6 +362,69 @@ void refreshStateView() {
     setEditText(g_stateEdit, makeStateView());
 }
 
+bool assembleSourceToBinary(
+    const std::string& inputPath,
+    const std::string& outputPath
+) {
+    using namespace zero_cpu;
+
+    try {
+        Assembler assembler;
+        AssembledProgram assembled = assembler.assembleFile(inputPath);
+
+        InstructionEncoder encoder;
+        std::vector<std::uint8_t> code = encoder.encodeProgram(
+            assembled.instructions,
+            assembled.labels
+        );
+
+        binary::BinaryProgram program;
+        program.header.major_version = binary::kMajorVersion;
+        program.header.minor_version = binary::kMinorVersion;
+        program.header.endianness = binary::BinaryEndianness::Little;
+        program.header.entry_point = 0;
+        program.header.code_size = static_cast<std::uint32_t>(code.size());
+        program.code = std::move(code);
+
+        binary::BinaryWriter writer;
+        writer.writeFile(outputPath, program);
+
+        binary::BinaryReader reader;
+        const binary::BinaryProgram verified = reader.readFile(outputPath);
+
+        std::ostringstream oss;
+        oss << "Assemble completed successfully.\n";
+        oss << "Input: " << inputPath << "\n";
+        oss << "Output: " << outputPath << "\n";
+        oss << "Instruction count: "
+            << assembled.instructions.size()
+            << "\n";
+        oss << "Code size: "
+            << verified.header.code_size
+            << " bytes\n";
+        oss << "Entry point: "
+            << verified.header.entry_point
+            << "\n";
+        oss << "\n";
+        oss << "Tip: output path was copied into the input box.\n";
+        oss << "Click [Load Binary], then [Step] or [Run].\n";
+
+        setEditText(g_traceEdit, oss.str());
+        SetWindowTextA(g_inputEdit, outputPath.c_str());
+
+        return true;
+    } catch (const std::exception& ex) {
+        std::ostringstream oss;
+        oss << "Assemble failed.\n";
+        oss << "Input: " << inputPath << "\n";
+        oss << "Output: " << outputPath << "\n";
+        oss << "Error: " << ex.what() << "\n";
+
+        setEditText(g_traceEdit, oss.str());
+        return false;
+    }
+}
+
 bool loadAssemblyProgram(const std::string& inputPath) {
     using namespace zero_cpu;
 
@@ -464,6 +533,24 @@ bool autoLoadFromInputPath() {
     }
 
     return loadAssemblyProgram(inputPath);
+}
+
+void onAssembleClicked() {
+    const std::string inputPath = getWindowTextString(g_inputEdit);
+    const std::string outputPath = getWindowTextString(g_outputEdit);
+
+    if (inputPath.empty()) {
+        setEditText(g_traceEdit, "Input path is empty.\n");
+        return;
+    }
+
+    if (outputPath.empty()) {
+        setEditText(g_traceEdit, "Output .zbin path is empty.\n");
+        return;
+    }
+
+    assembleSourceToBinary(inputPath, outputPath);
+    refreshStateView();
 }
 
 void onLoadAssemblyClicked() {
@@ -610,20 +697,24 @@ void onResetClicked() {
     g_loadedPath.clear();
 
     SetWindowTextA(g_inputEdit, "examples\\function_call.zasm");
+    SetWindowTextA(g_outputEdit, "examples\\function_call.zbin");
 
     setEditText(
         g_traceEdit,
         "Zero-CPU Studio v0.4\n"
         "\n"
         "Ready.\n"
-        "Assembly:\n"
+        "Assembly source:\n"
         "  examples\\function_call.zasm\n"
         "\n"
-        "Binary:\n"
+        "Binary output/input:\n"
         "  examples\\function_call.zbin\n"
         "  examples\\nop_halt.zbin\n"
         "\n"
-        "Use [Load Assembly] or [Load Binary], then [Step] or [Run].\n"
+        "Workflow:\n"
+        "  1. [Assemble] .zasm -> .zbin\n"
+        "  2. [Load Binary]\n"
+        "  3. [Step] or [Run]\n"
     );
 
     refreshStateView();
@@ -691,10 +782,55 @@ LRESULT CALLBACK windowProc(
             WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
             20,
             50,
-            520,
+            560,
             32,
             hwnd,
             controlId(kIdInputEdit),
+            nullptr,
+            nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
+            "Output .zbin path:",
+            WS_CHILD | WS_VISIBLE,
+            20,
+            88,
+            320,
+            28,
+            hwnd,
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
+        g_outputEdit = CreateWindowExA(
+            WS_EX_CLIENTEDGE,
+            "EDIT",
+            "examples\\function_call.zbin",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            20,
+            116,
+            560,
+            32,
+            hwnd,
+            controlId(kIdOutputEdit),
+            nullptr,
+            nullptr
+        );
+
+        g_assembleButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Assemble",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            600,
+            50,
+            110,
+            32,
+            hwnd,
+            controlId(kIdAssembleButton),
             nullptr,
             nullptr
         );
@@ -704,9 +840,9 @@ LRESULT CALLBACK windowProc(
             "BUTTON",
             "Load Assembly",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            560,
+            720,
             50,
-            130,
+            140,
             32,
             hwnd,
             controlId(kIdLoadAssemblyButton),
@@ -719,7 +855,7 @@ LRESULT CALLBACK windowProc(
             "BUTTON",
             "Load Binary",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            700,
+            870,
             50,
             120,
             32,
@@ -734,7 +870,7 @@ LRESULT CALLBACK windowProc(
             "BUTTON",
             "Step",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            830,
+            1000,
             50,
             80,
             32,
@@ -749,7 +885,7 @@ LRESULT CALLBACK windowProc(
             "BUTTON",
             "Run",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            920,
+            1090,
             50,
             80,
             32,
@@ -764,7 +900,7 @@ LRESULT CALLBACK windowProc(
             "BUTTON",
             "Reset",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            1010,
+            1180,
             50,
             80,
             32,
@@ -780,7 +916,7 @@ LRESULT CALLBACK windowProc(
             "CPU / Register / Memory View:",
             WS_CHILD | WS_VISIBLE,
             20,
-            100,
+            160,
             320,
             28,
             hwnd,
@@ -803,9 +939,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOHSCROLL |
                 ES_READONLY,
             20,
-            130,
-            580,
-            580,
+            190,
+            620,
+            560,
             hwnd,
             controlId(kIdStateEdit),
             nullptr,
@@ -817,8 +953,8 @@ LRESULT CALLBACK windowProc(
             "STATIC",
             "Trace / Execution Log:",
             WS_CHILD | WS_VISIBLE,
-            630,
-            100,
+            670,
+            160,
             320,
             28,
             hwnd,
@@ -840,10 +976,10 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOVSCROLL |
                 ES_AUTOHSCROLL |
                 ES_READONLY,
-            630,
-            130,
+            670,
+            190,
+            600,
             560,
-            580,
             hwnd,
             controlId(kIdTraceEdit),
             nullptr,
@@ -851,6 +987,8 @@ LRESULT CALLBACK windowProc(
         );
 
         applyFont(g_inputEdit, font);
+        applyFont(g_outputEdit, font);
+        applyFont(g_assembleButton, font);
         applyFont(g_loadAssemblyButton, font);
         applyFont(g_loadBinaryButton, font);
         applyFont(g_stepButton, font);
@@ -866,6 +1004,11 @@ LRESULT CALLBACK windowProc(
 
     case WM_COMMAND: {
         const int controlIdValue = LOWORD(wParam);
+
+        if (controlIdValue == kIdAssembleButton) {
+            onAssembleClicked();
+            return 0;
+        }
 
         if (controlIdValue == kIdLoadAssemblyButton) {
             onLoadAssemblyClicked();
