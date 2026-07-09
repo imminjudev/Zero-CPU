@@ -1,4 +1,5 @@
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/core/ALU.hpp"
 
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
@@ -11,6 +12,13 @@ namespace zero_cpu {
 
 CPU::CPU() {
     reset();
+}
+
+void applyALUResultToFlags(Flags& flags, const ALUResult& result) {
+    flags.setZero(result.zero);
+    flags.setSign(result.sign);
+    flags.setCarry(result.carry);
+    flags.setOverflow(result.overflow);
 }
 
 void CPU::reset() {
@@ -287,15 +295,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs + rhs;
+        const ALUResult result = ALU::add(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -319,15 +327,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs - rhs;
+        const ALUResult result = ALU::sub(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -351,15 +359,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs * rhs;
+        const ALUResult result = ALU::mul(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -383,19 +391,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        if (rhs == 0) {
-            throw std::runtime_error("Division by zero");
-        }
-
-        const std::int64_t result = lhs / rhs;
+        const ALUResult result = ALU::div(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -415,9 +419,9 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs - rhs;
+        const ALUResult result = ALU::compare(lhs, rhs);
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -437,9 +441,9 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs & rhs;
+        const ALUResult result = ALU::test(lhs, rhs);
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -608,15 +612,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs & rhs;
+        const ALUResult result = ALU::bitAnd(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -640,15 +644,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs | rhs;
+        const ALUResult result = ALU::bitOr(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -672,15 +676,15 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t result = lhs ^ rhs;
+        const ALUResult result = ALU::bitXor(lhs, rhs);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -698,15 +702,15 @@ void CPU::executeBinaryInstruction(
                 instruction.dst_payload
             );
 
-        const std::int64_t result = ~value;
+        const ALUResult result = ALU::bitNot(value);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
             instruction.dst_payload,
-            result
+            result.value
         );
 
-        state_.flags().updateZeroAndSign(result);
+        applyALUResultToFlags(state_.flags(), result);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -966,8 +970,17 @@ void CPU::execute(const Instruction& instruction) {
         executeNot(instruction);
         break;
 
-    case Opcode::TEST:
-        throw std::runtime_error("TEST is not implemented yet");
+    case Opcode::TEST: {
+        requireTwoOperands(instruction);
+
+        const std::int64_t lhs = readOperandValue(instruction.dst());
+        const std::int64_t rhs = readOperandValue(instruction.src());
+        const ALUResult result = ALU::test(lhs, rhs);
+
+        applyALUResultToFlags(state_.flags(), result);
+        advancePcUnlessHalted();
+        break;
+    }
 
     case Opcode::Invalid:
     default:
@@ -1033,10 +1046,10 @@ void CPU::executeAdd(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs + rhs;
+    const ALUResult result = ALU::add(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1047,10 +1060,10 @@ void CPU::executeSub(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs - rhs;
+    const ALUResult result = ALU::sub(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1061,10 +1074,10 @@ void CPU::executeMul(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs * rhs;
+    const ALUResult result = ALU::mul(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1076,14 +1089,10 @@ void CPU::executeDiv(const Instruction& instruction) {
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
 
-    if (rhs == 0) {
-        throw std::runtime_error("Division by zero");
-    }
+    const ALUResult result = ALU::div(lhs, rhs);
 
-    const std::int64_t result = lhs / rhs;
-
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1093,9 +1102,9 @@ void CPU::executeCmp(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs - rhs;
+    const ALUResult result = ALU::compare(lhs, rhs);
 
-    state_.flags().updateZeroAndSign(result);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1193,10 +1202,10 @@ void CPU::executeAnd(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs & rhs;
+    const ALUResult result = ALU::bitAnd(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1207,10 +1216,10 @@ void CPU::executeOr(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs | rhs;
+    const ALUResult result = ALU::bitOr(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1221,10 +1230,10 @@ void CPU::executeXor(const Instruction& instruction) {
 
     const std::int64_t lhs = readOperandValue(instruction.dst());
     const std::int64_t rhs = readOperandValue(instruction.src());
-    const std::int64_t result = lhs ^ rhs;
+    const ALUResult result = ALU::bitXor(lhs, rhs);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
@@ -1234,10 +1243,10 @@ void CPU::executeNot(const Instruction& instruction) {
     requireRegisterDestination(instruction.dst());
 
     const std::int64_t value = readOperandValue(instruction.dst());
-    const std::int64_t result = ~value;
+    const ALUResult result = ALU::bitNot(value);
 
-    writeRegisterDestination(instruction.dst(), result);
-    state_.flags().updateZeroAndSign(result);
+    writeRegisterDestination(instruction.dst(), result.value);
+    applyALUResultToFlags(state_.flags(), result);
 
     advancePcUnlessHalted();
 }
