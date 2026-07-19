@@ -18,7 +18,9 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -70,6 +72,83 @@ void printMemoryViews(const zero_cpu::CPU& cpu) {
               << "\n";
 }
 
+void printWatchedMemory(
+    const zero_cpu::CPU& cpu,
+    const std::vector<std::size_t>& watchAddresses
+) {
+    if (watchAddresses.empty()) {
+        return;
+    }
+
+    std::cout << "Watched Memory:\n";
+
+    for (const std::size_t address : watchAddresses) {
+        std::cout << "Memory["
+                  << address
+                  << "] = "
+                  << cpu.state().memory().read(address)
+                  << "\n";
+    }
+}
+
+std::size_t parseMemoryAddress(const std::string& text) {
+    std::size_t parsedLength = 0;
+
+    const unsigned long long value = std::stoull(
+        text,
+        &parsedLength,
+        0
+    );
+
+    if (parsedLength != text.size()) {
+        throw std::invalid_argument(
+            "Invalid memory address: " + text
+        );
+    }
+
+    if (value > static_cast<unsigned long long>(
+                    std::numeric_limits<std::size_t>::max()
+                )) {
+        throw std::out_of_range(
+            "Memory address is too large: " + text
+        );
+    }
+
+    return static_cast<std::size_t>(value);
+}
+
+std::vector<std::size_t> parseWatchAddresses(
+    int argc,
+    char* argv[],
+    int startIndex
+) {
+    std::vector<std::size_t> watchAddresses;
+
+    if (startIndex >= argc) {
+        return watchAddresses;
+    }
+
+    const std::string option = argv[startIndex];
+
+    if (option != "--watch") {
+        throw std::invalid_argument(
+            "Unknown run-binary option: " + option
+        );
+    }
+
+    if (startIndex + 1 >= argc) {
+        throw std::invalid_argument(
+            "--watch requires at least one memory address"
+        );
+    }
+
+    for (int i = startIndex + 1; i < argc; ++i) {
+        watchAddresses.push_back(parseMemoryAddress(argv[i]));
+    }
+
+    return watchAddresses;
+}
+
 void printFinalCheck(const zero_cpu::CPU& cpu) {
     using namespace zero_cpu;
 
@@ -79,7 +158,7 @@ void printFinalCheck(const zero_cpu::CPU& cpu) {
     const auto finalR2 =
         cpu.state().registers().get(RegisterName::R2);
 
-    std::cout << "Final Check:\n";
+    std::cout << "Default Final Check (function_call example):\n";
     std::cout << "R1 = " << finalR1 << "\n";
     std::cout << "R2 = " << finalR2 << "\n";
     std::cout << "SP = " << cpu.state().sp() << "\n";
@@ -462,7 +541,10 @@ int cpuLoadBinaryFile(const std::string& inputPath) {
     return 0;
 }
 
-int runBinaryFile(const std::string& inputPath) {
+int runBinaryFile(
+    const std::string& inputPath,
+    const std::vector<std::size_t>& watchAddresses
+) {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
 
@@ -476,6 +558,16 @@ int runBinaryFile(const std::string& inputPath) {
 
     printBinaryHeader(program);
     std::cout << "\n";
+
+    if (!watchAddresses.empty()) {
+        std::cout << "Memory Watch Addresses:";
+
+        for (const std::size_t address : watchAddresses) {
+            std::cout << " " << address;
+        }
+
+        std::cout << "\n\n";
+    }
 
     std::cout << "=== Binary Execution ===\n";
 
@@ -497,6 +589,12 @@ int runBinaryFile(const std::string& inputPath) {
             std::cout << "Execution failed: "
                       << cpu.state().errorMessage()
                       << "\n\n";
+
+            printWatchedMemory(cpu, watchAddresses);
+            if (!watchAddresses.empty()) {
+                std::cout << "\n";
+            }
+
             printFinalCheck(cpu);
             return 1;
         }
@@ -505,6 +603,12 @@ int runBinaryFile(const std::string& inputPath) {
 
         if (stepCount > 1000) {
             std::cout << "Step limit reached in binary execution.\n\n";
+
+            printWatchedMemory(cpu, watchAddresses);
+            if (!watchAddresses.empty()) {
+                std::cout << "\n";
+            }
+
             printFinalCheck(cpu);
             return 1;
         }
@@ -514,6 +618,11 @@ int runBinaryFile(const std::string& inputPath) {
     std::cout << cpu.state().summary();
     printMemoryViews(cpu);
     std::cout << "\n";
+
+    printWatchedMemory(cpu, watchAddresses);
+    if (!watchAddresses.empty()) {
+        std::cout << "\n";
+    }
 
     printFinalCheck(cpu);
     std::cout << "\n";
@@ -622,7 +731,7 @@ void printUsage() {
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
-    std::cout << "  zero_cli run-binary <input.zbin>\n";
+    std::cout << "  zero_cli run-binary <input.zbin> [--watch <addr>...]\n";
 }
 
 } // namespace
@@ -687,13 +796,16 @@ int main(int argc, char* argv[]) {
             }
 
             if (command == "run-binary") {
-                if (argc != 3) {
+                if (argc < 3) {
                     std::cerr << "Invalid run-binary command.\n\n";
                     printUsage();
                     return 1;
                 }
 
-                return runBinaryFile(argv[2]);
+                const std::vector<std::size_t> watchAddresses =
+                    parseWatchAddresses(argc, argv, 3);
+
+                return runBinaryFile(argv[2], watchAddresses);
             }
         }
 

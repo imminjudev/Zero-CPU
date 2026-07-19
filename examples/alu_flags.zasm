@@ -1,0 +1,70 @@
+MOV R7, 0
+
+MOV R1, 10
+MOV R2, 20
+ADD R1, R2
+STORE [120], R1
+
+MOV R1, 30
+MOV R2, 10
+SUB R1, R2
+STORE [128], R1
+
+MOV R1, 5
+MOV R2, 5
+CMP R1, R2
+JE cmp_equal_ok
+MOV R7, 101
+HALT
+
+cmp_equal_ok:
+MOV R3, 1
+STORE [136], R3
+
+MOV R1, 3
+MOV R2, 8
+CMP R1, R2
+JL cmp_less_ok
+MOV R7, 102
+HALT
+
+cmp_less_ok:
+MOV R3, 2
+STORE [144], R3
+
+MOV R1, 9
+MOV R2, 2
+CMP R1, R2
+JG cmp_greater_ok
+MOV R7, 103
+HALT
+
+cmp_greater_ok:
+MOV R3, 3
+STORE [152], R3
+
+MOV R1, 10
+MOV R2, 5
+TEST R1, R2
+JE test_zero_ok
+MOV R7, 104
+HALT
+
+test_zero_ok:
+MOV R3, 4
+STORE [160], R3
+
+MOV R1, 10
+MOV R2, 2
+TEST R1, R2
+JNE test_nonzero_ok
+MOV R7, 105
+HALT
+
+test_nonzero_ok:
+MOV R3, 5
+STORE [168], R3
+
+MOV R6, 777
+STORE [200], R6
+HALT
