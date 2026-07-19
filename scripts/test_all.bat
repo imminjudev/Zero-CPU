@@ -9,7 +9,7 @@ echo Zero-CPU Test Suite
 echo ========================================
 echo.
 
-echo [1/6] Building project...
+echo [1/11] Building project...
 cmake --build build
 if errorlevel 1 goto fail
 
@@ -33,51 +33,62 @@ echo Using CLI:
 echo   %ZERO_CLI%
 echo.
 
-echo [2/6] Running ALU unit test...
+echo [2/11] Running ALU unit test...
 "%ZERO_CLI%" alu-test
 if errorlevel 1 goto fail
 
 echo.
-echo Running MMIO bus test...
+echo [3/11] Running MMIO bus test...
 "%ZERO_CLI%" mmio-test
 if errorlevel 1 goto fail
 
 echo.
-echo Running interrupt controller test...
+echo [4/11] Running interrupt controller test...
 "%ZERO_CLI%" interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo Running CPU interrupt delivery test...
+echo [5/11] Running CPU interrupt delivery test...
 "%ZERO_CLI%" cpu-interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo Running timer device test...
+echo [6/11] Running timer device test...
 "%ZERO_CLI%" timer-test
 if errorlevel 1 goto fail
 
 echo.
-echo [3/6] Running binary format round-trip test...
+echo [7/11] Running CPU timer interrupt test...
+"%ZERO_CLI%" cpu-timer-test
+if errorlevel 1 goto fail
+
+echo.
+echo [8/11] Running binary format round-trip test...
 "%ZERO_CLI%" binary-test
 if errorlevel 1 goto fail
 
 echo.
-echo [4/6] Assembling function_call.zasm...
-"%ZERO_CLI%" assemble examples\function_call.zasm examples\function_call.zbin
+echo [9/11] Assembling and running function_call.zasm...
+"%ZERO_CLI%" assemble "examples\function_call.zasm" "examples\function_call.zbin"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" run-binary "examples\function_call.zbin" --expect-memory 100=20 2048=20
 if errorlevel 1 goto fail
 
 echo.
-echo [5/6] Running function_call.zbin...
-"%ZERO_CLI%" run-binary examples\function_call.zbin --expect-memory 100=20 2048=20
+echo [10/11] Assembling and running alu_flags.zasm...
+"%ZERO_CLI%" assemble "examples\alu_flags.zasm" "examples\alu_flags.zbin"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" run-binary "examples\alu_flags.zbin" --expect-memory 120=30 128=20 136=1 144=2 152=3 160=4 168=5 200=777
 if errorlevel 1 goto fail
 
 echo.
-echo [6/6] Assembling and running alu_flags.zasm...
-"%ZERO_CLI%" assemble examples\alu_flags.zasm examples\alu_flags.zbin
+echo [11/11] Assembling and running mmio_output.zasm...
+"%ZERO_CLI%" assemble "examples\mmio_output.zasm" "examples\mmio_output.zbin"
 if errorlevel 1 goto fail
 
-"%ZERO_CLI%" run-binary examples\alu_flags.zbin --expect-memory 120=30 128=20 136=1 144=2 152=3 160=4 168=5 200=777
+"%ZERO_CLI%" run-binary "examples\mmio_output.zbin" --debug-mmio --expect-memory 220=66 228=2
 if errorlevel 1 goto fail
 
 echo.
@@ -96,11 +107,3 @@ echo ========================================
 echo.
 
 exit /b 1
-
-echo.
-echo Running MMIO output example...
-"%ZERO_CLI%" assemble examples\mmio_output.zasm examples\mmio_output.zbin
-if errorlevel 1 goto fail
-
-"%ZERO_CLI%" run-binary examples\mmio_output.zbin --debug-mmio --expect-memory 220=66 228=2
-if errorlevel 1 goto fail

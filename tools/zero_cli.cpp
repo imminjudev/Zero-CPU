@@ -1666,6 +1666,143 @@ int runTimerDeviceTest() {
     return 0;
 }
 
+
+int runCPUTimerInterruptTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Zero-CPU CPU Timer Interrupt Test ===\n\n";
+
+    const std::string sourcePath = "examples/timer_interrupt.zasm";
+    const std::string binaryPath = "examples/timer_interrupt.zbin";
+
+    Assembler assembler;
+    AssembledProgram assembled = assembler.assembleFile(sourcePath);
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code = encoder.encodeProgram(
+        assembled.instructions,
+        assembled.labels
+    );
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size = static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    BinaryWriter writer;
+    writer.writeFile(binaryPath, program);
+
+    CPU cpu;
+    auto controller = std::make_shared<InterruptController>();
+    auto bus = std::make_shared<MMIOBus>();
+    auto timer = std::make_shared<TimerDevice>(
+        controller,
+        32,
+        3,
+        1234
+    );
+
+    constexpr std::size_t kTimerBase = 0xF100;
+    constexpr std::size_t kTimerSize = 48;
+
+    bus->mapDevice(kTimerBase, kTimerSize, timer);
+
+    cpu.setInterruptController(controller);
+    cpu.setMMIOBus(bus);
+    cpu.addClockedDevice(timer);
+    cpu.loadBinaryProgram(program);
+
+    const std::size_t handlerAddress =
+        cpu.binaryCodeBase() + kInstructionSize;
+
+    controller->setVectorHandler(32, handlerAddress);
+
+    std::cout << "Source: " << sourcePath << "\n";
+    std::cout << "Binary: " << binaryPath << "\n";
+    std::cout << "Timer MMIO: 0xF100..0xF12F\n";
+    std::cout << "Timer interval: 3 instructions\n";
+    std::cout << "Timer vector: 32\n";
+    std::cout << "Timer payload: 1234\n";
+    std::cout << "Handler PC: " << handlerAddress << "\n\n";
+
+    cpu.run();
+
+    std::cout << "=== Final CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
+    std::cout << "Timer tick count = " << timer->tickCount() << "\n";
+    std::cout << "Timer interrupt count = " << timer->interruptCount() << "\n";
+    std::cout << "Timer enabled = " << (timer->enabled() ? "true" : "false") << "\n";
+    std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
+
+    if (cpu.state().hasError()) {
+        std::cout << "CPU timer interrupt test failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+        return 1;
+    }
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        std::int64_t actual,
+        std::int64_t expected
+    ) {
+        if (actual == expected) {
+            std::cout << "[PASS] "
+                      << name
+                      << " = "
+                      << actual
+                      << "\n";
+            return;
+        }
+
+        std::cout << "[FAIL] "
+                  << name
+                  << " expected "
+                  << expected
+                  << " but got "
+                  << actual
+                  << "\n";
+        passed = false;
+    };
+
+    auto expectCondition = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect("Memory[280] timer vector", cpu.state().memory().read(280), 32);
+    expect("Memory[288] timer payload", cpu.state().memory().read(288), 1234);
+    expect("Memory[296] handler marker", cpu.state().memory().read(296), 999);
+    expect("Memory[304] main loop result", cpu.state().memory().read(304), 10);
+
+    expectCondition("CPU has one clocked device", cpu.clockedDeviceCount() == 1);
+    expectCondition("timer requested exactly one interrupt", timer->interruptCount() == 1);
+    expectCondition("timer was disabled by handler through MMIO", !timer->enabled());
+    expectCondition("interrupt queue is empty after run", controller->pendingCount() == 0);
+
+    if (!passed) {
+        std::cout << "\nCPU timer interrupt test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nCPU timer interrupt test finished successfully.\n";
+    return 0;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -1677,6 +1814,7 @@ void printUsage() {
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
     std::cout << "  zero_cli timer-test\n";
+    std::cout << "  zero_cli cpu-timer-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -1756,6 +1894,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runTimerDeviceTest();
+            }
+
+            if (command == "cpu-timer-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid cpu-timer-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runCPUTimerInterruptTest();
             }
 
             if (command == "assemble") {

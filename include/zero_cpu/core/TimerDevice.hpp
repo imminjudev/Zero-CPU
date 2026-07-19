@@ -1,5 +1,6 @@
 #pragma once
 
+#include "zero_cpu/core/ClockedDevice.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIODevice.hpp"
 
@@ -10,7 +11,7 @@
 
 namespace zero_cpu {
 
-class TimerDevice final : public MMIODevice {
+class TimerDevice final : public MMIODevice, public ClockedDevice {
 public:
     static constexpr std::size_t kTickCountOffset = 0;
     static constexpr std::size_t kIntervalOffset = 8;
@@ -31,7 +32,7 @@ public:
     std::int64_t read(std::size_t offset) override;
     void write(std::size_t offset, std::int64_t value) override;
 
-    void tick();
+    void tick() override;
     void tick(std::uint64_t count);
 
     void reset();

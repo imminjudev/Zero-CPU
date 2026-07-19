@@ -1,6 +1,7 @@
 #pragma once
 
 #include "zero_cpu/binary/BinaryProgram.hpp"
+#include "zero_cpu/core/ClockedDevice.hpp"
 #include "zero_cpu/core/CPUState.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
@@ -64,6 +65,10 @@ public:
     void clearInterruptController();
     bool hasInterruptController() const;
 
+    void addClockedDevice(std::shared_ptr<ClockedDevice> device);
+    void clearClockedDevices();
+    std::size_t clockedDeviceCount() const;
+
 private:
     CPUState state_;
     std::vector<Instruction> program_;
@@ -77,8 +82,10 @@ private:
 
     std::shared_ptr<MMIOBus> mmio_bus_;
     std::shared_ptr<InterruptController> interrupt_controller_;
+    std::vector<std::shared_ptr<ClockedDevice>> clocked_devices_;
 
     bool servicePendingInterruptIfNeeded();
+    void tickClockedDevices();
 
     std::int64_t readDataMemory(std::size_t address);
     void writeDataMemory(std::size_t address, std::int64_t value);

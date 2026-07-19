@@ -1,5 +1,6 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/ALU.hpp"
+#include "zero_cpu/core/ClockedDevice.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 
@@ -91,6 +92,10 @@ void CPU::step() {
     if (has_binary_program_) {
         try {
             stepBinary();
+
+            if (!state_.halted() && !state_.hasError()) {
+                tickClockedDevices();
+            }
         } catch (const std::exception& ex) {
             setRuntimeError(ex.what());
         }
@@ -108,6 +113,10 @@ void CPU::step() {
     try {
         const Instruction& instruction = program_[pc];
         execute(instruction);
+
+        if (!state_.halted() && !state_.hasError()) {
+            tickClockedDevices();
+        }
     } catch (const std::exception& ex) {
         setRuntimeError(ex.what());
     }
@@ -192,6 +201,22 @@ bool CPU::hasInterruptController() const {
     return static_cast<bool>(interrupt_controller_);
 }
 
+void CPU::addClockedDevice(std::shared_ptr<ClockedDevice> device) {
+    if (!device) {
+        throw std::runtime_error("Clocked device must not be null");
+    }
+
+    clocked_devices_.push_back(std::move(device));
+}
+
+void CPU::clearClockedDevices() {
+    clocked_devices_.clear();
+}
+
+std::size_t CPU::clockedDeviceCount() const {
+    return clocked_devices_.size();
+}
+
 bool CPU::servicePendingInterruptIfNeeded() {
     if (!interrupt_controller_) {
         return false;
@@ -230,6 +255,16 @@ bool CPU::servicePendingInterruptIfNeeded() {
 
     state_.setPc(handlerAddress);
     return true;
+}
+
+void CPU::tickClockedDevices() {
+    for (const std::shared_ptr<ClockedDevice>& device : clocked_devices_) {
+        if (!device) {
+            throw std::runtime_error("Clocked device list contains null device");
+        }
+
+        device->tick();
+    }
 }
 
 std::int64_t CPU::readDataMemory(std::size_t address) {

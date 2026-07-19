@@ -1,0 +1,20 @@
+JMP main
+
+timer_handler:
+MOV R5, 0
+STORE [61712], R5
+STORE [280], R0
+STORE [288], R1
+MOV R6, 999
+STORE [296], R6
+RET
+
+main:
+MOV R2, 0
+
+loop:
+ADD R2, 1
+CMP R2, 10
+JL loop
+STORE [304], R2
+HALT
