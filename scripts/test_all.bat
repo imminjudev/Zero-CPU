@@ -49,7 +49,7 @@ if errorlevel 1 goto fail
 
 echo.
 echo [5/6] Running function_call.zbin...
-"%ZERO_CLI%" run-binary examples\function_call.zbin --watch 100 2048
+"%ZERO_CLI%" run-binary examples\function_call.zbin --expect-memory 100=20 2048=20
 if errorlevel 1 goto fail
 
 echo.
@@ -57,7 +57,7 @@ echo [6/6] Assembling and running alu_flags.zasm...
 "%ZERO_CLI%" assemble examples\alu_flags.zasm examples\alu_flags.zbin
 if errorlevel 1 goto fail
 
-"%ZERO_CLI%" run-binary examples\alu_flags.zbin --watch 120 128 136 144 152 160 168 200
+"%ZERO_CLI%" run-binary examples\alu_flags.zbin --expect-memory 120=30 128=20 136=1 144=2 152=3 160=4 168=5 200=777
 if errorlevel 1 goto fail
 
 echo.

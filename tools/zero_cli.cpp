@@ -36,6 +36,16 @@ constexpr std::size_t kStackViewCount = 32;
 
 constexpr std::size_t kLoadedMemoryPreviewCount = 96;
 
+struct MemoryExpectation {
+    std::size_t address = 0;
+    std::int64_t expected = 0;
+};
+
+struct RunBinaryOptions {
+    std::vector<std::size_t> watchAddresses;
+    std::vector<MemoryExpectation> memoryExpectations;
+};
+
 void printProgram(
     const std::vector<zero_cpu::Instruction>& program,
     const zero_cpu::CPU::LabelTable& labels
@@ -92,6 +102,51 @@ void printWatchedMemory(
     }
 }
 
+
+bool checkMemoryExpectations(
+    const zero_cpu::CPU& cpu,
+    const std::vector<MemoryExpectation>& expectations
+) {
+    if (expectations.empty()) {
+        return true;
+    }
+
+    bool passed = true;
+
+    std::cout << "Memory Expectations:\n";
+
+    for (const MemoryExpectation& expectation : expectations) {
+        const std::int64_t actual = static_cast<std::int64_t>(
+            cpu.state().memory().read(expectation.address)
+        );
+
+        if (actual == expectation.expected) {
+            std::cout << "[PASS] Memory["
+                      << expectation.address
+                      << "] = "
+                      << actual
+                      << "\n";
+        } else {
+            std::cout << "[FAIL] Memory["
+                      << expectation.address
+                      << "] expected "
+                      << expectation.expected
+                      << " but got "
+                      << actual
+                      << "\n";
+            passed = false;
+        }
+    }
+
+    if (passed) {
+        std::cout << "Memory expectations passed.\n";
+    } else {
+        std::cout << "Memory expectations failed.\n";
+    }
+
+    return passed;
+}
+
 std::size_t parseMemoryAddress(const std::string& text) {
     std::size_t parsedLength = 0;
 
@@ -118,36 +173,101 @@ std::size_t parseMemoryAddress(const std::string& text) {
     return static_cast<std::size_t>(value);
 }
 
-std::vector<std::size_t> parseWatchAddresses(
+bool isCommandOption(const std::string& text) {
+    return text.rfind("--", 0) == 0;
+}
+
+std::int64_t parseExpectedMemoryValue(const std::string& text) {
+    std::size_t parsedLength = 0;
+
+    const long long value = std::stoll(
+        text,
+        &parsedLength,
+        0
+    );
+
+    if (parsedLength != text.size()) {
+        throw std::invalid_argument(
+            "Invalid expected memory value: " + text
+        );
+    }
+
+    return static_cast<std::int64_t>(value);
+}
+
+MemoryExpectation parseMemoryExpectation(const std::string& text) {
+    const std::size_t equalsPosition = text.find('=');
+
+    if (equalsPosition == std::string::npos ||
+        equalsPosition == 0 ||
+        equalsPosition + 1 >= text.size()) {
+        throw std::invalid_argument(
+            "Invalid memory expectation. Expected format: <address>=<value>, got: " + text
+        );
+    }
+
+    MemoryExpectation expectation;
+    expectation.address = parseMemoryAddress(text.substr(0, equalsPosition));
+    expectation.expected = parseExpectedMemoryValue(text.substr(equalsPosition + 1));
+    return expectation;
+}
+
+RunBinaryOptions parseRunBinaryOptions(
     int argc,
     char* argv[],
     int startIndex
 ) {
-    std::vector<std::size_t> watchAddresses;
+    RunBinaryOptions options;
 
-    if (startIndex >= argc) {
-        return watchAddresses;
-    }
+    int i = startIndex;
 
-    const std::string option = argv[startIndex];
+    while (i < argc) {
+        const std::string option = argv[i];
 
-    if (option != "--watch") {
+        if (option == "--watch") {
+            ++i;
+
+            if (i >= argc || isCommandOption(argv[i])) {
+                throw std::invalid_argument(
+                    "--watch requires at least one memory address"
+                );
+            }
+
+            while (i < argc && !isCommandOption(argv[i])) {
+                options.watchAddresses.push_back(
+                    parseMemoryAddress(argv[i])
+                );
+                ++i;
+            }
+
+            continue;
+        }
+
+        if (option == "--expect-memory") {
+            ++i;
+
+            if (i >= argc || isCommandOption(argv[i])) {
+                throw std::invalid_argument(
+                    "--expect-memory requires at least one <address>=<value> pair"
+                );
+            }
+
+            while (i < argc && !isCommandOption(argv[i])) {
+                options.memoryExpectations.push_back(
+                    parseMemoryExpectation(argv[i])
+                );
+                ++i;
+            }
+
+            continue;
+        }
+
         throw std::invalid_argument(
             "Unknown run-binary option: " + option
         );
     }
 
-    if (startIndex + 1 >= argc) {
-        throw std::invalid_argument(
-            "--watch requires at least one memory address"
-        );
-    }
-
-    for (int i = startIndex + 1; i < argc; ++i) {
-        watchAddresses.push_back(parseMemoryAddress(argv[i]));
-    }
-
-    return watchAddresses;
+    return options;
 }
 
 void printFinalCheck(const zero_cpu::CPU& cpu) {
@@ -781,7 +901,7 @@ int cpuLoadBinaryFile(const std::string& inputPath) {
 
 int runBinaryFile(
     const std::string& inputPath,
-    const std::vector<std::size_t>& watchAddresses
+    const RunBinaryOptions& options
 ) {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
@@ -797,14 +917,31 @@ int runBinaryFile(
     printBinaryHeader(program);
     std::cout << "\n";
 
-    if (!watchAddresses.empty()) {
+    if (!options.watchAddresses.empty()) {
         std::cout << "Memory Watch Addresses:";
 
-        for (const std::size_t address : watchAddresses) {
+        for (const std::size_t address : options.watchAddresses) {
             std::cout << " " << address;
         }
 
-        std::cout << "\n\n";
+        std::cout << "\n";
+    }
+
+    if (!options.memoryExpectations.empty()) {
+        std::cout << "Memory Expectations:";
+
+        for (const MemoryExpectation& expectation : options.memoryExpectations) {
+            std::cout << " "
+                      << expectation.address
+                      << "="
+                      << expectation.expected;
+        }
+
+        std::cout << "\n";
+    }
+
+    if (!options.watchAddresses.empty() || !options.memoryExpectations.empty()) {
+        std::cout << "\n";
     }
 
     std::cout << "=== Binary Execution ===\n";
@@ -828,8 +965,13 @@ int runBinaryFile(
                       << cpu.state().errorMessage()
                       << "\n\n";
 
-            printWatchedMemory(cpu, watchAddresses);
-            if (!watchAddresses.empty()) {
+            printWatchedMemory(cpu, options.watchAddresses);
+            if (!options.watchAddresses.empty()) {
+                std::cout << "\n";
+            }
+
+            checkMemoryExpectations(cpu, options.memoryExpectations);
+            if (!options.memoryExpectations.empty()) {
                 std::cout << "\n";
             }
 
@@ -842,8 +984,13 @@ int runBinaryFile(
         if (stepCount > 1000) {
             std::cout << "Step limit reached in binary execution.\n\n";
 
-            printWatchedMemory(cpu, watchAddresses);
-            if (!watchAddresses.empty()) {
+            printWatchedMemory(cpu, options.watchAddresses);
+            if (!options.watchAddresses.empty()) {
+                std::cout << "\n";
+            }
+
+            checkMemoryExpectations(cpu, options.memoryExpectations);
+            if (!options.memoryExpectations.empty()) {
                 std::cout << "\n";
             }
 
@@ -857,13 +1004,27 @@ int runBinaryFile(
     printMemoryViews(cpu);
     std::cout << "\n";
 
-    printWatchedMemory(cpu, watchAddresses);
-    if (!watchAddresses.empty()) {
+    printWatchedMemory(cpu, options.watchAddresses);
+    if (!options.watchAddresses.empty()) {
+        std::cout << "\n";
+    }
+
+    const bool memoryExpectationsPassed = checkMemoryExpectations(
+        cpu,
+        options.memoryExpectations
+    );
+
+    if (!options.memoryExpectations.empty()) {
         std::cout << "\n";
     }
 
     printFinalCheck(cpu);
     std::cout << "\n";
+
+    if (!memoryExpectationsPassed) {
+        std::cout << "Binary execution finished, but memory expectations failed.\n";
+        return 1;
+    }
 
     std::cout << "Binary execution finished successfully.\n";
 
@@ -970,7 +1131,7 @@ void printUsage() {
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
-    std::cout << "  zero_cli run-binary <input.zbin> [--watch <addr>...]\n";
+    std::cout << "  zero_cli run-binary <input.zbin> [--watch <addr>...] [--expect-memory <addr=value>...]\n";
 }
 
 } // namespace
@@ -1051,10 +1212,10 @@ int main(int argc, char* argv[]) {
                     return 1;
                 }
 
-                const std::vector<std::size_t> watchAddresses =
-                    parseWatchAddresses(argc, argv, 3);
+                const RunBinaryOptions options =
+                    parseRunBinaryOptions(argc, argv, 3);
 
-                return runBinaryFile(argv[2], watchAddresses);
+                return runBinaryFile(argv[2], options);
             }
         }
 
