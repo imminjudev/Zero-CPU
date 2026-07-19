@@ -54,6 +54,8 @@ Opcode decodeOpcode(std::uint8_t byte) {
         return Opcode::CALL;
     case 0x53:
         return Opcode::RET;
+    case 0x54:
+        return Opcode::IRET;
 
     case 0x60:
         return Opcode::AND;

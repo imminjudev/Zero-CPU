@@ -7,7 +7,7 @@ STORE [280], R0
 STORE [288], R1
 MOV R6, 999
 STORE [296], R6
-RET
+IRET
 
 main:
 MOV R2, 0

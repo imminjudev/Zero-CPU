@@ -26,6 +26,46 @@ void applyALUResultToFlags(Flags& flags, const ALUResult& result) {
     flags.setOverflow(result.overflow);
 }
 
+std::int64_t packFlags(const Flags& flags) {
+    std::int64_t value = 0;
+
+    if (flags.zero()) {
+        value |= 1LL << 0;
+    }
+
+    if (flags.sign()) {
+        value |= 1LL << 1;
+    }
+
+    if (flags.carry()) {
+        value |= 1LL << 2;
+    }
+
+    if (flags.overflow()) {
+        value |= 1LL << 3;
+    }
+
+    return value;
+}
+
+void restoreFlags(Flags& flags, std::int64_t value) {
+    flags.setZero((value & (1LL << 0)) != 0);
+    flags.setSign((value & (1LL << 1)) != 0);
+    flags.setCarry((value & (1LL << 2)) != 0);
+    flags.setOverflow((value & (1LL << 3)) != 0);
+}
+
+std::size_t checkedReturnAddress(
+    std::int64_t returnAddress,
+    const char* context
+) {
+    if (returnAddress < 0) {
+        throw std::runtime_error(context);
+    }
+
+    return static_cast<std::size_t>(returnAddress);
+}
+
 void CPU::reset() {
     state_.reset();
     program_.clear();
@@ -246,6 +286,7 @@ bool CPU::servicePendingInterruptIfNeeded() {
 
     const std::size_t returnAddress = state_.pc();
     pushValue(static_cast<std::int64_t>(returnAddress));
+    pushValue(packFlags(state_.flags()));
 
     state_.registers().set(
         RegisterName::R0,
@@ -714,12 +755,28 @@ void CPU::executeBinaryInstruction(
         requireNoBinaryOperands(instruction);
 
         const std::int64_t returnAddress = popValue();
+        state_.setPc(
+            checkedReturnAddress(
+                returnAddress,
+                "Negative binary return address"
+            )
+        );
+        break;
+    }
 
-        if (returnAddress < 0) {
-            throw std::runtime_error("Negative binary return address");
-        }
+    case Opcode::IRET: {
+        requireNoBinaryOperands(instruction);
 
-        state_.setPc(static_cast<std::size_t>(returnAddress));
+        const std::int64_t flagsValue = popValue();
+        restoreFlags(state_.flags(), flagsValue);
+
+        const std::int64_t returnAddress = popValue();
+        state_.setPc(
+            checkedReturnAddress(
+                returnAddress,
+                "Negative binary interrupt return address"
+            )
+        );
         break;
     }
 
@@ -1084,6 +1141,10 @@ void CPU::execute(const Instruction& instruction) {
         executeRet(instruction);
         break;
 
+    case Opcode::IRET:
+        executeIret(instruction);
+        break;
+
     case Opcode::AND:
         executeAnd(instruction);
         break;
@@ -1318,12 +1379,27 @@ void CPU::executeRet(const Instruction& instruction) {
     requireNoOperand(instruction);
 
     const std::int64_t returnAddress = popValue();
+    state_.setPc(
+        checkedReturnAddress(
+            returnAddress,
+            "Negative return address"
+        )
+    );
+}
 
-    if (returnAddress < 0) {
-        throw std::runtime_error("Negative return address");
-    }
+void CPU::executeIret(const Instruction& instruction) {
+    requireNoOperand(instruction);
 
-    state_.setPc(static_cast<std::size_t>(returnAddress));
+    const std::int64_t flagsValue = popValue();
+    restoreFlags(state_.flags(), flagsValue);
+
+    const std::int64_t returnAddress = popValue();
+    state_.setPc(
+        checkedReturnAddress(
+            returnAddress,
+            "Negative interrupt return address"
+        )
+    );
 }
 
 void CPU::executeAnd(const Instruction& instruction) {

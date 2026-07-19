@@ -160,6 +160,7 @@ private:
     void executePop(const Instruction& instruction);
     void executeCall(const Instruction& instruction);
     void executeRet(const Instruction& instruction);
+    void executeIret(const Instruction& instruction);
     void executeAnd(const Instruction& instruction);
     void executeOr(const Instruction& instruction);
     void executeXor(const Instruction& instruction);
