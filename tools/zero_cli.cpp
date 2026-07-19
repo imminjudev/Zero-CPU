@@ -4,6 +4,7 @@
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/binary/BinaryReader.hpp"
 #include "zero_cpu/binary/BinaryWriter.hpp"
+#include "zero_cpu/core/ALU.hpp"
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/Memory.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
@@ -357,6 +358,243 @@ void printDecodedInstructions(const std::vector<std::uint8_t>& code) {
         const std::size_t index = offset / kInstructionSize;
         printDecodedInstruction(index, decoded);
     }
+}
+
+
+std::string boolText(bool value) {
+    return value ? "true" : "false";
+}
+
+struct ExpectedALUResult {
+    std::int64_t value = 0;
+    bool zero = false;
+    bool sign = false;
+    bool carry = false;
+    bool overflow = false;
+};
+
+bool checkALUResult(
+    const std::string& name,
+    const zero_cpu::ALUResult& actual,
+    const ExpectedALUResult& expected
+) {
+    const bool passed =
+        actual.value == expected.value &&
+        actual.zero == expected.zero &&
+        actual.sign == expected.sign &&
+        actual.carry == expected.carry &&
+        actual.overflow == expected.overflow;
+
+    std::cout << (passed ? "[PASS] " : "[FAIL] ")
+              << name
+              << " | value=" << actual.value
+              << " ZF=" << boolText(actual.zero)
+              << " SF=" << boolText(actual.sign)
+              << " CF=" << boolText(actual.carry)
+              << " OF=" << boolText(actual.overflow)
+              << "\n";
+
+    if (!passed) {
+        std::cout << "       expected"
+                  << " value=" << expected.value
+                  << " ZF=" << boolText(expected.zero)
+                  << " SF=" << boolText(expected.sign)
+                  << " CF=" << boolText(expected.carry)
+                  << " OF=" << boolText(expected.overflow)
+                  << "\n";
+    }
+
+    return passed;
+}
+
+bool checkThrows(
+    const std::string& name,
+    void (*operation)()
+) {
+    try {
+        operation();
+    } catch (const std::exception& ex) {
+        std::cout << "[PASS] "
+                  << name
+                  << " | threw: "
+                  << ex.what()
+                  << "\n";
+        return true;
+    }
+
+    std::cout << "[FAIL] "
+              << name
+              << " | expected exception, but no exception was thrown\n";
+    return false;
+}
+
+void divByZeroOperation() {
+    (void)zero_cpu::ALU::div(10, 0);
+}
+
+void divOverflowOperation() {
+    (void)zero_cpu::ALU::div(
+        std::numeric_limits<std::int64_t>::min(),
+        -1
+    );
+}
+
+int runAluTest() {
+    using namespace zero_cpu;
+
+    std::cout << "=== Zero-CPU ALU Test ===\n";
+    std::cout << "Testing ALU value output and ZF/SF/CF/OF flags.\n\n";
+
+    int failures = 0;
+
+    auto expect = [&](
+        const std::string& name,
+        const ALUResult& actual,
+        const ExpectedALUResult& expected
+    ) {
+        if (!checkALUResult(name, actual, expected)) {
+            ++failures;
+        }
+    };
+
+    auto expectThrow = [&](
+        const std::string& name,
+        void (*operation)()
+    ) {
+        if (!checkThrows(name, operation)) {
+            ++failures;
+        }
+    };
+
+    expect(
+        "ADD 10 + 20",
+        ALU::add(10, 20),
+        ExpectedALUResult{30, false, false, false, false}
+    );
+
+    expect(
+        "ADD INT64_MAX + 1",
+        ALU::add(std::numeric_limits<std::int64_t>::max(), 1),
+        ExpectedALUResult{
+            std::numeric_limits<std::int64_t>::min(),
+            false,
+            true,
+            false,
+            true
+        }
+    );
+
+    expect(
+        "ADD -1 + 1",
+        ALU::add(-1, 1),
+        ExpectedALUResult{0, true, false, true, false}
+    );
+
+    expect(
+        "SUB 30 - 10",
+        ALU::sub(30, 10),
+        ExpectedALUResult{20, false, false, false, false}
+    );
+
+    expect(
+        "SUB 10 - 20",
+        ALU::sub(10, 20),
+        ExpectedALUResult{-10, false, true, true, false}
+    );
+
+    expect(
+        "SUB INT64_MIN - 1",
+        ALU::sub(std::numeric_limits<std::int64_t>::min(), 1),
+        ExpectedALUResult{
+            std::numeric_limits<std::int64_t>::max(),
+            false,
+            false,
+            false,
+            true
+        }
+    );
+
+    expect(
+        "MUL 6 * 7",
+        ALU::mul(6, 7),
+        ExpectedALUResult{42, false, false, false, false}
+    );
+
+    expect(
+        "MUL INT64_MAX * 2",
+        ALU::mul(std::numeric_limits<std::int64_t>::max(), 2),
+        ExpectedALUResult{-2, false, true, true, true}
+    );
+
+    expect(
+        "DIV 42 / 7",
+        ALU::div(42, 7),
+        ExpectedALUResult{6, false, false, false, false}
+    );
+
+    expectThrow("DIV 10 / 0", divByZeroOperation);
+    expectThrow("DIV INT64_MIN / -1", divOverflowOperation);
+
+    expect(
+        "AND 10 & 5",
+        ALU::bitAnd(10, 5),
+        ExpectedALUResult{0, true, false, false, false}
+    );
+
+    expect(
+        "OR 8 | 2",
+        ALU::bitOr(8, 2),
+        ExpectedALUResult{10, false, false, false, false}
+    );
+
+    expect(
+        "XOR 10 ^ 2",
+        ALU::bitXor(10, 2),
+        ExpectedALUResult{8, false, false, false, false}
+    );
+
+    expect(
+        "NOT 0",
+        ALU::bitNot(0),
+        ExpectedALUResult{-1, false, true, false, false}
+    );
+
+    expect(
+        "CMP 5, 5",
+        ALU::compare(5, 5),
+        ExpectedALUResult{0, true, false, false, false}
+    );
+
+    expect(
+        "CMP 3, 8",
+        ALU::compare(3, 8),
+        ExpectedALUResult{-5, false, true, true, false}
+    );
+
+    expect(
+        "TEST 10, 5",
+        ALU::test(10, 5),
+        ExpectedALUResult{0, true, false, false, false}
+    );
+
+    expect(
+        "TEST 10, 2",
+        ALU::test(10, 2),
+        ExpectedALUResult{2, false, false, false, false}
+    );
+
+    std::cout << "\n";
+
+    if (failures == 0) {
+        std::cout << "ALU test finished successfully.\n";
+        return 0;
+    }
+
+    std::cout << "ALU test failed. Failure count: "
+              << failures
+              << "\n";
+
+    return 1;
 }
 
 int runBinaryTest(const std::string& outputPath) {
@@ -727,6 +965,7 @@ void printUsage() {
     std::cout << "  zero_cli\n";
     std::cout << "  zero_cli <input.zasm>\n";
     std::cout << "  zero_cli binary-test [output.zbin]\n";
+    std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -753,6 +992,16 @@ int main(int argc, char* argv[]) {
                         : "examples/binary_test.zbin";
 
                 return runBinaryTest(outputPath);
+            }
+
+            if (command == "alu-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid alu-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runAluTest();
             }
 
             if (command == "assemble") {
