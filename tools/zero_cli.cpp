@@ -7,6 +7,7 @@
 #include "zero_cpu/core/ALU.hpp"
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/DebugOutputDevice.hpp"
+#include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/Memory.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
@@ -1282,6 +1283,121 @@ int runMMIOTest() {
     return 0;
 }
 
+
+int runInterruptTest() {
+    using namespace zero_cpu;
+
+    std::cout << "=== Zero-CPU Interrupt Controller Test ===\n\n";
+
+    bool passed = true;
+
+    auto expect = [&passed](const std::string& name, bool condition) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    auto expectThrow = [&passed](const std::string& name, auto operation) {
+        try {
+            operation();
+        } catch (const std::exception& ex) {
+            std::cout << "[PASS] "
+                      << name
+                      << " | threw: "
+                      << ex.what()
+                      << "\n";
+            return;
+        }
+
+        std::cout << "[FAIL] "
+                  << name
+                  << " | expected exception, but no exception was thrown\n";
+        passed = false;
+    };
+
+    InterruptController controller;
+
+    expect("global interrupts enabled by default", controller.globalEnabled());
+    expect("no pending interrupt on reset", !controller.hasPending());
+    expect("pending count is zero on reset", controller.pendingCount() == 0);
+
+    controller.setVectorHandler(1, 0x300);
+    expect("vector 1 handler installed", controller.hasVectorHandler(1));
+    expect("vector 1 handler address is 0x300", controller.vectorHandler(1) == 0x300);
+
+    controller.request(1, 123, "timer");
+    expect("interrupt request queued", controller.pendingCount() == 1);
+    expect("interrupt request is deliverable", controller.hasPending());
+
+    InterruptRequest first = controller.acknowledge();
+    expect("acknowledged vector is 1", first.vector == 1);
+    expect("acknowledged payload is 123", first.payload == 123);
+    expect("acknowledged source is timer", first.source == "timer");
+    expect("pending queue empty after acknowledge", controller.pendingCount() == 0);
+
+    controller.request(2, 222, "keyboard");
+    expect("vector 2 without handler is queued", controller.pendingCount() == 1);
+    expect("vector 2 without handler is not deliverable", !controller.hasPending());
+
+    controller.setVectorHandler(2, 0x400);
+    expect("vector 2 becomes deliverable after handler install", controller.hasPending());
+
+    controller.mask(2);
+    expect("masked vector 2 is not deliverable", !controller.hasPending());
+    expect("vector 2 reports masked", controller.isMasked(2));
+
+    controller.unmask(2);
+    expect("unmasked vector 2 is deliverable again", controller.hasPending());
+
+    controller.setGlobalEnabled(false);
+    expect("global disabled blocks delivery", !controller.hasPending());
+    expect("pending request remains queued while disabled", controller.pendingCount() == 1);
+
+    controller.setGlobalEnabled(true);
+    expect("global re-enabled restores delivery", controller.hasPending());
+
+    InterruptRequest second = controller.acknowledge();
+    expect("acknowledged vector is 2", second.vector == 2);
+    expect("acknowledged payload is 222", second.payload == 222);
+    expect("acknowledged source is keyboard", second.source == "keyboard");
+
+    expectThrow(
+        "acknowledge with no deliverable interrupt throws",
+        [&controller]() {
+            (void)controller.acknowledge();
+        }
+    );
+
+    expectThrow(
+        "reading missing vector handler throws",
+        [&controller]() {
+            (void)controller.vectorHandler(3);
+        }
+    );
+
+    controller.setVectorHandler(3, 0x500);
+    controller.request(3, 333, "network");
+    expect("vector 3 request deliverable", controller.hasPending());
+
+    controller.clear();
+    expect("clear removes vector handlers", !controller.hasVectorHandler(3));
+    expect("clear removes pending interrupts", controller.pendingCount() == 0);
+    expect("clear unmasks vector 3", !controller.isMasked(3));
+    expect("clear enables global interrupt flag", controller.globalEnabled());
+
+    if (!passed) {
+        std::cout << "\nInterrupt controller test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nInterrupt controller test finished successfully.\n";
+    return 0;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -1290,6 +1406,7 @@ void printUsage() {
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli mmio-test\n";
+    std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -1336,6 +1453,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runMMIOTest();
+            }
+
+            if (command == "interrupt-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid interrupt-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runInterruptTest();
             }
 
             if (command == "assemble") {

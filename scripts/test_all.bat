@@ -43,6 +43,11 @@ echo Running MMIO bus test...
 if errorlevel 1 goto fail
 
 echo.
+echo Running interrupt controller test...
+"%ZERO_CLI%" interrupt-test
+if errorlevel 1 goto fail
+
+echo.
 echo [3/6] Running binary format round-trip test...
 "%ZERO_CLI%" binary-test
 if errorlevel 1 goto fail
