@@ -1,11 +1,14 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/ALU.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
 
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 
+#include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace zero_cpu {
@@ -153,6 +156,35 @@ std::size_t CPU::binaryCodeSize() const {
     return binary_code_size_;
 }
 
+void CPU::setMMIOBus(std::shared_ptr<MMIOBus> bus) {
+    mmio_bus_ = std::move(bus);
+}
+
+void CPU::clearMMIOBus() {
+    mmio_bus_.reset();
+}
+
+bool CPU::hasMMIOBus() const {
+    return static_cast<bool>(mmio_bus_);
+}
+
+std::int64_t CPU::readDataMemory(std::size_t address) {
+    if (mmio_bus_ && mmio_bus_->hasDeviceAt(address)) {
+        return mmio_bus_->read(address);
+    }
+
+    return state_.memory().read(address);
+}
+
+void CPU::writeDataMemory(std::size_t address, std::int64_t value) {
+    if (mmio_bus_ && mmio_bus_->hasDeviceAt(address)) {
+        mmio_bus_->write(address, value);
+        return;
+    }
+
+    state_.memory().write(address, value);
+}
+
 void CPU::stepBinary() {
     const std::size_t pc = state_.pc();
 
@@ -240,8 +272,7 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        const std::int64_t value =
-            state_.memory().read(address);
+        const std::int64_t value = readDataMemory(address);
 
         writeBinaryRegisterDestination(
             instruction.dst_type,
@@ -269,7 +300,7 @@ void CPU::executeBinaryInstruction(
                 instruction.src_payload
             );
 
-        state_.memory().write(address, value);
+        writeDataMemory(address, value);
         state_.flags().updateZeroAndSign(value);
 
         advanceBinaryPcUnlessHalted();
@@ -747,7 +778,7 @@ RegisterName CPU::decodeBinaryRegister(std::int64_t payload) const {
 std::int64_t CPU::readBinaryOperandValue(
     EncodedOperandType type,
     std::int64_t payload
-) const {
+) {
     switch (type) {
     case EncodedOperandType::Register:
         return state_.registers().get(decodeBinaryRegister(payload));
@@ -756,7 +787,7 @@ std::int64_t CPU::readBinaryOperandValue(
         return payload;
 
     case EncodedOperandType::MemoryAddress:
-        return state_.memory().read(
+        return readDataMemory(
             readBinaryMemoryAddress(type, payload)
         );
 
@@ -1018,7 +1049,7 @@ void CPU::executeLoad(const Instruction& instruction) {
     }
 
     const std::int64_t value =
-        state_.memory().read(instruction.src().asMemoryAddress());
+        readDataMemory(instruction.src().asMemoryAddress());
 
     writeRegisterDestination(instruction.dst(), value);
     state_.flags().updateZeroAndSign(value);
@@ -1034,7 +1065,7 @@ void CPU::executeStore(const Instruction& instruction) {
     }
 
     const std::int64_t value = readOperandValue(instruction.src());
-    state_.memory().write(instruction.dst().asMemoryAddress(), value);
+    writeDataMemory(instruction.dst().asMemoryAddress(), value);
 
     state_.flags().updateZeroAndSign(value);
     advancePcUnlessHalted();
@@ -1251,7 +1282,7 @@ void CPU::executeNot(const Instruction& instruction) {
     advancePcUnlessHalted();
 }
 
-std::int64_t CPU::readOperandValue(const Operand& operand) const {
+std::int64_t CPU::readOperandValue(const Operand& operand) {
     switch (operand.type()) {
     case OperandType::Register:
         return state_.registers().get(operand.asRegister());
@@ -1260,7 +1291,7 @@ std::int64_t CPU::readOperandValue(const Operand& operand) const {
         return operand.asImmediate();
 
     case OperandType::MemoryAddress:
-        return state_.memory().read(operand.asMemoryAddress());
+        return readDataMemory(operand.asMemoryAddress());
 
     default:
         throw std::runtime_error("Operand cannot be read as a value");

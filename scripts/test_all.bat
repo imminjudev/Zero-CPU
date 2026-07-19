@@ -81,3 +81,11 @@ echo ========================================
 echo.
 
 exit /b 1
+
+echo.
+echo Running MMIO output example...
+"%ZERO_CLI%" assemble examples\mmio_output.zasm examples\mmio_output.zbin
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" run-binary examples\mmio_output.zbin --debug-mmio --expect-memory 220=66 228=2
+if errorlevel 1 goto fail

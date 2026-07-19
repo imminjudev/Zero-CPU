@@ -47,6 +47,7 @@ struct MemoryExpectation {
 struct RunBinaryOptions {
     std::vector<std::size_t> watchAddresses;
     std::vector<MemoryExpectation> memoryExpectations;
+    bool enableDebugMMIO = false;
 };
 
 void printProgram(
@@ -265,6 +266,12 @@ RunBinaryOptions parseRunBinaryOptions(
             continue;
         }
 
+        if (option == "--debug-mmio") {
+            options.enableDebugMMIO = true;
+            ++i;
+            continue;
+        }
+
         throw std::invalid_argument(
             "Unknown run-binary option: " + option
         );
@@ -294,6 +301,26 @@ void printFinalCheck(const zero_cpu::CPU& cpu) {
     std::cout << "Memory[2048] = "
               << cpu.state().memory().read(2048)
               << "\n";
+}
+
+void printDebugOutputDevice(
+    const zero_cpu::DebugOutputDevice& device
+) {
+    std::cout << "Debug MMIO Output Device:\n";
+    std::cout << "Write count = "
+              << device.writes().size()
+              << "\n";
+
+    const std::vector<std::int64_t>& values = device.writes();
+
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        std::cout << "  [" << i << "] " << values[i] << "\n";
+    }
+
+    if (!device.outputText().empty()) {
+        std::cout << "Captured text:\n"
+                  << device.outputText();
+    }
 }
 
 void runStepByStep(zero_cpu::CPU& cpu) {
@@ -913,6 +940,17 @@ int runBinaryFile(
     BinaryProgram program = reader.readFile(inputPath);
 
     CPU cpu;
+
+    std::shared_ptr<MMIOBus> mmioBus;
+    std::shared_ptr<DebugOutputDevice> debugOutputDevice;
+
+    if (options.enableDebugMMIO) {
+        mmioBus = std::make_shared<MMIOBus>();
+        debugOutputDevice = std::make_shared<DebugOutputDevice>();
+        mmioBus->mapDevice(0xF000, 0x10, debugOutputDevice);
+        cpu.setMMIOBus(mmioBus);
+    }
+
     cpu.loadBinaryProgram(program);
 
     std::cout << "Input binary file: " << inputPath << "\n\n";
@@ -943,7 +981,13 @@ int runBinaryFile(
         std::cout << "\n";
     }
 
-    if (!options.watchAddresses.empty() || !options.memoryExpectations.empty()) {
+    if (options.enableDebugMMIO) {
+        std::cout << "Debug MMIO: enabled at 0xF000..0xF00F\n";
+    }
+
+    if (!options.watchAddresses.empty() ||
+        !options.memoryExpectations.empty() ||
+        options.enableDebugMMIO) {
         std::cout << "\n";
     }
 
@@ -978,6 +1022,11 @@ int runBinaryFile(
                 std::cout << "\n";
             }
 
+            if (debugOutputDevice) {
+                printDebugOutputDevice(*debugOutputDevice);
+                std::cout << "\n";
+            }
+
             printFinalCheck(cpu);
             return 1;
         }
@@ -994,6 +1043,11 @@ int runBinaryFile(
 
             checkMemoryExpectations(cpu, options.memoryExpectations);
             if (!options.memoryExpectations.empty()) {
+                std::cout << "\n";
+            }
+
+            if (debugOutputDevice) {
+                printDebugOutputDevice(*debugOutputDevice);
                 std::cout << "\n";
             }
 
@@ -1018,6 +1072,11 @@ int runBinaryFile(
     );
 
     if (!options.memoryExpectations.empty()) {
+        std::cout << "\n";
+    }
+
+    if (debugOutputDevice) {
+        printDebugOutputDevice(*debugOutputDevice);
         std::cout << "\n";
     }
 
@@ -1235,7 +1294,7 @@ void printUsage() {
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
-    std::cout << "  zero_cli run-binary <input.zbin> [--watch <addr>...] [--expect-memory <addr=value>...]\n";
+    std::cout << "  zero_cli run-binary <input.zbin> [--debug-mmio] [--watch <addr>...] [--expect-memory <addr=value>...]\n";
 }
 
 } // namespace

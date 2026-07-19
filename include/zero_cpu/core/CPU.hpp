@@ -2,6 +2,7 @@
 
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/core/CPUState.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/trace/TraceLogger.hpp"
@@ -11,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 namespace zero_cpu {
 
@@ -48,6 +50,10 @@ public:
     std::size_t binaryEntryPoint() const;
     std::size_t binaryCodeSize() const;
 
+    void setMMIOBus(std::shared_ptr<MMIOBus> bus);
+    void clearMMIOBus();
+    bool hasMMIOBus() const;
+
 private:
     static constexpr std::size_t kStackSlotSize = 8;
 
@@ -70,7 +76,7 @@ private:
     std::int64_t readBinaryOperandValue(
         EncodedOperandType type,
         std::int64_t payload
-    ) const;
+    );
 
     void writeBinaryRegisterDestination(
         EncodedOperandType type,
@@ -139,7 +145,7 @@ private:
     void executeXor(const Instruction& instruction);
     void executeNot(const Instruction& instruction);
 
-    std::int64_t readOperandValue(const Operand& operand) const;
+    std::int64_t readOperandValue(const Operand& operand);
     void writeRegisterDestination(
         const Operand& operand,
         std::int64_t value
@@ -157,6 +163,10 @@ private:
 
     void advancePcUnlessHalted();
     void setRuntimeError(const std::string& message);
+    std::int64_t readDataMemory(std::size_t address);
+    void writeDataMemory(std::size_t address, std::int64_t value);
+
+    std::shared_ptr<MMIOBus> mmio_bus_;
 };
 
 } // namespace zero_cpu
