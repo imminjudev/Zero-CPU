@@ -1,6 +1,7 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/ALU.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/InterruptController.hpp"
 
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
@@ -75,6 +76,15 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
 
 void CPU::step() {
     if (state_.halted()) {
+        return;
+    }
+
+    try {
+        if (servicePendingInterruptIfNeeded()) {
+            return;
+        }
+    } catch (const std::exception& ex) {
+        setRuntimeError(ex.what());
         return;
     }
 
@@ -166,6 +176,60 @@ void CPU::clearMMIOBus() {
 
 bool CPU::hasMMIOBus() const {
     return static_cast<bool>(mmio_bus_);
+}
+
+void CPU::setInterruptController(
+    std::shared_ptr<InterruptController> controller
+) {
+    interrupt_controller_ = std::move(controller);
+}
+
+void CPU::clearInterruptController() {
+    interrupt_controller_.reset();
+}
+
+bool CPU::hasInterruptController() const {
+    return static_cast<bool>(interrupt_controller_);
+}
+
+bool CPU::servicePendingInterruptIfNeeded() {
+    if (!interrupt_controller_) {
+        return false;
+    }
+
+    if (!interrupt_controller_->hasPending()) {
+        return false;
+    }
+
+    const InterruptRequest request = interrupt_controller_->acknowledge();
+    const std::size_t handlerAddress =
+        interrupt_controller_->vectorHandler(request.vector);
+
+    if (has_binary_program_) {
+        if (!isBinaryPcInCode(handlerAddress)) {
+            throw std::runtime_error(
+                "Interrupt handler is outside loaded binary code section"
+            );
+        }
+    } else {
+        if (handlerAddress >= program_.size()) {
+            throw std::runtime_error(
+                "Interrupt handler is outside loaded program"
+            );
+        }
+    }
+
+    const std::size_t returnAddress = state_.pc();
+    pushValue(static_cast<std::int64_t>(returnAddress));
+
+    state_.registers().set(
+        RegisterName::R0,
+        static_cast<std::int64_t>(request.vector)
+    );
+    state_.registers().set(RegisterName::R1, request.payload);
+
+    state_.setPc(handlerAddress);
+    return true;
 }
 
 std::int64_t CPU::readDataMemory(std::size_t address) {

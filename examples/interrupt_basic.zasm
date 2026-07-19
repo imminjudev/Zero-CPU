@@ -1,0 +1,13 @@
+JMP main
+
+interrupt_handler:
+STORE [240], R0
+STORE [248], R1
+MOV R2, 777
+STORE [256], R2
+RET
+
+main:
+MOV R3, 123
+STORE [264], R3
+HALT

@@ -2,17 +2,19 @@
 
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/core/CPUState.hpp"
+#include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
+#include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/trace/TraceLogger.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <memory>
 
 namespace zero_cpu {
 
@@ -20,7 +22,9 @@ class CPU {
 public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;
 
+    static constexpr std::size_t kStackSlotSize = 8;
     static constexpr std::size_t kDefaultBinaryCodeBase = 512;
+    static constexpr std::size_t kDefaultMaxSteps = 100000;
 
     CPU();
 
@@ -34,7 +38,7 @@ public:
     void loadBinaryProgram(const binary::BinaryProgram& program);
 
     void step();
-    void run(std::size_t maxSteps = 1000);
+    void run(std::size_t maxSteps = kDefaultMaxSteps);
 
     CPUState& state();
     const CPUState& state() const;
@@ -54,9 +58,13 @@ public:
     void clearMMIOBus();
     bool hasMMIOBus() const;
 
-private:
-    static constexpr std::size_t kStackSlotSize = 8;
+    void setInterruptController(
+        std::shared_ptr<InterruptController> controller
+    );
+    void clearInterruptController();
+    bool hasInterruptController() const;
 
+private:
     CPUState state_;
     std::vector<Instruction> program_;
     LabelTable labels_;
@@ -67,9 +75,20 @@ private:
     std::size_t binary_entry_point_ = 0;
     std::size_t binary_code_size_ = 0;
 
+    std::shared_ptr<MMIOBus> mmio_bus_;
+    std::shared_ptr<InterruptController> interrupt_controller_;
+
+    bool servicePendingInterruptIfNeeded();
+
+    std::int64_t readDataMemory(std::size_t address);
+    void writeDataMemory(std::size_t address, std::int64_t value);
+
     void stepBinary();
     bool isBinaryPcInCode(std::size_t pc) const;
-    void executeBinaryInstruction(const DecodedInstruction& instruction);
+
+    void executeBinaryInstruction(
+        const DecodedInstruction& instruction
+    );
 
     RegisterName decodeBinaryRegister(std::int64_t payload) const;
 
@@ -117,35 +136,30 @@ private:
 
     void executeNop(const Instruction& instruction);
     void executeHalt(const Instruction& instruction);
-
     void executeMov(const Instruction& instruction);
     void executeLoad(const Instruction& instruction);
     void executeStore(const Instruction& instruction);
-
     void executeAdd(const Instruction& instruction);
     void executeSub(const Instruction& instruction);
     void executeMul(const Instruction& instruction);
     void executeDiv(const Instruction& instruction);
-
     void executeCmp(const Instruction& instruction);
-
     void executeJmp(const Instruction& instruction);
     void executeJe(const Instruction& instruction);
     void executeJne(const Instruction& instruction);
     void executeJg(const Instruction& instruction);
     void executeJl(const Instruction& instruction);
-
     void executePush(const Instruction& instruction);
     void executePop(const Instruction& instruction);
     void executeCall(const Instruction& instruction);
     void executeRet(const Instruction& instruction);
-
     void executeAnd(const Instruction& instruction);
     void executeOr(const Instruction& instruction);
     void executeXor(const Instruction& instruction);
     void executeNot(const Instruction& instruction);
 
     std::int64_t readOperandValue(const Operand& operand);
+
     void writeRegisterDestination(
         const Operand& operand,
         std::int64_t value
@@ -163,10 +177,6 @@ private:
 
     void advancePcUnlessHalted();
     void setRuntimeError(const std::string& message);
-    std::int64_t readDataMemory(std::size_t address);
-    void writeDataMemory(std::size_t address, std::int64_t value);
-
-    std::shared_ptr<MMIOBus> mmio_bus_;
 };
 
 } // namespace zero_cpu

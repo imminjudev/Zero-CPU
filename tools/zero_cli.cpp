@@ -1398,6 +1398,120 @@ int runInterruptTest() {
     return 0;
 }
 
+
+int runCPUInterruptTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Zero-CPU CPU Interrupt Delivery Test ===\n\n";
+
+    const std::string sourcePath = "examples/interrupt_basic.zasm";
+    const std::string binaryPath = "examples/interrupt_basic.zbin";
+
+    Assembler assembler;
+    AssembledProgram assembled = assembler.assembleFile(sourcePath);
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code = encoder.encodeProgram(
+        assembled.instructions,
+        assembled.labels
+    );
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size = static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    BinaryWriter writer;
+    writer.writeFile(binaryPath, program);
+
+    CPU cpu;
+    auto controller = std::make_shared<InterruptController>();
+
+    cpu.setInterruptController(controller);
+    cpu.loadBinaryProgram(program);
+
+    const std::size_t handlerAddress =
+        cpu.binaryCodeBase() + kInstructionSize;
+
+    controller->setVectorHandler(7, handlerAddress);
+    controller->request(7, 42, "cpu-interrupt-test");
+
+    std::cout << "Source: " << sourcePath << "\n";
+    std::cout << "Binary: " << binaryPath << "\n";
+    std::cout << "Vector: 7\n";
+    std::cout << "Payload: 42\n";
+    std::cout << "Handler PC: " << handlerAddress << "\n\n";
+
+    cpu.run();
+
+    std::cout << "=== Final CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
+
+    if (cpu.state().hasError()) {
+        std::cout << "CPU interrupt delivery failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+        return 1;
+    }
+
+    const std::int64_t vectorValue = cpu.state().memory().read(240);
+    const std::int64_t payloadValue = cpu.state().memory().read(248);
+    const std::int64_t handlerValue = cpu.state().memory().read(256);
+    const std::int64_t mainValue = cpu.state().memory().read(264);
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        std::int64_t actual,
+        std::int64_t expected
+    ) {
+        if (actual == expected) {
+            std::cout << "[PASS] "
+                      << name
+                      << " = "
+                      << actual
+                      << "\n";
+            return;
+        }
+
+        std::cout << "[FAIL] "
+                  << name
+                  << " expected "
+                  << expected
+                  << " but got "
+                  << actual
+                  << "\n";
+        passed = false;
+    };
+
+    expect("Memory[240] interrupt vector", vectorValue, 7);
+    expect("Memory[248] interrupt payload", payloadValue, 42);
+    expect("Memory[256] handler marker", handlerValue, 777);
+    expect("Memory[264] main marker", mainValue, 123);
+
+    if (controller->pendingCount() != 0) {
+        std::cout << "[FAIL] interrupt queue should be empty but count is "
+                  << controller->pendingCount()
+                  << "\n";
+        passed = false;
+    } else {
+        std::cout << "[PASS] interrupt queue empty after delivery\n";
+    }
+
+    if (!passed) {
+        std::cout << "\nCPU interrupt delivery test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nCPU interrupt delivery test finished successfully.\n";
+    return 0;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -1407,6 +1521,7 @@ void printUsage() {
     std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli interrupt-test\n";
+    std::cout << "  zero_cli cpu-interrupt-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -1463,6 +1578,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runInterruptTest();
+            }
+
+
+            if (command == "cpu-interrupt-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid cpu-interrupt-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runCPUInterruptTest();
             }
 
             if (command == "assemble") {

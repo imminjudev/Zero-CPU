@@ -48,6 +48,11 @@ echo Running interrupt controller test...
 if errorlevel 1 goto fail
 
 echo.
+echo Running CPU interrupt delivery test...
+"%ZERO_CLI%" cpu-interrupt-test
+if errorlevel 1 goto fail
+
+echo.
 echo [3/6] Running binary format round-trip test...
 "%ZERO_CLI%" binary-test
 if errorlevel 1 goto fail
