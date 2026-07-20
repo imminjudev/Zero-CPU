@@ -1,325 +1,635 @@
 # Zero-CPU
 
-**Zero-CPU**는 직접 설계한 가상 ISA를 기반으로 동작하는 C++ 기반 CPU 에뮬레이터 프로젝트입니다.
-이 프로젝트는 단순히 명령어를 실행하는 가상 머신을 만드는 것을 넘어, CPU 내부 상태가 명령어 실행에 따라 어떻게 변화하는지를 추적하고 분석하는 것을 목표로 합니다.
+Zero-CPU is a small virtual computer platform written in C++17.
 
-## Project Title
-
-**Zero-CPU: 상태 전이 추적을 지원하는 가상 ISA 기반 CPU 에뮬레이터 구현**
-
-## Overview
-
-Zero-CPU는 저수준 프로그래밍과 컴퓨터 구조 학습을 목적으로 설계된 가상 CPU입니다.
-레지스터, 메모리, 플래그, 프로그램 카운터, 스택 포인터, 명령어 디코더, 실행 엔진을 직접 구현하며, 자체 어셈블리 문법인 `.zasm`을 통해 프로그램을 작성하고 실행할 수 있도록 설계합니다.
-
-이 프로젝트의 핵심은 **명령어 실행 전후의 CPU 상태를 추적하는 것**입니다.
-각 명령어가 실행될 때 레지스터, 플래그, 메모리, PC, SP가 어떻게 변화하는지 기록하여 CPU의 동작 과정을 분석 가능한 형태로 남깁니다.
-
-## Motivation
-
-운영체제, 컴파일러, 가상 머신, 리버싱, 임베디드 시스템과 같은 저수준 시스템 분야를 이해하기 위해서는 CPU가 명령어를 어떻게 해석하고 실행하는지에 대한 이해가 필요합니다.
-
-Zero-CPU는 실제 x86 또는 ARM 아키텍처를 그대로 구현하는 것이 아니라, 학습과 분석에 적합한 작은 가상 ISA를 직접 설계하고 구현함으로써 CPU의 기본 동작 원리를 코드 수준에서 이해하는 것을 목표로 합니다.
-
-## Goals
-
-이 프로젝트의 주요 목표는 다음과 같습니다.
-
-* 자체 가상 ISA 설계
-* C++ 기반 CPU 에뮬레이터 구현
-* Fetch-Decode-Execute 사이클 구현
-* 레지스터, 메모리, 플래그, 스택 구조 구현
-* `.zasm` 어셈블리 파일 파싱
-* CLI 기반 디버거 구현
-* 명령어 실행 전후 상태 추적
-* 테스트 가능한 CPU 실행 모델 구성
-* GitHub 포트폴리오용 기술 문서 작성
-
-## Core Features
-
-### 1. Virtual CPU
-
-Zero-CPU는 다음과 같은 CPU 구성 요소를 가집니다.
-
-* Register File
-* Program Counter
-* Stack Pointer
-* Flags Register
-* Memory
-* ALU
-* Instruction Decoder
-* Execution Engine
-
-CPU는 기본적으로 다음 실행 흐름을 따릅니다.
+It is not just a visual CPU simulator. The goal is to build a compact systems project with its own ISA, assembler, binary format, loader, virtual CPU, MMIO devices, interrupt system, and mini-kernel style syscall flow.
 
 ```text
-Fetch -> Decode -> Execute -> Update State
+.zasm source
+    ↓
+Assembler
+    ↓
+InstructionEncoder
+    ↓
+.zbin virtual binary
+    ↓
+BinaryLoader
+    ↓
+Virtual Memory
+    ↓
+CPU Fetch-Decode-Execute
+    ↓
+MMIO / Interrupts / Mini Kernel
 ```
 
-### 2. Virtual ISA
+---
 
-Zero-CPU는 자체 명령어 집합을 사용합니다.
+## Project Goal
 
-초기 구현 대상 명령어는 다음과 같습니다.
+Zero-CPU is designed as a learning and portfolio project for systems software development.
 
-```asm
-MOV
-LOAD
-STORE
-
-ADD
-SUB
-MUL
-DIV
-
-AND
-OR
-XOR
-NOT
-
-CMP
-TEST
-
-JMP
-JE
-JNE
-JG
-JL
-
-PUSH
-POP
-CALL
-RET
-
-NOP
-HALT
-```
-
-### 3. Assembler
-
-Zero-CPU는 `.zasm` 형식의 어셈블리 파일을 읽어 내부 명령어 구조로 변환합니다.
-
-예시:
-
-```asm
-MOV R1, 10
-MOV R2, 20
-ADD R1, R2
-HALT
-```
-
-### 4. CLI Debugger
-
-터미널에서 CPU 실행 흐름을 직접 제어할 수 있는 CLI 디버거를 구현합니다.
-
-목표 명령어:
+It connects concepts from:
 
 ```text
-run
-step
-regs
-mem
-stack
-break
-continue
-trace
-quit
+- computer architecture
+- CPU execution
+- assembly language
+- binary formats
+- loaders
+- virtual memory model
+- ALU and FLAGS
+- stack and function calls
+- MMIO
+- interrupts
+- timer devices
+- software interrupts
+- syscall conventions
+- mini kernel design
 ```
 
-### 5. Trace System
-
-Zero-CPU의 가장 중요한 기능은 명령어 실행 전후의 상태를 기록하는 트레이스 시스템입니다.
-
-예상 출력 예시:
+The final direction is:
 
 ```text
-[PC=0002] ADD R1, R2
-
-Before:
-R1 = 10
-R2 = 20
-ZF = 0
-SF = 0
-
-After:
-R1 = 30
-R2 = 20
-ZF = 0
-SF = 0
-
-NextPC = 0003
+A small virtual computer platform with its own ISA, assembler, executable format, loader, virtual CPU, debugger tooling, device model, interrupt system, and mini kernel.
 ```
 
-이를 통해 각 명령어가 CPU 상태에 어떤 영향을 주는지 확인할 수 있습니다.
+---
 
-## Directory Structure
+## Current Features
+
+### Core CPU
+
+```text
+- Register file
+- FLAGS register
+- Byte-addressable memory
+- CPU state
+- ALU module
+- Fetch-Decode-Execute binary execution
+- Stack pointer
+- CALL / RET
+- INT / IRET
+- EI / DI
+```
+
+### ISA
+
+Current instruction groups:
+
+```text
+Control:
+- NOP
+- HALT
+
+Data movement:
+- MOV
+- LOAD
+- STORE
+
+Arithmetic:
+- ADD
+- SUB
+- MUL
+- DIV
+
+Comparison:
+- CMP
+- TEST
+
+Branching:
+- JMP
+- JE
+- JNE
+- JG
+- JL
+
+Stack / function:
+- PUSH
+- POP
+- CALL
+- RET
+
+Interrupt / system:
+- INT
+- IRET
+- EI
+- DI
+
+Bitwise:
+- AND
+- OR
+- XOR
+- NOT
+```
+
+### Toolchain
+
+```text
+- .zasm assembly source
+- Assembler
+- InstructionEncoder
+- InstructionDecoder
+- .zbin virtual binary format
+- BinaryWriter
+- BinaryReader
+- BinaryLoader
+```
+
+### System Extensions
+
+```text
+- MMIOBus
+- MMIODevice interface
+- DebugOutputDevice
+- InterruptController
+- TimerDevice
+- ClockedDevice interface
+- Hardware-style timer interrupt
+- Software interrupt through INT
+- INT 80 syscall convention
+```
+
+### Testing
+
+```text
+- ALU test
+- Binary format round-trip test
+- MMIO bus test
+- Interrupt controller test
+- CPU interrupt delivery test
+- Timer device test
+- CPU timer interrupt test
+- EI/DI interrupt control test
+- Software interrupt test
+- Mini-kernel syscall test
+- Full test runner script
+```
+
+---
+
+## Repository Structure
 
 ```text
 Zero-CPU/
-│
-├─ CMakeLists.txt
-├─ README.md
-│
-├─ docs/
-│  ├─ architecture.md
-│  ├─ isa.md
-│  ├─ execution-semantics.md
-│  └─ trace-format.md
-│
-├─ examples/
-│  ├─ simple_add.zasm
-│  ├─ branch_test.zasm
-│  └─ function_call.zasm
-│
 ├─ include/
 │  └─ zero_cpu/
-│     ├─ core/
-│     │  ├─ CPU.hpp
-│     │  ├─ CPUState.hpp
-│     │  ├─ RegisterFile.hpp
-│     │  ├─ Memory.hpp
-│     │  └─ Flags.hpp
-│     │
-│     ├─ isa/
-│     │  ├─ Instruction.hpp
-│     │  ├─ Opcode.hpp
-│     │  └─ Operand.hpp
-│     │
 │     ├─ assembler/
-│     │  ├─ Lexer.hpp
-│     │  ├─ Parser.hpp
-│     │  └─ Assembler.hpp
-│     │
-│     ├─ debugger/
-│     │  └─ Debugger.hpp
-│     │
+│     ├─ binary/
+│     ├─ core/
+│     ├─ isa/
 │     └─ trace/
-│        ├─ TraceEvent.hpp
-│        └─ TraceLogger.hpp
-│
 ├─ src/
+│  ├─ assembler/
+│  ├─ binary/
 │  ├─ core/
 │  ├─ isa/
-│  ├─ assembler/
-│  ├─ debugger/
 │  └─ trace/
-│
-├─ tests/
-│  ├─ test_arithmetic.cpp
-│  ├─ test_branch.cpp
-│  ├─ test_stack.cpp
-│  └─ test_memory.cpp
-│
-└─ tools/
-   └─ zero_cli.cpp
+├─ tools/
+│  └─ zero_cli.cpp
+├─ studio/
+│  └─ zero_studio.cpp
+├─ examples/
+├─ scripts/
+├─ docs/
+└─ CMakeLists.txt
 ```
 
-## Development Roadmap
+---
 
-### Phase 1. Project Setup
+## Requirements
 
-* GitHub 저장소 생성
-* CMake 프로젝트 구성
-* 기본 디렉터리 구조 생성
-* README 작성
-* architecture.md 작성
+```text
+- C++17
+- CMake
+- Visual Studio 2022 / MSVC
+- Windows command prompt or PowerShell
+```
 
-### Phase 2. CPU State Model
+This project is currently developed and tested on Windows with MSVC.
 
-* RegisterFile 구현
-* Memory 구현
-* Flags 구현
-* CPUState 구현
-* PC, SP 구조 정의
+---
 
-### Phase 3. Instruction Model
+## Build
 
-* Opcode 정의
-* Operand 정의
-* Instruction 구조체 구현
-* 명령어 문자열 출력 기능 구현
+From the project root:
 
-### Phase 4. Execution Engine
+```bat
+cd /d D:\Zero-CPU
+cmake --build build
+```
 
-* CPU 클래스 구현
-* Fetch 단계 구현
-* Decode 단계 구현
-* Execute 단계 구현
-* `NOP`, `HALT`, `MOV`, `ADD`, `SUB` 구현
+If the build directory does not exist yet:
 
-### Phase 5. ISA Expansion
+```bat
+cd /d D:\Zero-CPU
+cmake -S . -B build
+cmake --build build
+```
 
-* 산술 연산 명령어 구현
-* 논리 연산 명령어 구현
-* 비교 명령어 구현
-* 조건 분기 명령어 구현
-* 스택 명령어 구현
-* 함수 호출 명령어 구현
+---
 
-### Phase 6. Assembler
+## CLI Usage
 
-* `.zasm` 파일 입력 처리
-* 토큰 분리
-* 명령어 파싱
-* 라벨 처리
-* 내부 Instruction 형태로 변환
+The main command-line tool is:
 
-### Phase 7. Debugger
+```text
+zero_cli.exe
+```
 
-* step 실행
-* run 실행
-* register dump
-* memory dump
-* stack dump
-* breakpoint 기능
-* trace 출력 기능
+Typical path:
 
-### Phase 8. Trace System
+```bat
+build\Debug\zero_cli.exe
+```
 
-* 실행 전 CPU 상태 기록
-* 실행 후 CPU 상태 기록
-* 변경된 레지스터 표시
-* 변경된 플래그 표시
-* 메모리 접근 기록
-* 로그 파일 저장
+### Help
 
-### Phase 9. Testing
+```bat
+.\build\Debug\zero_cli.exe --help
+```
 
-* 명령어 단위 테스트
-* 분기 명령어 테스트
-* 스택 명령어 테스트
-* 함수 호출 테스트
-* 메모리 load/store 테스트
+### Run Assembly Directly
 
-## Expected Result
+```bat
+.\build\Debug\zero_cli.exe examples\function_call.zasm
+```
 
-Zero-CPU의 최종 산출물은 다음과 같습니다.
+### Assemble `.zasm` to `.zbin`
 
-* C++ 기반 가상 CPU 에뮬레이터
-* 자체 ISA 문서
-* `.zasm` 어셈블리 예제 파일
-* 어셈블러
-* CLI 디버거
-* 트레이스 로그 시스템
-* 테스트 코드
-* GitHub 포트폴리오 문서
-* 개발 회고 및 기술 블로그 글
+```bat
+.\build\Debug\zero_cli.exe assemble examples\function_call.zasm examples\function_call.zbin
+```
 
-## Long-Term Expansion
+### Dump Binary
 
-Zero-CPU는 이후 다음 방향으로 확장할 수 있습니다.
+```bat
+.\build\Debug\zero_cli.exe dump-binary examples\function_call.zbin
+```
 
-* 간단한 운영체제 커널 시뮬레이션
-* 인터럽트 모델 추가
-* 메모리 보호 모델 추가
-* 프로세스/스레드 스케줄링 시뮬레이션
-* 파이프라인 구조 실험
-* 캐시 메모리 시뮬레이션
-* 웹 기반 실행 시각화 도구
-* 간단한 컴파일러 백엔드 연결
+### Load Binary
 
-## Final Objective
+```bat
+.\build\Debug\zero_cli.exe load-binary examples\function_call.zbin
+```
 
-Zero-CPU는 직접 설계한 가상 ISA를 기반으로 CPU의 명령어 실행 과정과 상태 전이를 추적할 수 있는 C++ 기반 CPU 에뮬레이터입니다.
+### Run Binary
 
-이 프로젝트는 컴퓨터 구조, 시스템 프로그래밍, 어셈블러, 디버거, 실행 의미론을 직접 구현함으로써 저수준 시스템 프로그래밍 역량을 증명하는 것을 목표로 합니다.
+```bat
+.\build\Debug\zero_cli.exe run-binary examples\function_call.zbin
+```
+
+### Run Binary with Memory Expectations
+
+```bat
+.\build\Debug\zero_cli.exe run-binary examples\function_call.zbin --expect-memory 100=20 2048=20
+```
+
+### Run Binary with Debug MMIO
+
+```bat
+.\build\Debug\zero_cli.exe run-binary examples\mmio_output.zbin --debug-mmio --expect-memory 220=66 228=2
+```
+
+---
+
+## Test Commands
+
+### ALU Test
+
+```bat
+.\build\Debug\zero_cli.exe alu-test
+```
+
+### MMIO Test
+
+```bat
+.\build\Debug\zero_cli.exe mmio-test
+```
+
+### Interrupt Controller Test
+
+```bat
+.\build\Debug\zero_cli.exe interrupt-test
+```
+
+### CPU Interrupt Test
+
+```bat
+.\build\Debug\zero_cli.exe cpu-interrupt-test
+```
+
+### Timer Device Test
+
+```bat
+.\build\Debug\zero_cli.exe timer-test
+```
+
+### CPU Timer Interrupt Test
+
+```bat
+.\build\Debug\zero_cli.exe cpu-timer-test
+```
+
+### EI/DI Test
+
+```bat
+.\build\Debug\zero_cli.exe cpu-ei-di-test
+```
+
+### Software Interrupt Test
+
+```bat
+.\build\Debug\zero_cli.exe software-interrupt-test
+```
+
+### Mini Kernel Syscall Test
+
+```bat
+.\build\Debug\zero_cli.exe mini-kernel-syscall-test
+```
+
+---
+
+## Full Test Suite
+
+Run all tests:
+
+```bat
+cd /d D:\Zero-CPU
+scripts\test_all.bat
+```
+
+Expected final output:
+
+```text
+All Zero-CPU tests passed.
+```
+
+---
+
+## Example Programs
+
+### `function_call.zasm`
+
+Tests stack and function-call behavior.
+
+```text
+- MOV
+- CALL
+- STORE
+- PUSH
+- POP
+- RET
+- HALT
+```
+
+Expected memory:
+
+```text
+Memory[100] = 20
+Memory[2048] = 20
+```
+
+### `alu_flags.zasm`
+
+Tests ALU, CMP, TEST, and conditional jumps.
+
+```text
+- ADD
+- SUB
+- CMP
+- TEST
+- JE
+- JNE
+- JG
+- JL
+```
+
+### `mmio_output.zasm`
+
+Tests memory-mapped debug output.
+
+```asm
+MOV R1, 65
+STORE [61440], R1
+```
+
+`61440` is `0xF000`, the debug output MMIO address.
+
+### `interrupt_basic.zasm`
+
+Tests CPU interrupt delivery and IRET.
+
+### `timer_interrupt.zasm`
+
+Tests timer-generated hardware-style interrupts.
+
+### `interrupt_ei_di.zasm`
+
+Tests interrupt disable/enable behavior.
+
+```asm
+DI
+; protected section
+EI
+```
+
+### `software_interrupt.zasm`
+
+Tests software interrupt.
+
+```asm
+INT 80
+```
+
+### `mini_kernel_syscall.zasm`
+
+Tests the mini-kernel syscall convention.
+
+```asm
+MOV R1, 1
+MOV R2, 72
+INT 80
+```
+
+---
+
+## MMIO Map
+
+Current MMIO address conventions:
+
+```text
+0xF000..0xF00F = DebugOutputDevice
+0xF100..0xF12F = TimerDevice
+```
+
+### DebugOutputDevice
+
+```text
+offset 0 = write value / read last value
+offset 8 = read write count
+```
+
+### TimerDevice
+
+```text
+offset 0  = tick count
+offset 8  = interval
+offset 16 = enabled
+offset 24 = vector
+offset 32 = payload
+offset 40 = interrupt count
+```
+
+---
+
+## Interrupt Model
+
+Current interrupt flow:
+
+```text
+1. Device or INT instruction requests interrupt behavior.
+2. CPU saves return address.
+3. CPU sets R0 to interrupt vector.
+4. CPU sets R1 to interrupt payload when applicable.
+5. CPU jumps to handler address.
+6. Handler executes.
+7. Handler returns with IRET.
+```
+
+Important rule:
+
+```text
+CALL returns with RET.
+Interrupts return with IRET.
+```
+
+---
+
+## Software Interrupt and Syscall Convention
+
+The mini-kernel style syscall convention currently uses `INT 80`.
+
+```text
+R1 = syscall number
+R2 = syscall argument
+INT 80
+```
+
+Example:
+
+```asm
+MOV R1, 1
+MOV R2, 72
+INT 80
+```
+
+Current syscall demo:
+
+```text
+syscall 1 = debug output
+```
+
+This flow is the base for future BIO-OS / mini-kernel experiments.
+
+---
+
+## Zero-CPU Studio
+
+Zero-CPU Studio is a Win32-based debugger/visualizer.
+
+Its purpose is to support the core platform, not replace it.
+
+Current intended scope:
+
+```text
+- Load .zasm
+- Edit .zasm
+- Assemble
+- Load .zbin
+- Step
+- Run
+- View registers
+- View flags
+- View memory
+- View trace
+```
+
+Studio polish should come after the core architecture and tests are stable.
+
+---
+
+## Development Rule
+
+Every new instruction should be registered in:
+
+```text
+- include/zero_cpu/isa/Opcode.hpp
+- src/isa/Opcode.cpp
+- src/isa/InstructionEncoder.cpp
+- src/isa/InstructionDecoder.cpp
+- src/core/CPU.cpp
+```
+
+Every new system feature should have:
+
+```text
+- focused CLI test
+- example .zasm file when applicable
+- scripts/test_all.bat entry
+```
+
+---
+
+## Roadmap
+
+### Near Term
+
+```text
+- docs/syscall-convention.md
+- syscall 2: memory write
+- syscall 3: exit
+- user program / kernel handler separation
+- better interrupt frame with FLAGS save/restore
+- README and Velog documentation
+```
+
+### Mid Term
+
+```text
+- kernel.zasm
+- boot.zasm
+- BIO-OS demo
+- interrupt priority
+- nested interrupt policy
+- device table
+```
+
+### Long Term
+
+```text
+- privilege mode
+- user mode / kernel mode
+- virtual memory experiment
+- page table experiment
+- cache simulator
+- pipeline simulator
+```
+
+---
+
+## Current Direction
+
+The project direction is fixed as:
+
+```text
+Core
+→ Toolchain
+→ Test Infrastructure
+→ MMIO / Interrupts
+→ Mini Kernel
+```
+
+Avoid drifting into UI-only work.
+
+Core and system behavior first. Studio polish later.
