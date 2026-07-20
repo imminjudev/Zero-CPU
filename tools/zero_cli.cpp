@@ -10,6 +10,7 @@
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/Memory.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
@@ -36,7 +37,7 @@ namespace {
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
 
-constexpr std::size_t kStackViewStart = 2048;
+constexpr std::size_t kStackViewStart = zero_cpu::memory_map::kDefaultStackBase;
 constexpr std::size_t kStackViewCount = 32;
 
 constexpr std::size_t kLoadedMemoryPreviewCount = 96;
@@ -81,7 +82,11 @@ void printMemoryViews(const zero_cpu::CPU& cpu) {
                  )
               << "\n";
 
-    std::cout << "Stack[2048..2079]: "
+    std::cout << "Stack["
+              << kStackViewStart
+              << ".."
+              << (kStackViewStart + kStackViewCount - 1)
+              << "]: "
               << cpu.state().memory().dumpRange(
                      kStackViewStart,
                      kStackViewCount
@@ -300,8 +305,10 @@ void printFinalCheck(const zero_cpu::CPU& cpu) {
               << cpu.state().memory().read(100)
               << "\n";
 
-    std::cout << "Memory[2048] = "
-              << cpu.state().memory().read(2048)
+    std::cout << "Memory["
+              << memory_map::kDefaultStackBase
+              << "] = "
+              << cpu.state().memory().read(memory_map::kDefaultStackBase)
               << "\n";
 }
 
@@ -949,7 +956,11 @@ int runBinaryFile(
     if (options.enableDebugMMIO) {
         mmioBus = std::make_shared<MMIOBus>();
         debugOutputDevice = std::make_shared<DebugOutputDevice>();
-        mmioBus->mapDevice(0xF000, 0x10, debugOutputDevice);
+        mmioBus->mapDevice(
+            memory_map::kDebugOutputBase,
+            memory_map::kDebugOutputSize,
+            debugOutputDevice
+        );
         cpu.setMMIOBus(mmioBus);
     }
 
@@ -1196,7 +1207,11 @@ int runMMIOTest() {
     auto outputDevice = std::make_shared<DebugOutputDevice>();
 
     try {
-        bus.mapDevice(0xF000, 16, outputDevice);
+        bus.mapDevice(
+            memory_map::kDebugOutputBase,
+            memory_map::kDebugOutputSize,
+            outputDevice
+        );
         std::cout << "[PASS] mapped DebugOutputDevice at 0xF000..0xF00F\n";
     } catch (const std::exception& ex) {
         std::cout << "[FAIL] failed to map DebugOutputDevice: "
@@ -1205,7 +1220,9 @@ int runMMIOTest() {
         passed = false;
     }
 
-    if (bus.hasDeviceAt(0xF000) && bus.hasDeviceAt(0xF008) && !bus.hasDeviceAt(0xEFFF)) {
+    if (bus.hasDeviceAt(memory_map::kDebugOutputBase) &&
+        bus.hasDeviceAt(memory_map::kDebugOutputBase + 8) &&
+        !bus.hasDeviceAt(memory_map::kDebugOutputBase - 1)) {
         std::cout << "[PASS] MMIO address lookup\n";
     } else {
         std::cout << "[FAIL] MMIO address lookup\n";
@@ -1213,8 +1230,8 @@ int runMMIOTest() {
     }
 
     try {
-        bus.write(0xF000, 65);
-        bus.write(0xF000, 66);
+        bus.write(memory_map::kDebugOutputBase, 65);
+        bus.write(memory_map::kDebugOutputBase, 66);
 
         const bool valuesOk =
             outputDevice->writes().size() == 2 &&
@@ -1235,8 +1252,8 @@ int runMMIOTest() {
     }
 
     try {
-        const std::int64_t lastValue = bus.read(0xF000);
-        const std::int64_t writeCount = bus.read(0xF008);
+        const std::int64_t lastValue = bus.read(memory_map::kDebugOutputBase);
+        const std::int64_t writeCount = bus.read(memory_map::kDebugOutputBase + 8);
 
         if (lastValue == 66 && writeCount == 2) {
             std::cout << "[PASS] MMIO reads returned last value and write count\n";
@@ -1706,8 +1723,8 @@ int runCPUTimerInterruptTest() {
         1234
     );
 
-    constexpr std::size_t kTimerBase = 0xF100;
-    constexpr std::size_t kTimerSize = 48;
+    constexpr std::size_t kTimerBase = memory_map::kTimerBase;
+    constexpr std::size_t kTimerSize = memory_map::kTimerSize;
 
     bus->mapDevice(kTimerBase, kTimerSize, timer);
 
@@ -1843,8 +1860,8 @@ int runCPUEiDiTest() {
         555
     );
 
-    constexpr std::size_t kTimerBase = 0xF100;
-    constexpr std::size_t kTimerSize = 48;
+    constexpr std::size_t kTimerBase = memory_map::kTimerBase;
+    constexpr std::size_t kTimerSize = memory_map::kTimerSize;
 
     bus->mapDevice(kTimerBase, kTimerSize, timer);
 
@@ -1984,8 +2001,8 @@ int runSoftwareInterruptTest() {
     auto bus = std::make_shared<MMIOBus>();
     auto debugOutputDevice = std::make_shared<DebugOutputDevice>();
 
-    constexpr std::size_t kDebugOutputBase = 0xF000;
-    constexpr std::size_t kDebugOutputSize = 0x10;
+    constexpr std::size_t kDebugOutputBase = memory_map::kDebugOutputBase;
+    constexpr std::size_t kDebugOutputSize = memory_map::kDebugOutputSize;
     constexpr std::uint8_t kSyscallVector = 80;
 
     bus->mapDevice(kDebugOutputBase, kDebugOutputSize, debugOutputDevice);
@@ -2130,8 +2147,8 @@ int runMiniKernelSyscallTest() {
     auto bus = std::make_shared<MMIOBus>();
     auto debugOutputDevice = std::make_shared<DebugOutputDevice>();
 
-    constexpr std::size_t kDebugOutputBase = 0xF000;
-    constexpr std::size_t kDebugOutputSize = 0x10;
+    constexpr std::size_t kDebugOutputBase = memory_map::kDebugOutputBase;
+    constexpr std::size_t kDebugOutputSize = memory_map::kDebugOutputSize;
     constexpr std::uint8_t kSyscallVector = 80;
 
     bus->mapDevice(kDebugOutputBase, kDebugOutputSize, debugOutputDevice);
@@ -2284,8 +2301,8 @@ int runMiniKernelSyscall2Test() {
     auto bus = std::make_shared<MMIOBus>();
     auto debugOutputDevice = std::make_shared<DebugOutputDevice>();
 
-    constexpr std::size_t kDebugOutputBase = 0xF000;
-    constexpr std::size_t kDebugOutputSize = 0x10;
+    constexpr std::size_t kDebugOutputBase = memory_map::kDebugOutputBase;
+    constexpr std::size_t kDebugOutputSize = memory_map::kDebugOutputSize;
     constexpr std::uint8_t kSyscallVector = 80;
 
     bus->mapDevice(kDebugOutputBase, kDebugOutputSize, debugOutputDevice);
