@@ -163,6 +163,7 @@ private:
     void executeIret(const Instruction& instruction);
     void executeEi(const Instruction& instruction);
     void executeDi(const Instruction& instruction);
+    void executeInt(const Instruction& instruction);
     void executeAnd(const Instruction& instruction);
     void executeOr(const Instruction& instruction);
     void executeXor(const Instruction& instruction);

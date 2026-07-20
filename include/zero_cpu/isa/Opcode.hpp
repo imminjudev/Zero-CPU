@@ -36,6 +36,7 @@ enum class Opcode {
     IRET,
     EI,
     DI,
+    INT,
 
     NOP,
     HALT,

@@ -81,6 +81,8 @@ std::string opcodeToString(Opcode opcode) {
         return "EI";
     case Opcode::DI:
         return "DI";
+    case Opcode::INT:
+        return "INT";
 
     case Opcode::NOP:
         return "NOP";
@@ -127,6 +129,7 @@ Opcode opcodeFromString(const std::string& text) {
         {"IRET", Opcode::IRET},
         {"EI", Opcode::EI},
         {"DI", Opcode::DI},
+        {"INT", Opcode::INT},
 
         {"NOP", Opcode::NOP},
         {"HALT", Opcode::HALT}
@@ -187,7 +190,8 @@ bool isStackOpcode(Opcode opcode) {
 bool isFunctionCallOpcode(Opcode opcode) {
     return opcode == Opcode::CALL
         || opcode == Opcode::RET
-        || opcode == Opcode::IRET;
+        || opcode == Opcode::IRET
+        || opcode == Opcode::INT;
 }
 
 bool isControlOpcode(Opcode opcode) {

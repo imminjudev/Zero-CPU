@@ -783,10 +783,11 @@ void CPU::executeBinaryInstruction(
     case Opcode::EI: {
         requireNoBinaryOperands(instruction);
 
-        if (interrupt_controller_) {
-            interrupt_controller_->setGlobalEnabled(true);
+        if (!interrupt_controller_) {
+            throw std::runtime_error("EI requires interrupt controller");
         }
 
+        interrupt_controller_->setGlobalEnabled(true);
         advanceBinaryPcUnlessHalted();
         break;
     }
@@ -794,11 +795,55 @@ void CPU::executeBinaryInstruction(
     case Opcode::DI: {
         requireNoBinaryOperands(instruction);
 
-        if (interrupt_controller_) {
-            interrupt_controller_->setGlobalEnabled(false);
+        if (!interrupt_controller_) {
+            throw std::runtime_error("DI requires interrupt controller");
         }
 
+        interrupt_controller_->setGlobalEnabled(false);
         advanceBinaryPcUnlessHalted();
+        break;
+    }
+
+    case Opcode::INT: {
+        requireSingleBinaryOperand(instruction);
+
+        if (!interrupt_controller_) {
+            throw std::runtime_error("INT requires interrupt controller");
+        }
+
+        const std::int64_t vectorValue =
+            readBinaryOperandValue(
+                instruction.dst_type,
+                instruction.dst_payload
+            );
+
+        if (vectorValue < 0 || vectorValue > 255) {
+            throw std::runtime_error("INT vector must be in range 0..255");
+        }
+
+        const std::uint8_t vector =
+            static_cast<std::uint8_t>(vectorValue);
+
+        const std::size_t handlerAddress =
+            interrupt_controller_->vectorHandler(vector);
+
+        if (has_binary_program_ && !isBinaryPcInCode(handlerAddress)) {
+            throw std::runtime_error(
+                "INT handler is outside loaded binary code section"
+            );
+        }
+
+        const std::size_t returnAddress =
+            state_.pc() + binary::kInstructionSize;
+
+        pushValue(static_cast<std::int64_t>(returnAddress));
+        pushValue(packFlags(state_.flags()));
+
+        state_.registers().set(
+            RegisterName::R0,
+            static_cast<std::int64_t>(vector)
+        );
+        state_.setPc(handlerAddress);
         break;
     }
 
@@ -1175,6 +1220,10 @@ void CPU::execute(const Instruction& instruction) {
         executeDi(instruction);
         break;
 
+    case Opcode::INT:
+        executeInt(instruction);
+        break;
+
     case Opcode::AND:
         executeAnd(instruction);
         break;
@@ -1435,21 +1484,60 @@ void CPU::executeIret(const Instruction& instruction) {
 void CPU::executeEi(const Instruction& instruction) {
     requireNoOperand(instruction);
 
-    if(interrupt_controller_) {
-        interrupt_controller_->setGlobalEnabled(true);
+    if (!interrupt_controller_) {
+        throw std::runtime_error("EI requires interrupt controller");
     }
 
+    interrupt_controller_->setGlobalEnabled(true);
     advancePcUnlessHalted();
 }
 
 void CPU::executeDi(const Instruction& instruction) {
     requireNoOperand(instruction);
 
-    if (interrupt_controller_) {
-        interrupt_controller_->setGlobalEnabled(false);
+    if (!interrupt_controller_) {
+        throw std::runtime_error("DI requires interrupt controller");
     }
 
+    interrupt_controller_->setGlobalEnabled(false);
     advancePcUnlessHalted();
+}
+
+void CPU::executeInt(const Instruction& instruction) {
+    requireSingleOperand(instruction);
+
+    if (!interrupt_controller_) {
+        throw std::runtime_error("INT requires interrupt controller");
+    }
+
+    const std::int64_t vectorValue = readOperandValue(instruction.dst());
+
+    if (vectorValue < 0 || vectorValue > 255) {
+        throw std::runtime_error("INT vector must be in range 0..255");
+    }
+
+    const std::uint8_t vector =
+        static_cast<std::uint8_t>(vectorValue);
+
+    const std::size_t handlerAddress =
+        interrupt_controller_->vectorHandler(vector);
+
+    if (handlerAddress >= program_.size()) {
+        throw std::runtime_error(
+            "INT handler is outside loaded program"
+        );
+    }
+
+    const std::size_t returnAddress = state_.pc() + 1;
+
+    pushValue(static_cast<std::int64_t>(returnAddress));
+    pushValue(packFlags(state_.flags()));
+
+    state_.registers().set(
+        RegisterName::R0,
+        static_cast<std::int64_t>(vector)
+    );
+    state_.setPc(handlerAddress);
 }
 
 void CPU::executeAnd(const Instruction& instruction) {

@@ -1,0 +1,15 @@
+JMP main
+
+syscall_handler:
+    STORE [400], R0
+    STORE [408], R1
+    STORE [61440], R1
+    IRET
+
+main:
+    MOV R1, 65
+    INT 80
+
+    MOV R2, 123
+    STORE [416], R2
+    HALT
