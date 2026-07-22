@@ -2590,6 +2590,171 @@ int runMiniKernelSyscall3Test() {
 
 
 
+int runMiniKernelSyscall4TimerReadTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Zero-CPU Mini Kernel Syscall 4 Timer Read Test ===\n\n";
+
+    const std::string sourcePath = "examples/mini_kernel_syscall4_timer_read.zasm";
+    const std::string binaryPath = "examples/mini_kernel_syscall4_timer_read.zbin";
+
+    Assembler assembler;
+    AssembledProgram assembled = assembler.assembleFile(sourcePath);
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code = encoder.encodeProgram(
+        assembled.instructions,
+        assembled.labels
+    );
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size = static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    BinaryWriter writer;
+    writer.writeFile(binaryPath, program);
+
+    CPU cpu;
+    auto controller = std::make_shared<InterruptController>();
+    auto bus = std::make_shared<MMIOBus>();
+    auto timer = std::make_shared<TimerDevice>(
+        controller,
+        32,
+        1000,
+        0
+    );
+
+    constexpr std::uint8_t kSyscallVector = 80;
+    constexpr std::int64_t kExpectedTickCount = 12345;
+
+    timer->setEnabled(false);
+    timer->write(TimerDevice::kTickCountOffset, kExpectedTickCount);
+
+    bus->mapDevice(
+        memory_map::kTimerBase,
+        memory_map::kTimerSize,
+        timer
+    );
+
+    cpu.setInterruptController(controller);
+    cpu.setMMIOBus(bus);
+    cpu.loadBinaryProgram(program);
+
+    const auto handlerIt = assembled.labels.find("syscall_handler");
+    if (handlerIt == assembled.labels.end()) {
+        std::cout << "[FAIL] syscall_handler label not found\n";
+        return 1;
+    }
+
+    const std::size_t handlerAddress =
+        cpu.binaryCodeBase() + handlerIt->second * kInstructionSize;
+
+    controller->setVectorHandler(kSyscallVector, handlerAddress);
+
+    std::cout << "Source: " << sourcePath << "\n";
+    std::cout << "Binary: " << binaryPath << "\n";
+    std::cout << "Syscall vector: "
+              << static_cast<int>(kSyscallVector)
+              << "\n";
+    std::cout << "Syscall convention:\n";
+    std::cout << "  R1 = syscall number\n";
+    std::cout << "  R2 = return value for syscall 4\n";
+    std::cout << "Handler PC: " << handlerAddress << "\n";
+    std::cout << "Timer MMIO: 0xF100..0xF12F\n";
+    std::cout << "Initial timer tick count: "
+              << kExpectedTickCount
+              << "\n\n";
+
+    cpu.run();
+
+    std::cout << "=== Final CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
+    std::cout << "Timer tick count = " << timer->tickCount() << "\n";
+    std::cout << "Timer interrupt count = " << timer->interruptCount() << "\n";
+    std::cout << "Timer enabled = " << (timer->enabled() ? "true" : "false") << "\n";
+    std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
+
+    if (cpu.state().hasError()) {
+        std::cout << "Mini kernel syscall 4 timer read test failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+        return 1;
+    }
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        std::int64_t actual,
+        std::int64_t expected
+    ) {
+        if (actual == expected) {
+            std::cout << "[PASS] "
+                      << name
+                      << " = "
+                      << actual
+                      << "\n";
+            return;
+        }
+
+        std::cout << "[FAIL] "
+                  << name
+                  << " expected "
+                  << expected
+                  << " but got "
+                  << actual
+                  << "\n";
+        passed = false;
+    };
+
+    auto expectCondition = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect("Memory[432] syscall vector", cpu.state().memory().read(432), 80);
+    expect("Memory[440] syscall number", cpu.state().memory().read(440), 4);
+    expect("Memory[448] timer tick read by handler", cpu.state().memory().read(448), kExpectedTickCount);
+    expect("Memory[456] syscall 4 dispatch marker", cpu.state().memory().read(456), 4);
+    expect("Memory[464] returned timer tick in user program", cpu.state().memory().read(464), kExpectedTickCount);
+    expect("Memory[472] main resumed marker", cpu.state().memory().read(472), 444);
+
+    expect("R0 after syscall", cpu.state().registers().get(RegisterName::R0), 80);
+    expect("R1 syscall number preserved", cpu.state().registers().get(RegisterName::R1), 4);
+    expect("R2 timer tick return value", cpu.state().registers().get(RegisterName::R2), kExpectedTickCount);
+    expect("R3 main resumed value", cpu.state().registers().get(RegisterName::R3), 444);
+
+    expect("TimerDevice tick count unchanged", static_cast<std::int64_t>(timer->tickCount()), kExpectedTickCount);
+    expect("TimerDevice interrupt count", static_cast<std::int64_t>(timer->interruptCount()), 0);
+
+    expectCondition("timer remains disabled in syscall 4 test", !timer->enabled());
+    expectCondition("interrupt queue is empty after syscall 4", controller->pendingCount() == 0);
+    expectCondition("CPU halted after syscall 4 timer read program", cpu.state().halted());
+
+    if (!passed) {
+        std::cout << "\nMini kernel syscall 4 timer read test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nMini kernel syscall 4 timer read test finished successfully.\n";
+    return 0;
+}
+
+
+
 int runRegisterIndirectMemoryTest() {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
@@ -2722,6 +2887,7 @@ void printUsage() {
     std::cout << "  zero_cli mini-kernel-syscall-test\n";
     std::cout << "  zero_cli mini-kernel-syscall2-test\n";
     std::cout << "  zero_cli mini-kernel-syscall3-test\n";
+    std::cout << "  zero_cli mini-kernel-syscall4-timer-read-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -2875,6 +3041,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runMiniKernelSyscall3Test();
+            }
+
+
+            if (command == "mini-kernel-syscall4-timer-read-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid mini-kernel-syscall4-timer-read-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runMiniKernelSyscall4TimerReadTest();
             }
 
             if (command == "assemble") {

@@ -1,0 +1,27 @@
+JMP main
+
+syscall_handler:
+    STORE [432], R0
+    STORE [440], R1
+
+    CMP R1, 4
+    JE syscall_timer_read
+
+    IRET
+
+syscall_timer_read:
+    LOAD R2, [61696]
+    STORE [448], R2
+    STORE [456], R1
+    IRET
+
+main:
+    MOV R1, 4
+    MOV R2, 0
+    INT 80
+
+    STORE [464], R2
+    MOV R3, 444
+    STORE [472], R3
+
+    HALT

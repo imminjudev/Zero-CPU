@@ -9,7 +9,7 @@ echo Zero-CPU Test Suite
 echo ========================================
 echo.
 
-echo [1/17] Building project...
+echo [1/18] Building project...
 cmake --build build
 if errorlevel 1 goto fail
 
@@ -33,72 +33,78 @@ echo Using CLI:
 echo   %ZERO_CLI%
 echo.
 
-echo [2/17] Running ALU unit test...
+echo [2/18] Running ALU unit test...
 "%ZERO_CLI%" alu-test
 if errorlevel 1 goto fail
 
 echo.
-echo [3/17] Running MMIO bus test...
+echo [3/18] Running MMIO bus test...
 "%ZERO_CLI%" mmio-test
 if errorlevel 1 goto fail
 
 echo.
-echo [4/17] Running interrupt controller test...
+echo [4/18] Running interrupt controller test...
 "%ZERO_CLI%" interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo [5/17] Running CPU interrupt delivery test...
+echo [5/18] Running CPU interrupt delivery test...
 "%ZERO_CLI%" cpu-interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo [6/17] Running timer device test...
+echo [6/18] Running timer device test...
 "%ZERO_CLI%" timer-test
 if errorlevel 1 goto fail
 
 echo.
-echo [7/17] Running CPU timer interrupt test...
+echo [7/18] Running CPU timer interrupt test...
 "%ZERO_CLI%" cpu-timer-test
 if errorlevel 1 goto fail
 
 echo.
-echo [8/17] Running CPU EI/DI interrupt control test...
+echo [8/18] Running CPU EI/DI interrupt control test...
 "%ZERO_CLI%" cpu-ei-di-test
 if errorlevel 1 goto fail
 
 echo.
-echo [9/17] Running software interrupt test...
+echo [9/18] Running software interrupt test...
 "%ZERO_CLI%" software-interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo [10/17] Running register-indirect memory test...
+echo [10/18] Running register-indirect memory test...
 "%ZERO_CLI%" register-indirect-test
 if errorlevel 1 goto fail
 
 echo.
-echo [11/17] Running mini kernel syscall test...
+echo [11/18] Running mini kernel syscall test...
 "%ZERO_CLI%" mini-kernel-syscall-test
 if errorlevel 1 goto fail
 
 echo.
-echo [12/17] Running mini kernel syscall 2 test...
+echo [12/18] Running mini kernel syscall 2 test...
 "%ZERO_CLI%" mini-kernel-syscall2-test
 if errorlevel 1 goto fail
 
 echo.
-echo [13/17] Running mini kernel syscall 3 exit test...
+echo [13/18] Running mini kernel syscall 3 exit test...
 "%ZERO_CLI%" mini-kernel-syscall3-test
 if errorlevel 1 goto fail
 
+
 echo.
-echo [14/17] Running binary format round-trip test...
+echo [14/18] Running mini kernel syscall 4 timer read test...
+"%ZERO_CLI%" mini-kernel-syscall4-timer-read-test
+if errorlevel 1 goto fail
+
+echo.
+echo [15/18] Running binary format round-trip test...
 "%ZERO_CLI%" binary-test
 if errorlevel 1 goto fail
 
 echo.
-echo [15/17] Assembling and running function_call.zasm...
+echo [16/18] Assembling and running function_call.zasm...
 "%ZERO_CLI%" assemble "examples\function_call.zasm" "examples\function_call.zbin"
 if errorlevel 1 goto fail
 
@@ -106,7 +112,7 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo.
-echo [16/17] Assembling and running alu_flags.zasm...
+echo [17/18] Assembling and running alu_flags.zasm...
 "%ZERO_CLI%" assemble "examples\alu_flags.zasm" "examples\alu_flags.zbin"
 if errorlevel 1 goto fail
 
@@ -114,7 +120,7 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo.
-echo [17/17] Assembling and running mmio_output.zasm...
+echo [18/18] Assembling and running mmio_output.zasm...
 "%ZERO_CLI%" assemble "examples\mmio_output.zasm" "examples\mmio_output.zbin"
 if errorlevel 1 goto fail
 
