@@ -37,7 +37,15 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Zero-CPU generated binaries
 *.zbin
+
+# Zero-CPU generated integration sources
+examples/bio_os/combined_boot.zasm
+
+# Downloaded/generated archives
 *.zip
+*_files/
+zero_cpu_*_files/
 register_indirect_full_files/
 zero_cpu_register_indirect_full_files/
