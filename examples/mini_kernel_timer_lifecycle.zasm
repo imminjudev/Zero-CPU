@@ -1,0 +1,78 @@
+JMP main
+
+timer_handler:
+    STORE [400], R0
+    STORE [408], R1
+
+    MOV R6, 777
+    STORE [416], R6
+
+    MOV R7, 0
+    STORE [61712], R7
+
+    LOAD R7, [61712]
+    STORE [424], R7
+
+    IRET
+
+syscall_handler:
+    CMP R1, 7
+    JE syscall_timer_configure
+
+    CMP R1, 5
+    JE syscall_timer_enable
+
+    IRET
+
+syscall_timer_configure:
+    STORE [240], R0
+    STORE [248], R1
+    STORE [256], R2
+    STORE [264], R3
+
+    STORE [61704], R2
+    STORE [61720], R3
+    STORE [61728], R4
+
+    IRET
+
+syscall_timer_enable:
+    STORE [272], R0
+    STORE [280], R1
+
+    LOAD R6, [61704]
+    STORE [288], R6
+
+    MOV R6, 1
+    STORE [61712], R6
+
+    IRET
+
+main:
+    MOV R1, 7
+    MOV R2, 8
+    MOV R3, 44
+    MOV R4, 888
+    INT 80
+
+    MOV R1, 5
+    INT 80
+
+    MOV R5, 0
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+    ADD R5, 1
+
+    STORE [432], R5
+
+    MOV R7, 222
+    STORE [440], R7
+
+    HALT
