@@ -1,0 +1,33 @@
+JMP main
+
+syscall_handler:
+    STORE [344], R0
+    STORE [352], R1
+
+    CMP R1, 6
+    JE syscall_timer_disable
+
+    IRET
+
+syscall_timer_disable:
+    MOV R4, 0
+    STORE [61712], R4
+
+    STORE [360], R1
+
+    LOAD R5, [61712]
+    STORE [368], R5
+
+    LOAD R6, [61704]
+    STORE [376], R6
+
+    IRET
+
+main:
+    MOV R1, 6
+    INT 80
+
+    MOV R7, 666
+    STORE [384], R7
+
+    HALT
