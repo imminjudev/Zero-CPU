@@ -1,0 +1,22 @@
+user_program_main:
+    MOV R6, 1
+    STORE [160], R6
+
+    MOV R1, 1
+    MOV R2, 85
+    INT 80
+
+    MOV R1, 4
+    MOV R2, 0
+    INT 80
+    STORE [120], R2
+
+    MOV R1, 2
+    MOV R2, 128
+    MOV R3, 999
+    INT 80
+
+    MOV R4, 123
+    STORE [136], R4
+
+    RET

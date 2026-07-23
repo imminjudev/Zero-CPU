@@ -1,0 +1,70 @@
+syscall_handler:
+    STORE [100], R0
+    STORE [108], R1
+
+    CMP R1, 1
+    JE syscall_debug_output
+
+    CMP R1, 2
+    JE syscall_memory_write
+
+    CMP R1, 3
+    JE syscall_exit
+
+    CMP R1, 4
+    JE syscall_timer_read
+
+    CMP R1, 5
+    JE syscall_timer_enable
+
+    CMP R1, 7
+    JE syscall_timer_configure
+
+    IRET
+
+syscall_debug_output:
+    STORE [61440], R2
+    IRET
+
+syscall_memory_write:
+    STORE [R2], R3
+    IRET
+
+syscall_exit:
+    MOV R7, R2
+    STORE [180], R7
+    HALT
+
+syscall_timer_read:
+    LOAD R2, [61696]
+    IRET
+
+syscall_timer_enable:
+    STORE [61704], R2
+    STORE [61720], R3
+
+    MOV R6, 1
+    STORE [61712], R6
+
+    IRET
+
+syscall_timer_configure:
+    STORE [61704], R2
+    STORE [61720], R3
+    STORE [61728], R4
+    IRET
+
+timer_handler:
+    STORE [200], R0
+    STORE [208], R1
+
+    MOV R6, 777
+    STORE [216], R6
+
+    MOV R6, 0
+    STORE [61712], R6
+
+    LOAD R6, [61712]
+    STORE [224], R6
+
+    IRET

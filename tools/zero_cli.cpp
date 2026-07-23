@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -3333,6 +3334,11 @@ int runMiniKernelTimerLifecycleTest() {
     cpu.addClockedDevice(timer);
     cpu.loadBinaryProgram(program);
 
+    // The BIO-OS combined program is large enough to reach the default
+    // stack base at 2048. Move the stack higher for this integration demo,
+    // but keep it below the memory limit so the first PUSH is in range.
+    cpu.state().setSp(4000);
+
     const auto syscallHandlerIt = assembled.labels.find("syscall_handler");
     if (syscallHandlerIt == assembled.labels.end()) {
         std::cout << "[FAIL] syscall_handler label not found\n";
@@ -3464,6 +3470,255 @@ int runMiniKernelTimerLifecycleTest() {
     }
 
     std::cout << "\nMini kernel timer lifecycle test finished successfully.\n";
+    return 0;
+}
+
+
+
+int runBioOSCombinedBootTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout << "=== Zero-CPU BIO-OS Combined Boot Test ===\n\n";
+
+    const std::vector<std::string> sourceParts = {
+        "examples/bio_os/boot.zasm",
+        "examples/bio_os/kernel.zasm",
+        "examples/bio_os/user_program.zasm"
+    };
+
+    const std::string combinedSourcePath =
+        "examples/bio_os/combined_boot.zasm";
+    const std::string binaryPath =
+        "examples/bio_os/combined_boot.zbin";
+
+    {
+        std::ofstream combined(combinedSourcePath);
+
+        if (!combined) {
+            std::cout << "[FAIL] cannot create " << combinedSourcePath << "\n";
+            return 1;
+        }
+
+        for (const auto& part : sourceParts) {
+            std::ifstream input(part);
+
+            if (!input) {
+                std::cout << "[FAIL] cannot open " << part << "\n";
+                return 1;
+            }
+
+            combined << "\n; === " << part << " ===\n";
+            combined << input.rdbuf();
+            combined << "\n";
+        }
+    }
+
+    Assembler assembler;
+    AssembledProgram assembled = assembler.assembleFile(combinedSourcePath);
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code = encoder.encodeProgram(
+        assembled.instructions,
+        assembled.labels
+    );
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size = static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    BinaryWriter writer;
+    writer.writeFile(binaryPath, program);
+
+    CPU cpu;
+    auto controller = std::make_shared<InterruptController>();
+    auto bus = std::make_shared<MMIOBus>();
+    auto debugOutputDevice = std::make_shared<DebugOutputDevice>();
+    auto timer = std::make_shared<TimerDevice>(
+        controller,
+        44,
+        1000,
+        0
+    );
+
+    constexpr std::uint8_t kSyscallVector = 80;
+    constexpr std::uint8_t kTimerVector = 44;
+
+    timer->setEnabled(false);
+
+    bus->mapDevice(
+        memory_map::kDebugOutputBase,
+        memory_map::kDebugOutputSize,
+        debugOutputDevice
+    );
+
+    bus->mapDevice(
+        memory_map::kTimerBase,
+        memory_map::kTimerSize,
+        timer
+    );
+
+    cpu.setInterruptController(controller);
+    cpu.setMMIOBus(bus);
+    cpu.addClockedDevice(timer);
+    cpu.loadBinaryProgram(program);
+
+    // The BIO-OS combined program is large enough to reach the default
+    // stack base at 2048. Move the stack higher for this integration demo,
+    // but keep it below the memory limit so the first PUSH is in range.
+    cpu.state().setSp(4000);
+
+    const auto syscallHandlerIt = assembled.labels.find("syscall_handler");
+    if (syscallHandlerIt == assembled.labels.end()) {
+        std::cout << "[FAIL] syscall_handler label not found\n";
+        return 1;
+    }
+
+    const auto timerHandlerIt = assembled.labels.find("timer_handler");
+    if (timerHandlerIt == assembled.labels.end()) {
+        std::cout << "[FAIL] timer_handler label not found\n";
+        return 1;
+    }
+
+    const std::size_t syscallHandlerAddress =
+        cpu.binaryCodeBase() + syscallHandlerIt->second * kInstructionSize;
+
+    const std::size_t timerHandlerAddress =
+        cpu.binaryCodeBase() + timerHandlerIt->second * kInstructionSize;
+
+    controller->setVectorHandler(kSyscallVector, syscallHandlerAddress);
+    controller->setVectorHandler(kTimerVector, timerHandlerAddress);
+
+    std::cout << "Source parts:\n";
+    for (const auto& part : sourceParts) {
+        std::cout << "  " << part << "\n";
+    }
+
+    std::cout << "Combined source: " << combinedSourcePath << "\n";
+    std::cout << "Binary: " << binaryPath << "\n";
+    std::cout << "Syscall vector: " << static_cast<int>(kSyscallVector) << "\n";
+    std::cout << "Timer vector: " << static_cast<int>(kTimerVector) << "\n";
+    std::cout << "Syscall handler PC: " << syscallHandlerAddress << "\n";
+    std::cout << "Timer handler PC: " << timerHandlerAddress << "\n";
+    std::cout << "Debug MMIO: 0xF000..0xF00F\n";
+    std::cout << "Timer MMIO: 0xF100..0xF12F\n\n";
+
+    cpu.run();
+
+    std::cout << "=== Final CPU State ===\n";
+    std::cout << cpu.state().summary() << "\n";
+    printDebugOutputDevice(*debugOutputDevice);
+    std::cout << "\n";
+    std::cout << "Timer tick count = " << timer->tickCount() << "\n";
+    std::cout << "Timer interval = " << timer->interval() << "\n";
+    std::cout << "Timer vector = " << static_cast<int>(timer->vector()) << "\n";
+    std::cout << "Timer payload = " << timer->payload() << "\n";
+    std::cout << "Timer interrupt count = " << timer->interruptCount() << "\n";
+    std::cout << "Timer enabled = " << (timer->enabled() ? "true" : "false") << "\n";
+    std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
+
+    if (cpu.state().hasError()) {
+        std::cout << "BIO-OS combined boot test failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+        return 1;
+    }
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        std::int64_t actual,
+        std::int64_t expected
+    ) {
+        if (actual == expected) {
+            std::cout << "[PASS] "
+                      << name
+                      << " = "
+                      << actual
+                      << "\n";
+            return;
+        }
+
+        std::cout << "[FAIL] "
+                  << name
+                  << " expected "
+                  << expected
+                  << " but got "
+                  << actual
+                  << "\n";
+        passed = false;
+    };
+
+    auto expectCondition = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect("Memory[100] last syscall vector", cpu.state().memory().read(100), 80);
+    expect("Memory[108] last syscall number", cpu.state().memory().read(108), 3);
+    const std::int64_t userObservedTick = cpu.state().memory().read(120);
+    const std::int64_t finalTickCount = static_cast<std::int64_t>(timer->tickCount());
+
+    expectCondition(
+        "Memory[120] user timer read value is positive",
+        userObservedTick > 0
+    );
+    expectCondition(
+        "Memory[120] user timer read value is not after final tick",
+        userObservedTick <= finalTickCount
+    );
+    expect("Memory[128] user memory write result", cpu.state().memory().read(128), 999);
+    expect("Memory[136] user program marker", cpu.state().memory().read(136), 123);
+    expect("Memory[160] user program started marker", cpu.state().memory().read(160), 1);
+    expect("Memory[180] exit code marker", cpu.state().memory().read(180), 0);
+
+    expect("Memory[200] timer interrupt vector", cpu.state().memory().read(200), 44);
+    expect("Memory[208] timer interrupt payload", cpu.state().memory().read(208), 888);
+    expect("Memory[216] timer handler marker", cpu.state().memory().read(216), 777);
+    expect("Memory[224] timer disabled readback", cpu.state().memory().read(224), 0);
+    expect("Memory[232] boot timer wait counter", cpu.state().memory().read(232), 20);
+
+    expect("R7 exit code", cpu.state().registers().get(RegisterName::R7), 0);
+    expect("TimerDevice interval", static_cast<std::int64_t>(timer->interval()), 8);
+    expect("TimerDevice vector", static_cast<std::int64_t>(timer->vector()), 44);
+    expect("TimerDevice payload", timer->payload(), 888);
+
+    expectCondition("DebugOutputDevice captured at least two writes", debugOutputDevice->writes().size() >= 2);
+
+    if (debugOutputDevice->writes().size() >= 2) {
+        expect("DebugOutputDevice write[0] boot message", debugOutputDevice->writes()[0], 66);
+        expect("DebugOutputDevice write[1] user message", debugOutputDevice->writes()[1], 85);
+    } else {
+        std::cout << "[FAIL] DebugOutputDevice missing boot/user writes\n";
+        passed = false;
+    }
+
+    expectCondition("timer tick count is positive", timer->tickCount() > 0);
+    expectCondition("user program observed positive timer tick", cpu.state().memory().read(120) > 0);
+    expectCondition("TimerDevice requested at least one interrupt", timer->interruptCount() >= 1);
+    expectCondition("TimerDevice disabled by timer handler", !timer->enabled());
+    expectCondition("interrupt queue is empty after BIO-OS demo", controller->pendingCount() == 0);
+    expectCondition("CPU halted after BIO-OS combined boot demo", cpu.state().halted());
+
+    if (!passed) {
+        std::cout << "\nBIO-OS combined boot test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nBIO-OS combined boot test finished successfully.\n";
     return 0;
 }
 
@@ -3606,6 +3861,7 @@ void printUsage() {
     std::cout << "  zero_cli mini-kernel-syscall6-timer-disable-test\n";
     std::cout << "  zero_cli mini-kernel-syscall7-timer-configure-test\n";
     std::cout << "  zero_cli mini-kernel-timer-lifecycle-test\n";
+    std::cout << "  zero_cli bio-os-combined-boot-test\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
@@ -3814,6 +4070,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runMiniKernelTimerLifecycleTest();
+            }
+
+
+            if (command == "bio-os-combined-boot-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid bio-os-combined-boot-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runBioOSCombinedBootTest();
             }
 
             if (command == "assemble") {
