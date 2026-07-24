@@ -17,6 +17,7 @@
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
+#include "zero_cpu/system/BioOSRunner.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -4281,6 +4282,68 @@ int runRegisterIndirectMemoryTest() {
 }
 
 
+int runBioOSRunnerModuleTest(const std::string& bioOSDirectory) {
+    using namespace zero_cpu::system;
+
+    std::cout << "=== Zero-CPU BioOSRunner Module Test ===\n\n";
+
+    BioOSRunOptions options;
+    options.directory = bioOSDirectory;
+
+    BioOSRunner runner;
+    const BioOSRunResult result = runner.run(options);
+
+    std::cout << "Directory: " << result.directory << "\n";
+    std::cout << "Generated Source: " << result.combined_source_path << "\n";
+    std::cout << "Generated Binary: " << result.combined_binary_path << "\n";
+    std::cout << "Instruction Count: " << result.instruction_count << "\n";
+    std::cout << "Code Size: " << result.code_size << " bytes\n";
+    std::cout << "Syscall Handler PC: " << result.syscall_handler_pc << "\n";
+    std::cout << "Timer Handler PC: " << result.timer_handler_pc << "\n";
+    std::cout << "BIO-OS Stack Base: " << result.stack_base << "\n";
+    std::cout << "Step Count: " << result.step_count << "\n";
+    std::cout << "Final PC: " << result.final_pc << "\n";
+    std::cout << "Final SP: " << result.final_sp << "\n";
+    std::cout << "Exit Code: " << result.exit_code << "\n\n";
+
+    std::cout << "Debug Writes: " << result.debug_writes.size() << "\n";
+    std::cout << "Debug ASCII: " << result.debug_ascii << "\n";
+    std::cout << "Timer Tick Count: " << result.timer_tick_count << "\n";
+    std::cout << "Timer Interval: " << result.timer_interval << "\n";
+    std::cout << "Timer Vector: " << result.timer_vector << "\n";
+    std::cout << "Timer Payload: " << result.timer_payload << "\n";
+    std::cout << "Timer Interrupt Count: " << result.timer_interrupt_count << "\n";
+    std::cout << "Timer Enabled: " << (result.timer_enabled ? "true" : "false") << "\n\n";
+
+    if (!result.success()) {
+        std::cout << "BIO-OS runner module failed: " << result.error_message << "\n";
+        return 1;
+    }
+
+    bool passed = true;
+
+    auto expect = [&passed](const std::string& name, bool condition) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ") << name << "\n";
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect("BIO-OS runner halted CPU", result.halted);
+    expect("BIO-OS runner debug ASCII is BU", result.debug_ascii == "BU");
+    expect("BIO-OS runner captured two debug writes", result.debug_writes.size() == 2);
+    expect("BIO-OS runner timer interrupt count is at least one", result.timer_interrupt_count >= 1);
+    expect("BIO-OS runner timer disabled itself", !result.timer_enabled);
+    expect("BIO-OS runner exit code is zero", result.exit_code == 0);
+
+    if (!passed) {
+        std::cout << "\nBIO-OS runner module test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nBIO-OS runner module finished successfully.\n";
+    return 0;
+}
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -4307,6 +4370,7 @@ void printUsage() {
     std::cout << "  zero_cli mini-kernel-timer-lifecycle-test\n";
     std::cout << "  zero_cli bio-os-combined-boot-test\n";
     std::cout << "  zero_cli run-os <bio_os_directory>\n";
+    std::cout << "  zero_cli bio-os-runner-test <bio_os_directory>\n";
     std::cout << "  zero_cli syscall-table\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
@@ -4530,6 +4594,15 @@ int main(int argc, char* argv[]) {
             }
 
 
+            if (command == "bio-os-runner-test") {
+                if (argc != 3) {
+                    std::cerr << "Invalid bio-os-runner-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runBioOSRunnerModuleTest(argv[2]);
+            }
             if (command == "run-os") {
                 if (argc != 3) {
                     std::cerr << "Invalid run-os command.\n\n";
