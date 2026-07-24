@@ -15,8 +15,17 @@ inline constexpr std::size_t kLowMemoryEndExclusive =
 // .zbin code is loaded at this address by convention.
 inline constexpr std::size_t kBinaryCodeBase = 0x0200;
 
-// The stack currently starts around this address in the default CPU state.
+// The original default CPU stack base.
+// This is still used by small examples and unit-style tests.
 inline constexpr std::size_t kDefaultStackBase = 0x0800;
+
+// BIO-OS combined examples can grow beyond the original default stack base.
+// Keep the integration-demo stack high enough to avoid code/stack overlap,
+// but below the current 4 KiB memory boundary so the first PUSH is in range.
+inline constexpr std::size_t kBioOSStackBase = 0x0FA0;
+
+// Current default memory size used by the core Memory model.
+inline constexpr std::size_t kDefaultMemorySize = 0x1000;
 
 // DebugOutputDevice MMIO region.
 inline constexpr std::size_t kDebugOutputBase = 0xF000;
@@ -50,12 +59,28 @@ constexpr bool isLowMemoryAddress(std::size_t address) {
     return address >= kLowMemoryBase && address < kLowMemoryEndExclusive;
 }
 
-constexpr bool isCodeAddress(std::size_t address) {
+constexpr bool isDefaultCodeAddress(std::size_t address) {
     return address >= kBinaryCodeBase && address < kDefaultStackBase;
 }
 
-constexpr bool isStackAddress(std::size_t address) {
+constexpr bool isBioOSCodeAddress(std::size_t address) {
+    return address >= kBinaryCodeBase && address < kBioOSStackBase;
+}
+
+constexpr bool isCodeAddress(std::size_t address) {
+    return isDefaultCodeAddress(address);
+}
+
+constexpr bool isDefaultStackAddress(std::size_t address) {
     return address >= kDefaultStackBase && address < kDebugOutputBase;
+}
+
+constexpr bool isBioOSStackAddress(std::size_t address) {
+    return address >= kBioOSStackBase && address < kDefaultMemorySize;
+}
+
+constexpr bool isStackAddress(std::size_t address) {
+    return isDefaultStackAddress(address);
 }
 
 constexpr bool isDebugOutputAddress(std::size_t address) {

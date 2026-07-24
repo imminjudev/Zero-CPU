@@ -3334,10 +3334,9 @@ int runMiniKernelTimerLifecycleTest() {
     cpu.addClockedDevice(timer);
     cpu.loadBinaryProgram(program);
 
-    // The BIO-OS combined program is large enough to reach the default
-    // stack base at 2048. Move the stack higher for this integration demo,
-    // but keep it below the memory limit so the first PUSH is in range.
-    cpu.state().setSp(4000);
+    // BIO-OS combined programs can grow beyond the default stack base.
+    // Use the documented integration-demo stack base from MemoryMap.hpp.
+    cpu.state().setSp(memory_map::kBioOSStackBase);
 
     const auto syscallHandlerIt = assembled.labels.find("syscall_handler");
     if (syscallHandlerIt == assembled.labels.end()) {
@@ -3581,10 +3580,9 @@ int runBioOSDirectory(const std::string& osDirectory) {
     cpu.addClockedDevice(timer);
     cpu.loadBinaryProgram(program);
 
-    // The BIO-OS combined program is large enough to reach the default
-    // stack base at 2048. Move the stack higher for this demo, but keep
-    // it below the memory limit so the first PUSH is in range.
-    cpu.state().setSp(4000);
+    // BIO-OS combined programs can grow beyond the default stack base.
+    // Use the documented integration-demo stack base from MemoryMap.hpp.
+    cpu.state().setSp(memory_map::kBioOSStackBase);
 
     const auto syscallHandlerIt = assembled.labels.find("syscall_handler");
     if (syscallHandlerIt == assembled.labels.end()) {
@@ -3751,10 +3749,9 @@ int runBioOSCombinedBootTest() {
     cpu.addClockedDevice(timer);
     cpu.loadBinaryProgram(program);
 
-    // The BIO-OS combined program is large enough to reach the default
-    // stack base at 2048. Move the stack higher for this integration demo,
-    // but keep it below the memory limit so the first PUSH is in range.
-    cpu.state().setSp(4000);
+    // BIO-OS combined programs can grow beyond the default stack base.
+    // Use the documented integration-demo stack base from MemoryMap.hpp.
+    cpu.state().setSp(memory_map::kBioOSStackBase);
 
     const auto syscallHandlerIt = assembled.labels.find("syscall_handler");
     if (syscallHandlerIt == assembled.labels.end()) {
