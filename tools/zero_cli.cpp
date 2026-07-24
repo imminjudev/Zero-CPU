@@ -333,6 +333,35 @@ void printDebugOutputDevice(
     }
 }
 
+
+std::string debugOutputAsAscii(const zero_cpu::DebugOutputDevice& device) {
+    std::string text;
+
+    for (const std::int64_t value : device.writes()) {
+        if (value >= 32 && value <= 126) {
+            text.push_back(static_cast<char>(value));
+        } else if (value == 10) {
+            text.push_back('\n');
+        } else {
+            text.push_back('.');
+        }
+    }
+
+    return text;
+}
+
+void printDebugOutputAscii(const zero_cpu::DebugOutputDevice& device) {
+    const std::string text = debugOutputAsAscii(device);
+
+    if (text.empty()) {
+        std::cout << "ASCII view: <empty>\n";
+        return;
+    }
+
+    std::cout << "ASCII view:\n";
+    std::cout << text << "\n";
+}
+
 void runStepByStep(zero_cpu::CPU& cpu) {
     std::cout << "=== Step Execution With Trace ===\n";
 
@@ -2036,6 +2065,7 @@ int runSoftwareInterruptTest() {
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
 
@@ -2185,6 +2215,7 @@ int runMiniKernelSyscallTest() {
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
 
@@ -2340,6 +2371,7 @@ int runMiniKernelSyscall2Test() {
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
 
@@ -2501,6 +2533,7 @@ int runMiniKernelSyscall3Test() {
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Pending interrupts = " << controller->pendingCount() << "\n\n";
 
@@ -3625,6 +3658,7 @@ int runBioOSDirectory(const std::string& osDirectory) {
     std::cout << "=== BIO-OS Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Timer tick count = " << timer->tickCount() << "\n";
     std::cout << "Timer interval = " << timer->interval() << "\n";
@@ -3648,6 +3682,14 @@ int runBioOSDirectory(const std::string& osDirectory) {
 
     if (debugOutputDevice->writes().empty()) {
         std::cout << "BIO-OS run failed: no debug output captured.\n";
+        return 1;
+    }
+
+    const std::string asciiOutput = debugOutputAsAscii(*debugOutputDevice);
+    if (asciiOutput != "BU") {
+        std::cout << "BIO-OS run failed: expected ASCII debug output BU but got "
+                  << asciiOutput
+                  << "\n";
         return 1;
     }
 
@@ -3793,6 +3835,7 @@ int runBioOSCombinedBootTest() {
     std::cout << "=== Final CPU State ===\n";
     std::cout << cpu.state().summary() << "\n";
     printDebugOutputDevice(*debugOutputDevice);
+    printDebugOutputAscii(*debugOutputDevice);
     std::cout << "\n";
     std::cout << "Timer tick count = " << timer->tickCount() << "\n";
     std::cout << "Timer interval = " << timer->interval() << "\n";
@@ -3878,6 +3921,8 @@ int runBioOSCombinedBootTest() {
     expect("TimerDevice payload", timer->payload(), 888);
 
     expectCondition("DebugOutputDevice captured at least two writes", debugOutputDevice->writes().size() >= 2);
+
+    expectCondition("BIO-OS ASCII output is BU", debugOutputAsAscii(*debugOutputDevice) == "BU");
 
     if (debugOutputDevice->writes().size() >= 2) {
         expect("DebugOutputDevice write[0] boot message", debugOutputDevice->writes()[0], 66);
