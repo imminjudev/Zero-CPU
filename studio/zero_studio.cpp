@@ -4,6 +4,11 @@
 #include "zero_cpu/binary/BinaryReader.hpp"
 #include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/core/DebugOutputDevice.hpp"
+#include "zero_cpu/core/InterruptController.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -17,6 +22,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -81,6 +87,10 @@ HWND g_addBreakpointButton = nullptr;
 HWND g_clearBreakpointsButton = nullptr;
 
 zero_cpu::CPU g_cpu;
+std::shared_ptr<zero_cpu::InterruptController> g_interruptController;
+std::shared_ptr<zero_cpu::MMIOBus> g_mmioBus;
+std::shared_ptr<zero_cpu::DebugOutputDevice> g_debugOutputDevice;
+std::shared_ptr<zero_cpu::TimerDevice> g_timerDevice;
 StudioMode g_mode = StudioMode::None;
 bool g_programLoaded = false;
 std::string g_loadedPath;
@@ -415,10 +425,143 @@ std::string makeBinaryInfoView() {
     return oss.str();
 }
 
+std::string studioBoolText(bool value) {
+    return value ? "true" : "false";
+}
+
+std::string studioDebugOutputAsAscii() {
+    if (!g_debugOutputDevice) {
+        return {};
+    }
+
+    std::string text;
+
+    for (const std::int64_t value : g_debugOutputDevice->writes()) {
+        if (value >= 32 && value <= 126) {
+            text.push_back(static_cast<char>(value));
+        } else if (value == 10) {
+            text.push_back('\n');
+        } else {
+            text.push_back('.');
+        }
+    }
+
+    return text;
+}
+
+void configureSystemDevices() {
+    using namespace zero_cpu;
+
+    g_interruptController = std::make_shared<InterruptController>();
+    g_mmioBus = std::make_shared<MMIOBus>();
+    g_debugOutputDevice = std::make_shared<DebugOutputDevice>();
+    g_timerDevice = std::make_shared<TimerDevice>(
+        g_interruptController,
+        44,
+        1000,
+        0
+    );
+
+    g_timerDevice->setEnabled(false);
+
+    g_mmioBus->mapDevice(
+        memory_map::kDebugOutputBase,
+        memory_map::kDebugOutputSize,
+        g_debugOutputDevice
+    );
+
+    g_mmioBus->mapDevice(
+        memory_map::kTimerBase,
+        memory_map::kTimerSize,
+        g_timerDevice
+    );
+
+    g_cpu.setInterruptController(g_interruptController);
+    g_cpu.setMMIOBus(g_mmioBus);
+    g_cpu.clearClockedDevices();
+    g_cpu.addClockedDevice(g_timerDevice);
+}
+
+std::string makeSystemPanelView() {
+    using namespace zero_cpu;
+
+    std::ostringstream oss;
+
+    oss << "System Panel\n";
+
+    oss << "Debug MMIO = 0x"
+        << std::hex
+        << memory_map::kDebugOutputBase
+        << "..0x"
+        << (memory_map::kDebugOutputEndExclusive - 1)
+        << std::dec
+        << "\n";
+
+    oss << "Timer MMIO = 0x"
+        << std::hex
+        << memory_map::kTimerBase
+        << "..0x"
+        << (memory_map::kTimerEndExclusive - 1)
+        << std::dec
+        << "\n";
+
+    oss << "Syscall Vector = 80\n";
+    oss << "Default Timer Vector = 44\n";
+
+    if (g_interruptController) {
+        oss << "Interrupts Enabled = "
+            << studioBoolText(g_interruptController->globalEnabled())
+            << "\n";
+        oss << "Pending Interrupts = "
+            << g_interruptController->pendingCount()
+            << "\n";
+    } else {
+        oss << "Interrupt Controller = <not configured>\n";
+    }
+
+    if (g_timerDevice) {
+        oss << "Timer Tick Count = "
+            << g_timerDevice->tickCount()
+            << "\n";
+        oss << "Timer Interval = "
+            << g_timerDevice->interval()
+            << "\n";
+        oss << "Timer Vector = "
+            << static_cast<int>(g_timerDevice->vector())
+            << "\n";
+        oss << "Timer Payload = "
+            << g_timerDevice->payload()
+            << "\n";
+        oss << "Timer Interrupt Count = "
+            << g_timerDevice->interruptCount()
+            << "\n";
+        oss << "Timer Enabled = "
+            << studioBoolText(g_timerDevice->enabled())
+            << "\n";
+    } else {
+        oss << "TimerDevice = <not configured>\n";
+    }
+
+    if (g_debugOutputDevice) {
+        const std::string ascii = studioDebugOutputAsAscii();
+
+        oss << "Debug Writes = "
+            << g_debugOutputDevice->writes().size()
+            << "\n";
+        oss << "Debug ASCII = "
+            << (ascii.empty() ? "<empty>" : ascii)
+            << "\n";
+    } else {
+        oss << "DebugOutputDevice = <not configured>\n";
+    }
+
+    return oss.str();
+}
+
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.6\n";
+    oss << "Zero-CPU Studio v0.7\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -454,6 +597,9 @@ std::string makeStateView() {
         oss << "\n";
         oss << makeBinaryInfoView();
     }
+
+    oss << "\n";
+    oss << makeSystemPanelView();
 
     oss << "\n";
     oss << makeRegisterView();
@@ -586,6 +732,7 @@ bool loadAssemblyProgram(const std::string& inputPath) {
         AssembledProgram assembled = assembler.assembleFile(inputPath);
 
         g_cpu.loadProgram(assembled.instructions, assembled.labels);
+        configureSystemDevices();
         g_mode = StudioMode::Assembly;
         g_programLoaded = true;
         g_loadedPath = inputPath;
@@ -630,6 +777,7 @@ bool loadBinaryProgram(const std::string& inputPath) {
         BinaryProgram program = reader.readFile(inputPath);
 
         g_cpu.loadBinaryProgram(program);
+        configureSystemDevices();
         g_mode = StudioMode::Binary;
         g_programLoaded = true;
         g_loadedPath = inputPath;
@@ -923,6 +1071,7 @@ void onClearBreakpointsClicked() {
 
 void onResetClicked() {
     g_cpu.reset();
+    configureSystemDevices();
     g_mode = StudioMode::None;
     g_programLoaded = false;
     g_loadedPath.clear();
@@ -943,10 +1092,11 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.6\n"
+        "Zero-CPU Studio v0.7\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
+        "System panel added.\n"
         "\n"
         "Workflow:\n"
         "  1. Edit .zasm in Source Editor\n"
