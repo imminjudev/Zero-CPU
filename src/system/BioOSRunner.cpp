@@ -9,6 +9,7 @@
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
 
@@ -23,12 +24,16 @@
 namespace zero_cpu::system {
 namespace {
 
-std::string joinPath(const std::string& directory, const std::string& fileName) {
+std::string joinPath(
+    const std::string& directory,
+    const std::string& fileName
+) {
     if (directory.empty()) {
         return fileName;
     }
 
     const char last = directory.back();
+
     if (last == '\\' || last == '/') {
         return directory + fileName;
     }
@@ -38,6 +43,7 @@ std::string joinPath(const std::string& directory, const std::string& fileName) 
 
 std::string readTextFile(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
+
     if (!file) {
         throw std::runtime_error("Failed to open file: " + path);
     }
@@ -49,6 +55,7 @@ std::string readTextFile(const std::string& path) {
 
 void writeTextFile(const std::string& path, const std::string& text) {
     std::ofstream file(path, std::ios::binary);
+
     if (!file) {
         throw std::runtime_error("Failed to write file: " + path);
     }
@@ -77,17 +84,19 @@ std::string makeCombinedSource(const std::string& directory) {
     return source.str();
 }
 
-std::string combinedSourcePath(const BioOSRunOptions& options) {
+std::string resolveCombinedSourcePath(const BioOSRunOptions& options) {
     if (!options.combined_source_path.empty()) {
         return options.combined_source_path;
     }
+
     return joinPath(options.directory, "combined_boot.zasm");
 }
 
-std::string combinedBinaryPath(const BioOSRunOptions& options) {
+std::string resolveCombinedBinaryPath(const BioOSRunOptions& options) {
     if (!options.combined_binary_path.empty()) {
         return options.combined_binary_path;
     }
+
     return joinPath(options.directory, "combined_boot.zbin");
 }
 
@@ -97,6 +106,7 @@ std::size_t labelAddress(
     std::size_t codeBase
 ) {
     const auto it = assembled.labels.find(labelName);
+
     if (it == assembled.labels.end()) {
         throw std::runtime_error("BIO-OS label not found: " + labelName);
     }
@@ -104,9 +114,120 @@ std::size_t labelAddress(
     return codeBase + it->second * binary::kInstructionSize;
 }
 
+BioOSRunResult runPreparedProgram(
+    CPU& cpu,
+    const std::shared_ptr<InterruptController>& interruptController,
+    const std::shared_ptr<MMIOBus>& mmioBus,
+    const std::shared_ptr<DebugOutputDevice>& debugOutputDevice,
+    const std::shared_ptr<TimerDevice>& timerDevice,
+    const BioOSRunOptions& options,
+    const AssembledProgram& assembled,
+    binary::BinaryProgram program,
+    const std::string& combinedSource
+) {
+    BioOSRunResult result;
+    result.directory = options.directory;
+    result.combined_source_path = resolveCombinedSourcePath(options);
+    result.combined_binary_path = resolveCombinedBinaryPath(options);
+    result.combined_source = combinedSource;
+    result.instruction_count = assembled.instructions.size();
+    result.code_size = program.code.size();
+    result.stack_base = memory_map::kBioOSStackBase;
+
+    if (!interruptController) {
+        throw std::runtime_error("BioOSRunner requires InterruptController");
+    }
+
+    if (!mmioBus) {
+        throw std::runtime_error("BioOSRunner requires MMIOBus");
+    }
+
+    if (!debugOutputDevice) {
+        throw std::runtime_error("BioOSRunner requires DebugOutputDevice");
+    }
+
+    if (!timerDevice) {
+        throw std::runtime_error("BioOSRunner requires TimerDevice");
+    }
+
+    cpu.loadBinaryProgram(program);
+    cpu.setInterruptController(interruptController);
+    cpu.setMMIOBus(mmioBus);
+    cpu.clearClockedDevices();
+    cpu.addClockedDevice(timerDevice);
+    cpu.state().setSp(memory_map::kBioOSStackBase);
+
+    result.syscall_handler_pc =
+        labelAddress(
+            assembled,
+            "syscall_handler",
+            cpu.binaryCodeBase()
+        );
+
+    result.timer_handler_pc =
+        labelAddress(
+            assembled,
+            "timer_handler",
+            cpu.binaryCodeBase()
+        );
+
+    interruptController->setVectorHandler(
+        80,
+        result.syscall_handler_pc
+    );
+
+    interruptController->setVectorHandler(
+        44,
+        result.timer_handler_pc
+    );
+
+    while (
+        !cpu.state().halted() &&
+        result.step_count < options.max_steps
+    ) {
+        cpu.step();
+
+        if (cpu.state().hasError()) {
+            result.has_error = true;
+            result.error_message = cpu.state().errorMessage();
+            break;
+        }
+
+        ++result.step_count;
+    }
+
+    if (!cpu.state().halted() && !result.has_error) {
+        result.hit_step_limit = true;
+        result.error_message = "BIO-OS step limit reached";
+    }
+
+    result.halted = cpu.state().halted();
+    result.final_pc = cpu.state().pc();
+    result.final_sp = cpu.state().sp();
+    result.exit_code =
+        cpu.state().registers().get(RegisterName::R7);
+
+    result.debug_writes = debugOutputDevice->writes();
+    result.debug_ascii =
+        bioOSDebugOutputAsAscii(result.debug_writes);
+
+    result.timer_tick_count = timerDevice->tickCount();
+    result.timer_interval = timerDevice->interval();
+    result.timer_vector =
+        static_cast<int>(timerDevice->vector());
+    result.timer_payload = timerDevice->payload();
+    result.timer_interrupt_count =
+        timerDevice->interruptCount();
+    result.timer_enabled = timerDevice->enabled();
+
+    return result;
+}
+
 } // namespace
 
-std::string bioOSDebugOutputAsAscii(const std::vector<std::int64_t>& writes) {
+std::string bioOSDebugOutputAsAscii(
+    const std::vector<std::int64_t>& writes
+) {
     std::string text;
 
     for (const std::int64_t value : writes) {
@@ -123,39 +244,90 @@ std::string bioOSDebugOutputAsAscii(const std::vector<std::int64_t>& writes) {
 }
 
 BioOSRunResult BioOSRunner::run(const BioOSRunOptions& options) const {
+    CPU cpu;
+
+    auto interruptController =
+        std::make_shared<InterruptController>();
+    auto mmioBus = std::make_shared<MMIOBus>();
+    auto debugOutputDevice =
+        std::make_shared<DebugOutputDevice>();
+    auto timerDevice =
+        std::make_shared<TimerDevice>(
+            interruptController,
+            44,
+            1000,
+            0
+        );
+
+    timerDevice->setEnabled(false);
+
+    mmioBus->mapDevice(
+        memory_map::kDebugOutputBase,
+        memory_map::kDebugOutputSize,
+        debugOutputDevice
+    );
+
+    mmioBus->mapDevice(
+        memory_map::kTimerBase,
+        memory_map::kTimerSize,
+        timerDevice
+    );
+
+    return runOn(
+        cpu,
+        interruptController,
+        mmioBus,
+        debugOutputDevice,
+        timerDevice,
+        options
+    );
+}
+
+BioOSRunResult BioOSRunner::runOn(
+    CPU& cpu,
+    const std::shared_ptr<InterruptController>& interruptController,
+    const std::shared_ptr<MMIOBus>& mmioBus,
+    const std::shared_ptr<DebugOutputDevice>& debugOutputDevice,
+    const std::shared_ptr<TimerDevice>& timerDevice,
+    const BioOSRunOptions& options
+) const {
     using namespace zero_cpu::binary;
 
     BioOSRunResult result;
     result.directory = options.directory;
-    result.combined_source_path = combinedSourcePath(options);
-    result.combined_binary_path = combinedBinaryPath(options);
+    result.combined_source_path = resolveCombinedSourcePath(options);
+    result.combined_binary_path = resolveCombinedBinaryPath(options);
     result.stack_base = memory_map::kBioOSStackBase;
 
     try {
-        result.combined_source = makeCombinedSource(options.directory);
+        const std::string combinedSource =
+            makeCombinedSource(options.directory);
 
         if (options.write_generated_files) {
-            writeTextFile(result.combined_source_path, result.combined_source);
+            writeTextFile(
+                result.combined_source_path,
+                combinedSource
+            );
         }
 
         Assembler assembler;
-        AssembledProgram assembled = assembler.assembleString(result.combined_source);
+        AssembledProgram assembled =
+            assembler.assembleString(combinedSource);
 
         InstructionEncoder encoder;
-        std::vector<std::uint8_t> code = encoder.encodeProgram(
-            assembled.instructions,
-            assembled.labels
-        );
-
-        result.instruction_count = assembled.instructions.size();
-        result.code_size = code.size();
+        std::vector<std::uint8_t> code =
+            encoder.encodeProgram(
+                assembled.instructions,
+                assembled.labels
+            );
 
         BinaryProgram program;
         program.header.major_version = kMajorVersion;
         program.header.minor_version = kMinorVersion;
         program.header.endianness = BinaryEndianness::Little;
         program.header.entry_point = 0;
-        program.header.code_size = static_cast<std::uint32_t>(code.size());
+        program.header.code_size =
+            static_cast<std::uint32_t>(code.size());
         program.code = std::move(code);
 
         if (options.write_generated_files) {
@@ -163,63 +335,17 @@ BioOSRunResult BioOSRunner::run(const BioOSRunOptions& options) const {
             writer.writeFile(result.combined_binary_path, program);
         }
 
-        CPU cpu;
-        auto interruptController = std::make_shared<InterruptController>();
-        auto mmioBus = std::make_shared<MMIOBus>();
-        auto debugOutputDevice = std::make_shared<DebugOutputDevice>();
-        auto timerDevice = std::make_shared<TimerDevice>(interruptController, 44, 1000, 0);
-
-        timerDevice->setEnabled(false);
-
-        mmioBus->mapDevice(memory_map::kDebugOutputBase, memory_map::kDebugOutputSize, debugOutputDevice);
-        mmioBus->mapDevice(memory_map::kTimerBase, memory_map::kTimerSize, timerDevice);
-
-        cpu.loadBinaryProgram(program);
-        cpu.setInterruptController(interruptController);
-        cpu.setMMIOBus(mmioBus);
-        cpu.clearClockedDevices();
-        cpu.addClockedDevice(timerDevice);
-        cpu.state().setSp(memory_map::kBioOSStackBase);
-
-        result.syscall_handler_pc = labelAddress(assembled, "syscall_handler", cpu.binaryCodeBase());
-        result.timer_handler_pc = labelAddress(assembled, "timer_handler", cpu.binaryCodeBase());
-
-        interruptController->setVectorHandler(80, result.syscall_handler_pc);
-        interruptController->setVectorHandler(44, result.timer_handler_pc);
-
-        while (!cpu.state().halted() && result.step_count < options.max_steps) {
-            cpu.step();
-
-            if (cpu.state().hasError()) {
-                result.has_error = true;
-                result.error_message = cpu.state().errorMessage();
-                break;
-            }
-
-            ++result.step_count;
-        }
-
-        if (!cpu.state().halted() && !result.has_error) {
-            result.hit_step_limit = true;
-            result.error_message = "BIO-OS step limit reached";
-        }
-
-        result.halted = cpu.state().halted();
-        result.final_pc = cpu.state().pc();
-        result.final_sp = cpu.state().sp();
-        result.exit_code = cpu.state().registers().get(RegisterName::R7);
-
-        result.debug_writes = debugOutputDevice->writes();
-        result.debug_ascii = bioOSDebugOutputAsAscii(result.debug_writes);
-
-        result.timer_tick_count = timerDevice->tickCount();
-        result.timer_interval = timerDevice->interval();
-        result.timer_vector = static_cast<int>(timerDevice->vector());
-        result.timer_payload = timerDevice->payload();
-        result.timer_interrupt_count = timerDevice->interruptCount();
-        result.timer_enabled = timerDevice->enabled();
-
-        return result;
+        return runPreparedProgram(
+            cpu,
+            interruptController,
+            mmioBus,
+            debugOutputDevice,
+            timerDevice,
+            options,
+            assembled,
+            std::move(program),
+            combinedSource
+        );
     } catch (const std::exception& ex) {
         result.has_error = true;
         result.error_message = ex.what();

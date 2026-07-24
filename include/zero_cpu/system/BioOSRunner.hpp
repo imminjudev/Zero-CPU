@@ -2,8 +2,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
+
+namespace zero_cpu {
+
+class CPU;
+class DebugOutputDevice;
+class InterruptController;
+class MMIOBus;
+class TimerDevice;
+
+} // namespace zero_cpu
 
 namespace zero_cpu::system {
 
@@ -59,6 +70,15 @@ std::string bioOSDebugOutputAsAscii(
 class BioOSRunner {
 public:
     BioOSRunResult run(const BioOSRunOptions& options = {}) const;
+
+    BioOSRunResult runOn(
+        CPU& cpu,
+        const std::shared_ptr<InterruptController>& interruptController,
+        const std::shared_ptr<MMIOBus>& mmioBus,
+        const std::shared_ptr<DebugOutputDevice>& debugOutputDevice,
+        const std::shared_ptr<TimerDevice>& timerDevice,
+        const BioOSRunOptions& options = {}
+    ) const;
 };
 
 } // namespace zero_cpu::system

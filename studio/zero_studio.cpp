@@ -4,6 +4,7 @@
 #include "zero_cpu/binary/BinaryReader.hpp"
 #include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/core/DebugOutputDevice.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
@@ -563,7 +564,7 @@ std::string makeSystemPanelView() {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.8\n";
+    oss << "Zero-CPU Studio v0.9\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -917,110 +918,107 @@ void runLoadedBioOSProgram(std::ostringstream& log) {
 }
 
 void onRunBioOSClicked() {
-    using namespace zero_cpu;
-    using namespace zero_cpu::binary;
+    using namespace zero_cpu::system;
 
     const std::string bioOSDirectory = "examples\\bio_os";
-    const std::string combinedSourcePath =
-        studioJoinPath(bioOSDirectory, "combined_boot.zasm");
-    const std::string combinedBinaryPath =
-        studioJoinPath(bioOSDirectory, "combined_boot.zbin");
 
     try {
-        const std::string combinedSource =
-            makeBioOSCombinedSource(bioOSDirectory);
-
-        writeTextFile(combinedSourcePath, combinedSource);
-
-        Assembler assembler;
-        AssembledProgram assembled =
-            assembler.assembleFile(combinedSourcePath);
-
-        InstructionEncoder encoder;
-        std::vector<std::uint8_t> code =
-            encoder.encodeProgram(
-                assembled.instructions,
-                assembled.labels
-            );
-
-        BinaryProgram program;
-        program.header.major_version = kMajorVersion;
-        program.header.minor_version = kMinorVersion;
-        program.header.endianness = BinaryEndianness::Little;
-        program.header.entry_point = 0;
-        program.header.code_size =
-            static_cast<std::uint32_t>(code.size());
-        program.code = std::move(code);
-
-        BinaryWriter writer;
-        writer.writeFile(combinedBinaryPath, program);
-
-        g_cpu.loadBinaryProgram(program);
         configureSystemDevices();
-        g_cpu.state().setSp(memory_map::kBioOSStackBase);
 
-        g_interruptController->setVectorHandler(
-            80,
-            bioOSHandlerAddress(assembled, "syscall_handler")
-        );
+        BioOSRunOptions options;
+        options.directory = bioOSDirectory;
 
-        g_interruptController->setVectorHandler(
-            44,
-            bioOSHandlerAddress(assembled, "timer_handler")
-        );
+        BioOSRunner runner;
+        const BioOSRunResult result =
+            runner.runOn(
+                g_cpu,
+                g_interruptController,
+                g_mmioBus,
+                g_debugOutputDevice,
+                g_timerDevice,
+                options
+            );
 
         g_mode = StudioMode::Binary;
         g_programLoaded = true;
-        g_loadedPath = combinedBinaryPath;
+        g_loadedPath = result.combined_binary_path;
 
-        SetWindowTextA(g_inputEdit, combinedBinaryPath.c_str());
-        SetWindowTextA(g_outputEdit, combinedBinaryPath.c_str());
-        setEditText(g_sourceEdit, combinedSource);
+        SetWindowTextA(g_inputEdit, result.combined_binary_path.c_str());
+        SetWindowTextA(g_outputEdit, result.combined_binary_path.c_str());
+        setEditText(g_sourceEdit, result.combined_source);
 
         std::ostringstream log;
-        log << "[Studio BIO-OS Run]\n";
-        log << "Directory: " << bioOSDirectory << "\n";
-        log << "Generated Source: " << combinedSourcePath << "\n";
-        log << "Generated Binary: " << combinedBinaryPath << "\n";
+        log << "[Studio BIO-OS Run via BioOSRunner]\n";
+        log << "Directory: " << result.directory << "\n";
+        log << "Generated Source: "
+            << result.combined_source_path
+            << "\n";
+        log << "Generated Binary: "
+            << result.combined_binary_path
+            << "\n";
         log << "Instruction Count: "
-            << assembled.instructions.size()
+            << result.instruction_count
             << "\n";
         log << "Code Size: "
-            << program.header.code_size
+            << result.code_size
             << " bytes\n";
         log << "Syscall Handler PC: "
-            << bioOSHandlerAddress(assembled, "syscall_handler")
+            << result.syscall_handler_pc
             << "\n";
         log << "Timer Handler PC: "
-            << bioOSHandlerAddress(assembled, "timer_handler")
+            << result.timer_handler_pc
             << "\n";
         log << "BIO-OS Stack Base: "
-            << memory_map::kBioOSStackBase
+            << result.stack_base
+            << "\n";
+        log << "Step Count: "
+            << result.step_count
+            << "\n";
+        log << "Final PC: "
+            << result.final_pc
+            << "\n";
+        log << "Final SP: "
+            << result.final_sp
+            << "\n";
+        log << "Exit Code: "
+            << result.exit_code
             << "\n\n";
 
-        runLoadedBioOSProgram(log);
+        if (!result.success()) {
+            log << "BIO-OS execution failed: "
+                << result.error_message
+                << "\n";
+        } else {
+            log << "BIO-OS execution finished successfully.\n";
+        }
 
         log << "\n";
         log << "Debug Writes: "
-            << (g_debugOutputDevice
-                ? g_debugOutputDevice->writes().size()
-                : 0)
+            << result.debug_writes.size()
             << "\n";
         log << "Debug ASCII: "
-            << studioDebugOutputAsAscii()
+            << (result.debug_ascii.empty()
+                ? std::string("<empty>")
+                : result.debug_ascii)
             << "\n";
-
-        if (g_timerDevice) {
-            log << "Timer Tick Count: "
-                << g_timerDevice->tickCount()
-                << "\n";
-            log << "Timer Interrupt Count: "
-                << g_timerDevice->interruptCount()
-                << "\n";
-            log << "Timer Enabled: "
-                << studioBoolText(g_timerDevice->enabled())
-                << "\n";
-        }
+        log << "Timer Tick Count: "
+            << result.timer_tick_count
+            << "\n";
+        log << "Timer Interval: "
+            << result.timer_interval
+            << "\n";
+        log << "Timer Vector: "
+            << result.timer_vector
+            << "\n";
+        log << "Timer Payload: "
+            << result.timer_payload
+            << "\n";
+        log << "Timer Interrupt Count: "
+            << result.timer_interrupt_count
+            << "\n";
+        log << "Timer Enabled: "
+            << studioBoolText(result.timer_enabled)
+            << "\n";
 
         setEditText(g_traceEdit, log.str());
         refreshStateView();
@@ -1290,12 +1288,13 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.8\n"
+        "Zero-CPU Studio v0.9\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
         "System panel added.\n"
         "BIO-OS runner added.\n"
+        "Studio BIO-OS runner uses BioOSRunner.\n"
         "\n"
         "Workflow:\n"
         "  1. Edit .zasm in Source Editor\n"
