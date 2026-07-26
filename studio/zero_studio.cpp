@@ -680,6 +680,59 @@ std::string pipelineStatusText(bool active) {
     return active ? "[ACTIVE]" : "[idle]";
 }
 
+std::string makeRecentInstructionTraceView() {
+    std::ostringstream oss;
+
+    oss << "Recent Instruction Trace\n";
+
+    const auto& events = g_cpu.traceLogger().events();
+
+    if (events.empty()) {
+        oss << "No TraceEvent recorded yet.\n";
+        return oss.str();
+    }
+
+    constexpr std::size_t kMaxRecentTraceEvents = 16;
+
+    const std::size_t eventCount = events.size();
+
+    const std::size_t start =
+        eventCount > kMaxRecentTraceEvents
+            ? eventCount - kMaxRecentTraceEvents
+            : 0;
+
+    oss << "Showing last "
+        << (eventCount - start)
+        << " of "
+        << eventCount
+        << " events\n";
+
+    for (std::size_t i = start; i < eventCount; ++i) {
+        const auto& event = events[i];
+
+        oss << "["
+            << i
+            << "] PC "
+            << event.pcBefore()
+            << " -> "
+            << event.pcAfter()
+            << " | "
+            << event.instruction().toString()
+            << " | "
+            << event.action();
+
+        if (event.hasError()) {
+            oss << " | ERROR: "
+                << event.errorMessage();
+        }
+
+        oss << "\n";
+    }
+
+    return oss.str();
+}
+
+
 std::string makeExecutionDetailProbeView() {
     std::ostringstream oss;
 
@@ -1427,7 +1480,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.17\n";
+    oss << "Zero-CPU Studio v0.18\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -1472,6 +1525,9 @@ std::string makeStateView() {
 
     oss << "\n";
     oss << makeExecutionDetailProbeView();
+
+    oss << "\n";
+    oss << makeRecentInstructionTraceView();
 
     oss << "\n";
     oss << makeSystemPanelView();
@@ -2164,7 +2220,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.17\n"
+        "Zero-CPU Studio v0.18\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2177,6 +2233,7 @@ void onResetClicked() {
         "Scroll repaint fixed.\n"
         "Pipeline timeline added.\n"
         "Execution detail probe added.\n"
+        "Recent instruction trace added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
