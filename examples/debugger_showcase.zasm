@@ -1,0 +1,18 @@
+; Zero-CPU function call and stack example
+; Expected result:
+; R1 = 0
+; R2 = 20
+; Memory[100] = 20
+; SP = 256
+
+MOV R1, 10
+CALL double_value
+STORE [100], R1
+PUSH R1
+MOV R1, 0
+POP R2
+HALT
+
+double_value:
+    ADD R1, R1
+    RET
