@@ -3,11 +3,143 @@
 #include "zero_cpu/core/RegisterFile.hpp"
 
 #include <algorithm>
+#include <exception>
 #include <iomanip>
 #include <sstream>
 #include <utility>
 
 namespace zero_cpu {
+
+namespace {
+
+bool isAluTraceOpcode(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::ADD:
+    case Opcode::SUB:
+    case Opcode::MUL:
+    case Opcode::DIV:
+    case Opcode::CMP:
+    case Opcode::TEST:
+    case Opcode::AND:
+    case Opcode::OR:
+    case Opcode::XOR:
+    case Opcode::NOT:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+bool aluOpcodeWritesDestination(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::ADD:
+    case Opcode::SUB:
+    case Opcode::MUL:
+    case Opcode::DIV:
+    case Opcode::AND:
+    case Opcode::OR:
+    case Opcode::XOR:
+    case Opcode::NOT:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+std::string aluOperationName(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::ADD:
+        return "ALU_ADD";
+    case Opcode::SUB:
+        return "ALU_SUB";
+    case Opcode::MUL:
+        return "ALU_MUL";
+    case Opcode::DIV:
+        return "ALU_DIV";
+    case Opcode::CMP:
+        return "ALU_COMPARE";
+    case Opcode::TEST:
+        return "ALU_TEST";
+    case Opcode::AND:
+        return "ALU_AND";
+    case Opcode::OR:
+        return "ALU_OR";
+    case Opcode::XOR:
+        return "ALU_XOR";
+    case Opcode::NOT:
+        return "ALU_NOT";
+    default:
+        return "ALU_UNKNOWN";
+    }
+}
+
+void appendAluNote(ALUTraceDetail& detail, const std::string& note) {
+    if (note.empty()) {
+        return;
+    }
+
+    if (!detail.note.empty()) {
+        detail.note += "; ";
+    }
+
+    detail.note += note;
+}
+
+bool tryReadTraceOperandValue(
+    const CPUState& state,
+    const Operand& operand,
+    std::int64_t& value,
+    std::string& note
+) {
+    try {
+        switch (operand.type()) {
+        case OperandType::Register:
+            value = state.registers().get(operand.asRegister());
+            return true;
+
+        case OperandType::Immediate:
+            value = operand.asImmediate();
+            return true;
+
+        case OperandType::MemoryAddress:
+            value = state.memory().read(operand.asMemoryAddress());
+            return true;
+
+        case OperandType::RegisterIndirectAddress: {
+            const std::int64_t rawAddress =
+                state.registers().get(operand.asRegisterIndirectBase());
+
+            if (rawAddress < 0) {
+                note = "negative register-indirect address";
+                return false;
+            }
+
+            value = state.memory().read(static_cast<std::size_t>(rawAddress));
+            return true;
+        }
+
+        case OperandType::Label:
+            note = "label operand has no runtime value snapshot";
+            return false;
+
+        case OperandType::None:
+        default:
+            note = "operand is empty";
+            return false;
+        }
+    } catch (const std::exception& ex) {
+        note = ex.what();
+        return false;
+    }
+}
+
+std::string registerNameText(RegisterName reg) {
+    return RegisterFile::registerNameToString(reg);
+}
+
+} // namespace
 
 TraceEvent::TraceEvent(
     CPUState before,
@@ -24,9 +156,11 @@ TraceEvent::TraceEvent(
       stage_(),
       action_(),
       datapath_nodes_(),
+      alu_detail_(),
       error_message_(std::move(error_message)) {
     analyzeChanges();
     analyzeVisualMetadata();
+    analyzeAluDetail();
 }
 
 const CPUState& TraceEvent::before() const {
@@ -77,6 +211,54 @@ std::string TraceEvent::datapathString() const {
     return joinDatapathNodes(datapath_nodes_);
 }
 
+const ALUTraceDetail& TraceEvent::aluDetail() const {
+    return alu_detail_;
+}
+
+std::string TraceEvent::aluDetailString() const {
+    if (!alu_detail_.active) {
+        return "ALU Detail = inactive";
+    }
+
+    std::ostringstream oss;
+
+    oss << alu_detail_.operation;
+
+    if (alu_detail_.has_lhs) {
+        oss << " | lhs("
+            << alu_detail_.lhs_text
+            << ")="
+            << alu_detail_.lhs;
+    }
+
+    if (alu_detail_.has_rhs) {
+        oss << " | rhs("
+            << alu_detail_.rhs_text
+            << ")="
+            << alu_detail_.rhs;
+    }
+
+    if (alu_detail_.has_result) {
+        oss << " | result";
+
+        if (!alu_detail_.destination.empty()) {
+            oss << "("
+                << alu_detail_.destination
+                << ")";
+        }
+
+        oss << "="
+            << alu_detail_.result;
+    }
+
+    if (!alu_detail_.note.empty()) {
+        oss << " | note="
+            << alu_detail_.note;
+    }
+
+    return oss.str();
+}
+
 bool TraceEvent::hasError() const {
     return !error_message_.empty();
 }
@@ -101,6 +283,10 @@ std::string TraceEvent::toCompactString() const {
 
     if (!datapath_nodes_.empty()) {
         oss << " | path=" << datapathString();
+    }
+
+    if (alu_detail_.active) {
+        oss << " | " << aluDetailString();
     }
 
     for (const auto& change : changed_registers_) {
@@ -161,6 +347,59 @@ std::string TraceEvent::toFullString() const {
     oss << "  Datapath: "
         << (datapath_nodes_.empty() ? "None" : datapathString())
         << "\n\n";
+
+    oss << "ALU Trace Detail:\n";
+    if (!alu_detail_.active) {
+        oss << "  None\n\n";
+    } else {
+        oss << "  Operation: "
+            << alu_detail_.operation
+            << "\n";
+
+        if (!alu_detail_.destination.empty()) {
+            oss << "  Destination: "
+                << alu_detail_.destination
+                << "\n";
+        }
+
+        if (alu_detail_.has_lhs) {
+            oss << "  LHS "
+                << alu_detail_.lhs_text
+                << " = "
+                << alu_detail_.lhs
+                << "\n";
+        } else if (!alu_detail_.lhs_text.empty()) {
+            oss << "  LHS "
+                << alu_detail_.lhs_text
+                << " = <unavailable>\n";
+        }
+
+        if (alu_detail_.has_rhs) {
+            oss << "  RHS "
+                << alu_detail_.rhs_text
+                << " = "
+                << alu_detail_.rhs
+                << "\n";
+        } else if (!alu_detail_.rhs_text.empty()) {
+            oss << "  RHS "
+                << alu_detail_.rhs_text
+                << " = <unavailable>\n";
+        }
+
+        if (alu_detail_.has_result) {
+            oss << "  Result: "
+                << alu_detail_.result
+                << "\n";
+        }
+
+        if (!alu_detail_.note.empty()) {
+            oss << "  Note: "
+                << alu_detail_.note
+                << "\n";
+        }
+
+        oss << "\n";
+    }
 
     oss << "Before:\n";
     oss << before_.summary();
@@ -234,6 +473,94 @@ std::string TraceEvent::toFullString() const {
 
     return oss.str();
 }
+
+void TraceEvent::analyzeAluDetail() {
+    alu_detail_ = ALUTraceDetail{};
+
+    const Opcode opcode = instruction_.opcode();
+
+    if (!isAluTraceOpcode(opcode)) {
+        return;
+    }
+
+    alu_detail_.active = true;
+    alu_detail_.operation =
+        action_.empty() || action_ == "UNKNOWN"
+            ? aluOperationName(opcode)
+            : action_;
+
+    const Operand& dst = instruction_.dst();
+    const Operand& src = instruction_.src();
+
+    if (!dst.isNone()) {
+        alu_detail_.lhs_text = dst.toString();
+
+        std::string note;
+        std::int64_t value = 0;
+
+        if (tryReadTraceOperandValue(before_, dst, value, note)) {
+            alu_detail_.lhs = value;
+            alu_detail_.has_lhs = true;
+        } else {
+            appendAluNote(
+                alu_detail_,
+                "lhs unavailable: " + note
+            );
+        }
+
+        if (dst.isRegister()) {
+            alu_detail_.destination =
+                registerNameText(dst.asRegister());
+        } else {
+            alu_detail_.destination = dst.toString();
+        }
+    }
+
+    if (opcode != Opcode::NOT && !src.isNone()) {
+        alu_detail_.rhs_text = src.toString();
+
+        std::string note;
+        std::int64_t value = 0;
+
+        if (tryReadTraceOperandValue(before_, src, value, note)) {
+            alu_detail_.rhs = value;
+            alu_detail_.has_rhs = true;
+        } else {
+            appendAluNote(
+                alu_detail_,
+                "rhs unavailable: " + note
+            );
+        }
+    }
+
+    if (aluOpcodeWritesDestination(opcode)) {
+        if (dst.isRegister()) {
+            alu_detail_.result =
+                after_.registers().get(dst.asRegister());
+            alu_detail_.has_result = true;
+
+            if (alu_detail_.destination.empty()) {
+                alu_detail_.destination =
+                    registerNameText(dst.asRegister());
+            }
+        } else if (!changed_registers_.empty()) {
+            alu_detail_.result = changed_registers_.front().after;
+            alu_detail_.destination = changed_registers_.front().name;
+            alu_detail_.has_result = true;
+        }
+    } else if (opcode == Opcode::CMP) {
+        appendAluNote(
+            alu_detail_,
+            "comparison result updates flags and is not written to a register"
+        );
+    } else if (opcode == Opcode::TEST) {
+        appendAluNote(
+            alu_detail_,
+            "bit-test result updates flags and is not written to a register"
+        );
+    }
+}
+
 
 void TraceEvent::analyzeChanges() {
     analyzeRegisterChanges();

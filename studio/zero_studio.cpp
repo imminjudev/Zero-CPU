@@ -943,6 +943,55 @@ std::string makeExecutionDetailProbeView() {
             << action
             << "\n";
 
+        const auto& aluDetail = event.aluDetail();
+
+        if (aluDetail.active) {
+            oss << "  Operand Snapshot\n";
+
+            if (aluDetail.has_lhs) {
+                oss << "    lhs "
+                    << aluDetail.lhs_text
+                    << " = "
+                    << aluDetail.lhs
+                    << "\n";
+            } else if (!aluDetail.lhs_text.empty()) {
+                oss << "    lhs "
+                    << aluDetail.lhs_text
+                    << " = <unavailable>\n";
+            }
+
+            if (aluDetail.has_rhs) {
+                oss << "    rhs "
+                    << aluDetail.rhs_text
+                    << " = "
+                    << aluDetail.rhs
+                    << "\n";
+            } else if (!aluDetail.rhs_text.empty()) {
+                oss << "    rhs "
+                    << aluDetail.rhs_text
+                    << " = <unavailable>\n";
+            }
+
+            if (aluDetail.has_result) {
+                oss << "    result";
+
+                if (!aluDetail.destination.empty()) {
+                    oss << " -> "
+                        << aluDetail.destination;
+                }
+
+                oss << " = "
+                    << aluDetail.result
+                    << "\n";
+            }
+
+            if (!aluDetail.note.empty()) {
+                oss << "    note = "
+                    << aluDetail.note
+                    << "\n";
+            }
+        }
+
         if (event.changedRegisters().empty()) {
             oss << "  Register Result = none\n";
         } else {
@@ -1639,7 +1688,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.19\n";
+    oss << "Zero-CPU Studio v0.20\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2382,7 +2431,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.19\n"
+        "Zero-CPU Studio v0.20\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2397,6 +2446,7 @@ void onResetClicked() {
         "Execution detail probe added.\n"
         "Recent instruction trace added.\n"
         "Memory map viewer added.\n"
+        "ALU operand/result detail added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"

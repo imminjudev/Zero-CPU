@@ -28,6 +28,26 @@ struct MemoryChange {
     std::int64_t after;
 };
 
+struct ALUTraceDetail {
+    bool active = false;
+
+    std::string operation;
+    std::string destination;
+
+    std::string lhs_text;
+    std::string rhs_text;
+
+    std::int64_t lhs = 0;
+    std::int64_t rhs = 0;
+    std::int64_t result = 0;
+
+    bool has_lhs = false;
+    bool has_rhs = false;
+    bool has_result = false;
+
+    std::string note;
+};
+
 class TraceEvent {
 public:
     TraceEvent(
@@ -53,6 +73,9 @@ public:
     const std::vector<std::string>& datapathNodes() const;
     std::string datapathString() const;
 
+    const ALUTraceDetail& aluDetail() const;
+    std::string aluDetailString() const;
+
     bool hasError() const;
     const std::string& errorMessage() const;
 
@@ -71,6 +94,7 @@ private:
     std::string stage_;
     std::string action_;
     std::vector<std::string> datapath_nodes_;
+    ALUTraceDetail alu_detail_;
 
     std::string error_message_;
 
@@ -80,6 +104,7 @@ private:
     void analyzeFlagChanges();
     void analyzeMemoryChanges();
     void analyzeVisualMetadata();
+    void analyzeAluDetail();
 
     void addDatapathNode(std::string node);
 
