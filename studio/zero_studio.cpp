@@ -653,6 +653,179 @@ std::string makeSystemPanelView() {
     return oss.str();
 }
 
+bool timelineEventHasNode(
+    const zero_cpu::TraceEvent& event,
+    const std::string& nodeName
+) {
+    const auto& nodes = event.datapathNodes();
+
+    for (const std::string& node : nodes) {
+        if (node == nodeName) {
+            return true;
+        }
+
+        if (nodeName == "Memory/MMIO" && node == "Memory") {
+            return true;
+        }
+
+        if (nodeName == "Memory" && node == "Memory/MMIO") {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string pipelineStatusText(bool active) {
+    return active ? "[ACTIVE]" : "[idle]";
+}
+
+std::string makePipelineTimelineView() {
+    std::ostringstream oss;
+
+    oss << "Pipeline Timeline\n";
+
+    const auto& events = g_cpu.traceLogger().events();
+
+    if (events.empty()) {
+        oss << "No TraceEvent recorded yet.\n";
+        oss << "[FETCH]     waiting for PC\n";
+        oss << "[DECODE]    waiting for instruction\n";
+        oss << "[EXECUTE]   waiting for operation\n";
+        oss << "[MEMORY]    waiting for memory/bus activity\n";
+        oss << "[WRITEBACK] waiting for state update\n";
+        return oss.str();
+    }
+
+    const auto& event = events.back();
+
+    const bool hasMemory =
+        timelineEventHasNode(event, "Memory/MMIO") ||
+        timelineEventHasNode(event, "Memory") ||
+        timelineEventHasNode(event, "Stack");
+
+    const bool hasWriteback =
+        timelineEventHasNode(event, "Writeback") ||
+        !event.changedRegisters().empty();
+
+    const bool hasFlags = !event.changedFlags().empty();
+
+    oss << "Instruction = "
+        << event.instruction().toString()
+        << "\n";
+
+    oss << "Action = "
+        << event.action()
+        << "\n";
+
+    oss << "PC = "
+        << event.pcBefore()
+        << " -> "
+        << event.pcAfter()
+        << "\n";
+
+    if (event.hasError()) {
+        oss << "Error = "
+            << event.errorMessage()
+            << "\n";
+    }
+
+    oss << "\n";
+
+    oss << "[FETCH]     "
+        << pipelineStatusText(true)
+        << " PC "
+        << event.pcBefore()
+        << " reads instruction"
+        << "\n";
+
+    oss << "[DECODE]    "
+        << pipelineStatusText(true)
+        << " "
+        << event.instruction().toString()
+        << " -> opcode/operands"
+        << "\n";
+
+    oss << "[EXECUTE]   "
+        << pipelineStatusText(true)
+        << " "
+        << event.action()
+        << "\n";
+
+    oss << "[MEMORY]    "
+        << pipelineStatusText(hasMemory)
+        << " ";
+
+    if (hasMemory) {
+        if (timelineEventHasNode(event, "Stack")) {
+            oss << "stack access";
+        } else {
+            oss << "memory/MMIO access";
+        }
+    } else {
+        oss << "no memory access";
+    }
+
+    oss << "\n";
+
+    oss << "[WRITEBACK] "
+        << pipelineStatusText(hasWriteback || hasFlags)
+        << " ";
+
+    if (hasWriteback) {
+        if (!event.changedRegisters().empty()) {
+            bool first = true;
+
+            for (const auto& change : event.changedRegisters()) {
+                if (!first) {
+                    oss << ", ";
+                }
+
+                oss << change.name
+                    << ": "
+                    << change.before
+                    << " -> "
+                    << change.after;
+
+                first = false;
+            }
+        } else {
+            oss << "state updated";
+        }
+    } else if (hasFlags) {
+        oss << "flags updated";
+    } else {
+        oss << "no register writeback";
+    }
+
+    oss << "\n";
+
+    if (hasFlags) {
+        oss << "[FLAGS]     [ACTIVE] ";
+
+        bool first = true;
+
+        for (const auto& change : event.changedFlags()) {
+            if (!first) {
+                oss << ", ";
+            }
+
+            oss << change.name
+                << ": "
+                << (change.before ? 1 : 0)
+                << " -> "
+                << (change.after ? 1 : 0);
+
+            first = false;
+        }
+
+        oss << "\n";
+    }
+
+    return oss.str();
+}
+
+
 std::string makeVisualDatapathView() {
     std::ostringstream oss;
 
@@ -1070,7 +1243,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.15\n";
+    oss << "Zero-CPU Studio v0.16\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -1109,6 +1282,9 @@ std::string makeStateView() {
 
     oss << "\n";
     oss << makeVisualDatapathView();
+
+    oss << "\n";
+    oss << makePipelineTimelineView();
 
     oss << "\n";
     oss << makeSystemPanelView();
@@ -1801,7 +1977,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.15\n"
+        "Zero-CPU Studio v0.16\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -1812,6 +1988,7 @@ void onResetClicked() {
         "Main window scrolling added.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
+        "Pipeline timeline added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
