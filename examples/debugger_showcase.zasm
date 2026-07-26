@@ -1,16 +1,66 @@
-; Zero-CPU function call and stack example
-; Expected result:
-; R1 = 0
-; R2 = 20
-; Memory[100] = 20
-; SP = 256
+; Zero-CPU Studio debugger showcase
+;
+; Purpose:
+;   This example is designed for Zero-CPU Studio v0.2 visual debugging.
+;
+; It intentionally exercises:
+;   - ALU datapath
+;   - flag updates
+;   - memory write/read
+;   - stack PUSH/POP
+;   - CALL/RET
+;   - DebugOutput MMIO
+;   - INT 80 syscall
+;   - HALT
+;
+; Suggested Studio flow:
+;   1. Open Zero-CPU Studio.
+;   2. Load this file into the source editor.
+;   3. Click Assemble.
+;   4. Click Load Binary.
+;   5. Step through slowly and watch:
+;      Visual Datapath Panel
+;      Pipeline Timeline
+;      Execution Detail Probe
+;      Recent Instruction Trace
+;      Memory Map Viewer
+;      Graphical Datapath Canvas
+;
+; Expected checkpoints:
+;   Memory[180] = 30
+;   Memory[188] = 60
+;   Memory[196] = 60
+;   Memory[204] = 123
+;   Memory[212] = 90
+;   DebugOutputDevice receives ASCII 'Z' through direct MMIO
+;   INT 80 syscall 1 writes ASCII 'A' through debug output syscall
 
 MOV R1, 10
+MOV R2, 20
+ADD R1, R2
+STORE [180], R1
+
 CALL double_value
-STORE [100], R1
+STORE [188], R1
+
 PUSH R1
 MOV R1, 0
-POP R2
+POP R3
+STORE [196], R3
+
+MOV R4, 123
+STORE [204], R4
+LOAD R5, [204]
+SUB R5, R1
+STORE [212], R5
+
+MOV R6, 90
+STORE [61440], R6
+
+MOV R1, 1
+MOV R2, 65
+INT 80
+
 HALT
 
 double_value:
