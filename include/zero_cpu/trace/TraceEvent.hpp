@@ -48,6 +48,27 @@ struct ALUTraceDetail {
     std::string note;
 };
 
+struct MemoryTraceDetail {
+    bool active = false;
+
+    std::string operation;
+    std::string address_text;
+    std::string value_text;
+    std::string destination;
+    std::string route;
+
+    std::size_t address = 0;
+    std::int64_t value = 0;
+
+    bool has_address = false;
+    bool has_value = false;
+
+    bool is_read = false;
+    bool is_write = false;
+
+    std::string note;
+};
+
 class TraceEvent {
 public:
     TraceEvent(
@@ -76,6 +97,9 @@ public:
     const ALUTraceDetail& aluDetail() const;
     std::string aluDetailString() const;
 
+    const MemoryTraceDetail& memoryDetail() const;
+    std::string memoryDetailString() const;
+
     bool hasError() const;
     const std::string& errorMessage() const;
 
@@ -95,6 +119,7 @@ private:
     std::string action_;
     std::vector<std::string> datapath_nodes_;
     ALUTraceDetail alu_detail_;
+    MemoryTraceDetail memory_detail_;
 
     std::string error_message_;
 
@@ -105,6 +130,7 @@ private:
     void analyzeMemoryChanges();
     void analyzeVisualMetadata();
     void analyzeAluDetail();
+    void analyzeMemoryDetail();
 
     void addDatapathNode(std::string node);
 

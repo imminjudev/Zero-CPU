@@ -1037,6 +1037,58 @@ std::string makeExecutionDetailProbeView() {
             << (stackActive ? "Stack" : "Memory/MMIO")
             << "\n";
 
+        const auto& memoryDetail = event.memoryDetail();
+
+        if (memoryDetail.active) {
+            oss << "  Operation Detail\n";
+            oss << "    operation = "
+                << memoryDetail.operation
+                << "\n";
+
+            if (memoryDetail.has_address) {
+                oss << "    address "
+                    << memoryDetail.address_text
+                    << " = "
+                    << memoryDetail.address
+                    << "\n";
+            } else if (!memoryDetail.address_text.empty()) {
+                oss << "    address "
+                    << memoryDetail.address_text
+                    << " = <unavailable>\n";
+            }
+
+            if (!memoryDetail.route.empty()) {
+                oss << "    route = "
+                    << memoryDetail.route
+                    << "\n";
+            }
+
+            if (memoryDetail.has_value) {
+                oss << "    value";
+
+                if (!memoryDetail.value_text.empty()) {
+                    oss << " "
+                        << memoryDetail.value_text;
+                }
+
+                oss << " = "
+                    << memoryDetail.value
+                    << "\n";
+            }
+
+            if (!memoryDetail.destination.empty()) {
+                oss << "    destination = "
+                    << memoryDetail.destination
+                    << "\n";
+            }
+
+            if (!memoryDetail.note.empty()) {
+                oss << "    note = "
+                    << memoryDetail.note
+                    << "\n";
+            }
+        }
+
         if (event.changedMemory().empty()) {
             oss << "  Memory Mutations = none\n";
             oss << "  Note = memory path may still be active for reads.\n";
@@ -1688,7 +1740,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.20\n";
+    oss << "Zero-CPU Studio v0.21\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2431,7 +2483,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.20\n"
+        "Zero-CPU Studio v0.21\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2447,6 +2499,7 @@ void onResetClicked() {
         "Recent instruction trace added.\n"
         "Memory map viewer added.\n"
         "ALU operand/result detail added.\n"
+        "Memory operand detail added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"

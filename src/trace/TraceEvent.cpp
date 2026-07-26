@@ -1,6 +1,7 @@
 #include "zero_cpu/trace/TraceEvent.hpp"
 
 #include "zero_cpu/core/RegisterFile.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -139,6 +140,98 @@ std::string registerNameText(RegisterName reg) {
     return RegisterFile::registerNameToString(reg);
 }
 
+
+bool isMemoryTraceOpcode(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::LOAD:
+    case Opcode::STORE:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+std::string memoryOperationName(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::LOAD:
+        return "MEMORY_READ";
+    case Opcode::STORE:
+        return "MEMORY_WRITE";
+    default:
+        return "MEMORY_UNKNOWN";
+    }
+}
+
+void appendMemoryNote(MemoryTraceDetail& detail, const std::string& note) {
+    if (note.empty()) {
+        return;
+    }
+
+    if (!detail.note.empty()) {
+        detail.note += "; ";
+    }
+
+    detail.note += note;
+}
+
+std::string memoryRouteText(std::size_t address) {
+    using namespace zero_cpu::memory_map;
+
+    if (isDebugOutputAddress(address)) {
+        return "DebugOutput MMIO";
+    }
+
+    if (isTimerAddress(address)) {
+        return "Timer MMIO";
+    }
+
+    if (isMmioAddress(address)) {
+        return "MMIO";
+    }
+
+    if (address < kDefaultMemorySize) {
+        return "RAM";
+    }
+
+    return "Outside default RAM";
+}
+
+bool tryResolveTraceMemoryAddress(
+    const CPUState& state,
+    const Operand& operand,
+    std::size_t& address,
+    std::string& note
+) {
+    try {
+        switch (operand.type()) {
+        case OperandType::MemoryAddress:
+            address = operand.asMemoryAddress();
+            return true;
+
+        case OperandType::RegisterIndirectAddress: {
+            const std::int64_t rawAddress =
+                state.registers().get(operand.asRegisterIndirectBase());
+
+            if (rawAddress < 0) {
+                note = "negative register-indirect address";
+                return false;
+            }
+
+            address = static_cast<std::size_t>(rawAddress);
+            return true;
+        }
+
+        default:
+            note = "operand is not a memory address";
+            return false;
+        }
+    } catch (const std::exception& ex) {
+        note = ex.what();
+        return false;
+    }
+}
+
 } // namespace
 
 TraceEvent::TraceEvent(
@@ -157,10 +250,12 @@ TraceEvent::TraceEvent(
       action_(),
       datapath_nodes_(),
       alu_detail_(),
+      memory_detail_(),
       error_message_(std::move(error_message)) {
     analyzeChanges();
     analyzeVisualMetadata();
     analyzeAluDetail();
+    analyzeMemoryDetail();
 }
 
 const CPUState& TraceEvent::before() const {
@@ -259,6 +354,57 @@ std::string TraceEvent::aluDetailString() const {
     return oss.str();
 }
 
+const MemoryTraceDetail& TraceEvent::memoryDetail() const {
+    return memory_detail_;
+}
+
+std::string TraceEvent::memoryDetailString() const {
+    if (!memory_detail_.active) {
+        return "Memory Detail = inactive";
+    }
+
+    std::ostringstream oss;
+
+    oss << memory_detail_.operation;
+
+    if (memory_detail_.has_address) {
+        oss << " | address("
+            << memory_detail_.address_text
+            << ")="
+            << memory_detail_.address;
+    }
+
+    if (!memory_detail_.route.empty()) {
+        oss << " | route="
+            << memory_detail_.route;
+    }
+
+    if (memory_detail_.has_value) {
+        oss << " | value";
+
+        if (!memory_detail_.value_text.empty()) {
+            oss << "("
+                << memory_detail_.value_text
+                << ")";
+        }
+
+        oss << "="
+            << memory_detail_.value;
+    }
+
+    if (!memory_detail_.destination.empty()) {
+        oss << " | destination="
+            << memory_detail_.destination;
+    }
+
+    if (!memory_detail_.note.empty()) {
+        oss << " | note="
+            << memory_detail_.note;
+    }
+
+    return oss.str();
+}
+
 bool TraceEvent::hasError() const {
     return !error_message_.empty();
 }
@@ -287,6 +433,10 @@ std::string TraceEvent::toCompactString() const {
 
     if (alu_detail_.active) {
         oss << " | " << aluDetailString();
+    }
+
+    if (memory_detail_.active) {
+        oss << " | " << memoryDetailString();
     }
 
     for (const auto& change : changed_registers_) {
@@ -395,6 +545,60 @@ std::string TraceEvent::toFullString() const {
         if (!alu_detail_.note.empty()) {
             oss << "  Note: "
                 << alu_detail_.note
+                << "\n";
+        }
+
+        oss << "\n";
+    }
+
+    oss << "Memory Trace Detail:\n";
+    if (!memory_detail_.active) {
+        oss << "  None\n\n";
+    } else {
+        oss << "  Operation: "
+            << memory_detail_.operation
+            << "\n";
+
+        if (memory_detail_.has_address) {
+            oss << "  Address "
+                << memory_detail_.address_text
+                << " = "
+                << memory_detail_.address
+                << "\n";
+        } else if (!memory_detail_.address_text.empty()) {
+            oss << "  Address "
+                << memory_detail_.address_text
+                << " = <unavailable>\n";
+        }
+
+        if (!memory_detail_.route.empty()) {
+            oss << "  Route: "
+                << memory_detail_.route
+                << "\n";
+        }
+
+        if (memory_detail_.has_value) {
+            oss << "  Value";
+
+            if (!memory_detail_.value_text.empty()) {
+                oss << " "
+                    << memory_detail_.value_text;
+            }
+
+            oss << " = "
+                << memory_detail_.value
+                << "\n";
+        }
+
+        if (!memory_detail_.destination.empty()) {
+            oss << "  Destination: "
+                << memory_detail_.destination
+                << "\n";
+        }
+
+        if (!memory_detail_.note.empty()) {
+            oss << "  Note: "
+                << memory_detail_.note
                 << "\n";
         }
 
@@ -561,6 +765,105 @@ void TraceEvent::analyzeAluDetail() {
     }
 }
 
+
+void TraceEvent::analyzeMemoryDetail() {
+    memory_detail_ = MemoryTraceDetail{};
+
+    const Opcode opcode = instruction_.opcode();
+
+    if (!isMemoryTraceOpcode(opcode)) {
+        return;
+    }
+
+    memory_detail_.active = true;
+    memory_detail_.operation =
+        action_.empty() || action_ == "UNKNOWN"
+            ? memoryOperationName(opcode)
+            : action_;
+
+    const Operand& dst = instruction_.dst();
+    const Operand& src = instruction_.src();
+
+    if (opcode == Opcode::LOAD) {
+        memory_detail_.is_read = true;
+        memory_detail_.address_text = src.toString();
+
+        std::string note;
+        std::size_t address = 0;
+
+        if (tryResolveTraceMemoryAddress(before_, src, address, note)) {
+            memory_detail_.address = address;
+            memory_detail_.has_address = true;
+            memory_detail_.route = memoryRouteText(address);
+        } else {
+            appendMemoryNote(
+                memory_detail_,
+                "address unavailable: " + note
+            );
+        }
+
+        if (dst.isRegister()) {
+            memory_detail_.destination = registerNameText(dst.asRegister());
+            memory_detail_.value = after_.registers().get(dst.asRegister());
+            memory_detail_.has_value = true;
+            memory_detail_.value_text = memory_detail_.destination;
+        } else if (!changed_registers_.empty()) {
+            memory_detail_.destination = changed_registers_.front().name;
+            memory_detail_.value = changed_registers_.front().after;
+            memory_detail_.has_value = true;
+            memory_detail_.value_text = memory_detail_.destination;
+        } else {
+            appendMemoryNote(
+                memory_detail_,
+                "load value unavailable because no destination register changed"
+            );
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::STORE) {
+        memory_detail_.is_write = true;
+        memory_detail_.address_text = dst.toString();
+        memory_detail_.value_text = src.toString();
+
+        std::string addressNote;
+        std::size_t address = 0;
+
+        if (tryResolveTraceMemoryAddress(before_, dst, address, addressNote)) {
+            memory_detail_.address = address;
+            memory_detail_.has_address = true;
+            memory_detail_.route = memoryRouteText(address);
+        } else {
+            appendMemoryNote(
+                memory_detail_,
+                "address unavailable: " + addressNote
+            );
+        }
+
+        std::string valueNote;
+        std::int64_t value = 0;
+
+        if (tryReadTraceOperandValue(before_, src, value, valueNote)) {
+            memory_detail_.value = value;
+            memory_detail_.has_value = true;
+        } else {
+            appendMemoryNote(
+                memory_detail_,
+                "value unavailable: " + valueNote
+            );
+        }
+
+        if (memory_detail_.has_address &&
+            memory_detail_.route.find("MMIO") != std::string::npos &&
+            changed_memory_.empty()) {
+            appendMemoryNote(
+                memory_detail_,
+                "MMIO write is visible through the device, not normal RAM snapshot"
+            );
+        }
+    }
+}
 
 void TraceEvent::analyzeChanges() {
     analyzeRegisterChanges();
