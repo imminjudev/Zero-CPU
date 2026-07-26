@@ -40,9 +40,68 @@ Software interrupt       implemented
 INT 80 syscalls          syscall 1..7 implemented
 BIO-OS boot demo         implemented
 run-os CLI command       implemented
+Studio visual debugger    implemented
 ```
 
 The current project is at the early BIO-OS demo stage.
+
+---
+
+## Studio Debugger v0.2
+
+Zero-CPU Studio includes a visual debugger for explaining how instructions move
+through the virtual CPU.
+
+The v0.2 debugger focuses on making CPU execution visible:
+
+```text
+- Visual Datapath Panel
+- Graphical Datapath Canvas
+- Pipeline Timeline
+- Execution Detail Probe
+- Recent Instruction Trace
+- Memory Map Viewer
+- debugger_showcase.zasm demo program
+```
+
+Recommended demo file:
+
+```text
+examples/debugger_showcase.zasm
+```
+
+Studio demo flow:
+
+```text
+1. Open Zero-CPU Studio.
+2. Set Input source/binary path to:
+   examples\debugger_showcase.zasm
+3. Set Output .zbin path to:
+   examples\debugger_showcase.zbin
+4. Click [Load Source]
+5. Click [Assemble]
+6. Click [Load BIN]
+7. Click [Step]
+```
+
+What the demo exercises:
+
+```text
+- ALU ADD/SUB
+- flag updates
+- STORE / LOAD
+- PUSH / POP
+- CALL / RET
+- direct DebugOutputDevice MMIO
+- INT 80 syscall
+- HALT
+```
+
+Detailed documentation:
+
+```text
+docs/studio-debugger-v0.2.md
+```
 
 ---
 
