@@ -680,6 +680,165 @@ std::string pipelineStatusText(bool active) {
     return active ? "[ACTIVE]" : "[idle]";
 }
 
+std::string studioHexAddress(std::size_t value) {
+    std::ostringstream oss;
+
+    oss << "0x"
+        << std::uppercase
+        << std::hex
+        << std::setw(4)
+        << std::setfill('0')
+        << value
+        << std::dec
+        << std::setfill(' ');
+
+    return oss.str();
+}
+
+std::string studioAddressRange(
+    std::size_t begin,
+    std::size_t endExclusive
+) {
+    std::ostringstream oss;
+
+    oss << "["
+        << studioHexAddress(begin)
+        << ".."
+        << studioHexAddress(endExclusive - 1)
+        << "]";
+
+    return oss.str();
+}
+
+std::string classifyStudioAddress(std::size_t address) {
+    using namespace zero_cpu::memory_map;
+
+    if (isLowMemoryAddress(address)) {
+        return "Low Data / Scratch";
+    }
+
+    if (isDebugOutputAddress(address)) {
+        return "DebugOutput MMIO";
+    }
+
+    if (isTimerAddress(address)) {
+        return "Timer MMIO";
+    }
+
+    if (isBioOSStackAddress(address)) {
+        return "BIO-OS Stack";
+    }
+
+    if (isBioOSCodeAddress(address)) {
+        return "Program Code / BIO-OS Code Window";
+    }
+
+    if (address >= kDefaultMemorySize && address < kDebugOutputBase) {
+        return "Outside default RAM / reserved gap";
+    }
+
+    if (isMmioAddress(address)) {
+        return "MMIO";
+    }
+
+    return "Unknown / unmapped";
+}
+
+std::string makeMemoryMapViewer() {
+    using namespace zero_cpu::memory_map;
+
+    std::ostringstream oss;
+
+    const std::size_t pc = g_cpu.state().pc();
+    const std::size_t sp = g_cpu.state().sp();
+
+    oss << "Memory Map Viewer\n";
+
+    oss << "Current PC = "
+        << studioHexAddress(pc)
+        << " ("
+        << pc
+        << ") -> "
+        << classifyStudioAddress(pc)
+        << "\n";
+
+    oss << "Current SP = "
+        << studioHexAddress(sp)
+        << " ("
+        << sp
+        << ") -> "
+        << classifyStudioAddress(sp)
+        << "\n";
+
+    oss << "\n";
+    oss << "Core RAM Layout\n";
+
+    oss << "  "
+        << studioAddressRange(kLowMemoryBase, kLowMemoryEndExclusive)
+        << " Low Data / Scratch\n";
+
+    oss << "  "
+        << studioAddressRange(kBinaryCodeBase, kDefaultStackBase)
+        << " Default Program Code Window\n";
+
+    oss << "  "
+        << studioHexAddress(kDefaultStackBase)
+        << " Default Stack Base\n";
+
+    oss << "  "
+        << studioAddressRange(kBinaryCodeBase, kBioOSStackBase)
+        << " BIO-OS Combined Code Window\n";
+
+    oss << "  "
+        << studioAddressRange(kBioOSStackBase, kDefaultMemorySize)
+        << " BIO-OS Stack Window\n";
+
+    oss << "  "
+        << studioAddressRange(kDefaultMemorySize, kDebugOutputBase)
+        << " Outside default RAM / reserved gap\n";
+
+    oss << "\n";
+    oss << "MMIO Layout\n";
+
+    oss << "  "
+        << studioAddressRange(kDebugOutputBase, kDebugOutputEndExclusive)
+        << " DebugOutputDevice\n";
+
+    oss << "  "
+        << studioAddressRange(kTimerBase, kTimerEndExclusive)
+        << " TimerDevice\n";
+
+    oss << "\n";
+    oss << "Timer MMIO Registers\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerTickCountOffset)
+        << " tick_count\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerIntervalOffset)
+        << " interval\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerEnabledOffset)
+        << " enabled\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerVectorOffset)
+        << " vector\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerPayloadOffset)
+        << " payload\n";
+
+    oss << "  "
+        << studioHexAddress(kTimerBase + kTimerInterruptCountOffset)
+        << " interrupt_count\n";
+
+    return oss.str();
+}
+
+
 std::string makeRecentInstructionTraceView() {
     std::ostringstream oss;
 
@@ -1480,7 +1639,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.18\n";
+    oss << "Zero-CPU Studio v0.19\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -1528,6 +1687,9 @@ std::string makeStateView() {
 
     oss << "\n";
     oss << makeRecentInstructionTraceView();
+
+    oss << "\n";
+    oss << makeMemoryMapViewer();
 
     oss << "\n";
     oss << makeSystemPanelView();
@@ -2220,7 +2382,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.18\n"
+        "Zero-CPU Studio v0.19\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2234,6 +2396,7 @@ void onResetClicked() {
         "Pipeline timeline added.\n"
         "Execution detail probe added.\n"
         "Recent instruction trace added.\n"
+        "Memory map viewer added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
