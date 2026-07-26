@@ -680,6 +680,190 @@ std::string pipelineStatusText(bool active) {
     return active ? "[ACTIVE]" : "[idle]";
 }
 
+std::string makeExecutionDetailProbeView() {
+    std::ostringstream oss;
+
+    oss << "Execution Detail Probe\n";
+
+    const auto& events = g_cpu.traceLogger().events();
+
+    if (events.empty()) {
+        oss << "No TraceEvent recorded yet.\n";
+        oss << "ALU Detail = waiting\n";
+        oss << "Memory Detail = waiting\n";
+        oss << "Interrupt Detail = waiting\n";
+        return oss.str();
+    }
+
+    const auto& event = events.back();
+
+    const bool aluActive = timelineEventHasNode(event, "ALU");
+    const bool memoryActive =
+        timelineEventHasNode(event, "Memory/MMIO") ||
+        timelineEventHasNode(event, "Memory") ||
+        !event.changedMemory().empty();
+
+    const bool stackActive = timelineEventHasNode(event, "Stack");
+
+    const std::string action = event.action();
+    const std::string instructionText = event.instruction().toString();
+
+    const bool interruptActive =
+        timelineEventHasNode(event, "InterruptController") ||
+        action.find("INTERRUPT") != std::string::npos ||
+        instructionText.find("INT") != std::string::npos ||
+        instructionText.find("IRET") != std::string::npos;
+
+    oss << "Instruction = "
+        << instructionText
+        << "\n";
+
+    oss << "Action = "
+        << action
+        << "\n";
+
+    oss << "\n";
+    oss << "ALU Detail\n";
+
+    if (aluActive) {
+        oss << "  Active = true\n";
+        oss << "  Operation = "
+            << action
+            << "\n";
+
+        if (event.changedRegisters().empty()) {
+            oss << "  Register Result = none\n";
+        } else {
+            oss << "  Register Result\n";
+
+            for (const auto& change : event.changedRegisters()) {
+                oss << "    "
+                    << change.name
+                    << ": "
+                    << change.before
+                    << " -> "
+                    << change.after
+                    << "\n";
+            }
+        }
+
+        if (event.changedFlags().empty()) {
+            oss << "  Flag Result = none\n";
+        } else {
+            oss << "  Flag Result\n";
+
+            for (const auto& change : event.changedFlags()) {
+                oss << "    "
+                    << change.name
+                    << ": "
+                    << (change.before ? 1 : 0)
+                    << " -> "
+                    << (change.after ? 1 : 0)
+                    << "\n";
+            }
+        }
+    } else {
+        oss << "  Active = false\n";
+        oss << "  Operation = none\n";
+    }
+
+    oss << "\n";
+    oss << "Memory Detail\n";
+
+    if (memoryActive || stackActive) {
+        oss << "  Active = true\n";
+        oss << "  Route = "
+            << (stackActive ? "Stack" : "Memory/MMIO")
+            << "\n";
+
+        if (event.changedMemory().empty()) {
+            oss << "  Memory Mutations = none\n";
+            oss << "  Note = memory path may still be active for reads.\n";
+        } else {
+            oss << "  Memory Mutations = "
+                << event.changedMemory().size()
+                << "\n";
+
+            constexpr std::size_t kMaxProbeMemoryChanges = 8;
+            const std::size_t memoryChangeCount = event.changedMemory().size();
+
+            const std::size_t visibleCount =
+                memoryChangeCount < kMaxProbeMemoryChanges
+                    ? memoryChangeCount
+                    : kMaxProbeMemoryChanges;
+
+            for (std::size_t i = 0; i < visibleCount; ++i) {
+                const auto& change = event.changedMemory()[i];
+
+                oss << "    Memory["
+                    << change.address
+                    << "]: "
+                    << change.before
+                    << " -> "
+                    << change.after
+                    << "\n";
+            }
+
+            if (memoryChangeCount > visibleCount) {
+                oss << "    ... "
+                    << (memoryChangeCount - visibleCount)
+                    << " more memory changes hidden\n";
+            }
+        }
+    } else {
+        oss << "  Active = false\n";
+        oss << "  Route = none\n";
+    }
+
+    oss << "\n";
+    oss << "Interrupt Detail\n";
+
+    if (interruptActive) {
+        oss << "  Active = true\n";
+        oss << "  Action = "
+            << action
+            << "\n";
+        oss << "  Instruction = "
+            << instructionText
+            << "\n";
+
+        if (action == "SOFTWARE_INTERRUPT") {
+            oss << "  Kind = software interrupt\n";
+        } else if (action == "HARDWARE_INTERRUPT") {
+            oss << "  Kind = hardware interrupt\n";
+        } else if (action == "INTERRUPT_RETURN") {
+            oss << "  Kind = interrupt return\n";
+        } else {
+            oss << "  Kind = interrupt-related control flow\n";
+        }
+    } else {
+        oss << "  Active = false\n";
+        oss << "  Action = none\n";
+    }
+
+    oss << "\n";
+    oss << "Writeback Summary\n";
+
+    if (event.changedRegisters().empty() && event.changedFlags().empty()) {
+        oss << "  No register/flag writeback.\n";
+    } else {
+        if (!event.changedRegisters().empty()) {
+            oss << "  Registers = "
+                << event.changedRegisters().size()
+                << "\n";
+        }
+
+        if (!event.changedFlags().empty()) {
+            oss << "  Flags = "
+                << event.changedFlags().size()
+                << "\n";
+        }
+    }
+
+    return oss.str();
+}
+
+
 std::string makePipelineTimelineView() {
     std::ostringstream oss;
 
@@ -1243,7 +1427,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.16\n";
+    oss << "Zero-CPU Studio v0.17\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -1285,6 +1469,9 @@ std::string makeStateView() {
 
     oss << "\n";
     oss << makePipelineTimelineView();
+
+    oss << "\n";
+    oss << makeExecutionDetailProbeView();
 
     oss << "\n";
     oss << makeSystemPanelView();
@@ -1977,7 +2164,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.16\n"
+        "Zero-CPU Studio v0.17\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -1989,6 +2176,7 @@ void onResetClicked() {
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
         "Pipeline timeline added.\n"
+        "Execution detail probe added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
