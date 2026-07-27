@@ -103,6 +103,154 @@ Detailed documentation:
 docs/studio-debugger-v0.2.md
 ```
 
+## Studio Debugger v0.3
+
+Zero-CPU Studio v0.3 expands the visual debugger from a datapath viewer into an
+instruction execution explainer.
+
+The v0.3 debugger adds four instruction detail layers:
+
+```text
+- ALU Detail
+- Memory Detail
+- Stack Detail
+- Control Flow Detail
+```
+
+These details are shown in the `Execution Detail Probe` while stepping through
+`examples/debugger_showcase.zasm`.
+
+### ALU Detail
+
+ALU instructions explain their operands and result.
+
+Example:
+
+```asm
+ADD R1, R2
+```
+
+The debugger can show:
+
+```text
+lhs R1 = 10
+rhs R2 = 20
+result -> R1 = 30
+```
+
+### Memory Detail
+
+Memory instructions explain address, route, and value.
+
+Example:
+
+```asm
+STORE [180], R1
+```
+
+The debugger can show:
+
+```text
+operation = MEMORY_WRITE
+address [180] = 180
+route = RAM
+value R1 = 30
+```
+
+For MMIO writes, the same detail layer can show:
+
+```text
+route = DebugOutput MMIO
+```
+
+### Stack Detail
+
+Stack instructions explain stack address, SP movement, and transferred value.
+
+Example:
+
+```asm
+PUSH R1
+```
+
+The debugger can show:
+
+```text
+operation = STACK_PUSH
+stack address = 2048
+SP = 2048 -> 2056
+value = 60
+```
+
+`CALL` and `RET` also expose return-address behavior.
+
+### Control Flow Detail
+
+Control-flow instructions explain PC movement, branch decisions, targets, and
+return addresses.
+
+Examples:
+
+```asm
+CALL double_value
+RET
+INT 80
+```
+
+The debugger can show:
+
+```text
+from PC = ...
+to PC = ...
+taken = true
+target = ...
+return address = ...
+vector = 80
+```
+
+Conditional branches can show the condition and whether the branch was taken:
+
+```text
+condition = ZF == 1
+taken = false
+fallthrough = ...
+```
+
+### Recommended v0.3 Demo
+
+```text
+examples/debugger_showcase.zasm
+```
+
+Studio now defaults to the debugger showcase paths:
+
+```text
+examples\debugger_showcase.zasm
+examples\debugger_showcase.zbin
+```
+
+Recommended flow:
+
+```text
+1. Open Zero-CPU Studio.
+2. Click [Load Source].
+3. Click [Assemble].
+4. Click [Load BIN].
+5. Step through the program.
+6. Watch the Execution Detail Probe.
+```
+
+Useful documentation:
+
+```text
+docs/v0.3-debugger-showcase-guide.md
+docs/v0.3-alu-trace-detail.md
+docs/v0.3-memory-trace-detail.md
+docs/v0.3-stack-trace-detail.md
+docs/v0.3-control-flow-trace-detail.md
+docs/studio-default-debugger-showcase.md
+```
+
 ---
 
 ## Quick Start
