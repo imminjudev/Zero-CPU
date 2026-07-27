@@ -197,6 +197,63 @@ std::string memoryRouteText(std::size_t address) {
     return "Outside default RAM";
 }
 
+
+bool isStackTraceOpcode(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::PUSH:
+    case Opcode::POP:
+    case Opcode::CALL:
+    case Opcode::RET:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+std::string stackOperationName(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::PUSH:
+        return "STACK_PUSH";
+    case Opcode::POP:
+        return "STACK_POP";
+    case Opcode::CALL:
+        return "CALL";
+    case Opcode::RET:
+        return "RETURN";
+    default:
+        return "STACK_UNKNOWN";
+    }
+}
+
+void appendStackNote(StackTraceDetail& detail, const std::string& note) {
+    if (note.empty()) {
+        return;
+    }
+
+    if (!detail.note.empty()) {
+        detail.note += "; ";
+    }
+
+    detail.note += note;
+}
+
+bool findMemoryChangeAt(
+    const std::vector<MemoryChange>& changes,
+    std::size_t address,
+    MemoryChange& found
+) {
+    for (const MemoryChange& change : changes) {
+        if (change.address == address) {
+            found = change;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 bool tryResolveTraceMemoryAddress(
     const CPUState& state,
     const Operand& operand,
@@ -251,11 +308,13 @@ TraceEvent::TraceEvent(
       datapath_nodes_(),
       alu_detail_(),
       memory_detail_(),
+      stack_detail_(),
       error_message_(std::move(error_message)) {
     analyzeChanges();
     analyzeVisualMetadata();
     analyzeAluDetail();
     analyzeMemoryDetail();
+    analyzeStackDetail();
 }
 
 const CPUState& TraceEvent::before() const {
@@ -405,6 +464,60 @@ std::string TraceEvent::memoryDetailString() const {
     return oss.str();
 }
 
+const StackTraceDetail& TraceEvent::stackDetail() const {
+    return stack_detail_;
+}
+
+std::string TraceEvent::stackDetailString() const {
+    if (!stack_detail_.active) {
+        return "Stack Detail = inactive";
+    }
+
+    std::ostringstream oss;
+
+    oss << stack_detail_.operation;
+
+    if (stack_detail_.has_stack_address) {
+        oss << " | stack_address="
+            << stack_detail_.stack_address;
+    }
+
+    if (stack_detail_.has_sp_change) {
+        oss << " | SP="
+            << stack_detail_.sp_before
+            << "->"
+            << stack_detail_.sp_after;
+    }
+
+    if (stack_detail_.has_value) {
+        oss << " | value="
+            << stack_detail_.value;
+    }
+
+    if (stack_detail_.has_return_address) {
+        oss << " | return_address="
+            << stack_detail_.return_address;
+    }
+
+    if (!stack_detail_.destination.empty()) {
+        oss << " | destination="
+            << stack_detail_.destination;
+    }
+
+    if (stack_detail_.has_target) {
+        oss << " | target="
+            << stack_detail_.target;
+    }
+
+    if (!stack_detail_.note.empty()) {
+        oss << " | note="
+            << stack_detail_.note;
+    }
+
+    return oss.str();
+}
+
+
 bool TraceEvent::hasError() const {
     return !error_message_.empty();
 }
@@ -437,6 +550,10 @@ std::string TraceEvent::toCompactString() const {
 
     if (memory_detail_.active) {
         oss << " | " << memoryDetailString();
+    }
+
+    if (stack_detail_.active) {
+        oss << " | " << stackDetailString();
     }
 
     for (const auto& change : changed_registers_) {
@@ -599,6 +716,67 @@ std::string TraceEvent::toFullString() const {
         if (!memory_detail_.note.empty()) {
             oss << "  Note: "
                 << memory_detail_.note
+                << "\n";
+        }
+
+        oss << "\n";
+    }
+
+    oss << "Stack Trace Detail:\n";
+    if (!stack_detail_.active) {
+        oss << "  None\n\n";
+    } else {
+        oss << "  Operation: "
+            << stack_detail_.operation
+            << "\n";
+
+        if (!stack_detail_.operand_text.empty()) {
+            oss << "  Operand: "
+                << stack_detail_.operand_text
+                << "\n";
+        }
+
+        if (stack_detail_.has_stack_address) {
+            oss << "  Stack Address: "
+                << stack_detail_.stack_address
+                << "\n";
+        }
+
+        if (stack_detail_.has_sp_change) {
+            oss << "  SP: "
+                << stack_detail_.sp_before
+                << " -> "
+                << stack_detail_.sp_after
+                << "\n";
+        }
+
+        if (stack_detail_.has_value) {
+            oss << "  Value: "
+                << stack_detail_.value
+                << "\n";
+        }
+
+        if (stack_detail_.has_return_address) {
+            oss << "  Return Address: "
+                << stack_detail_.return_address
+                << "\n";
+        }
+
+        if (!stack_detail_.destination.empty()) {
+            oss << "  Destination: "
+                << stack_detail_.destination
+                << "\n";
+        }
+
+        if (stack_detail_.has_target) {
+            oss << "  Target: "
+                << stack_detail_.target
+                << "\n";
+        }
+
+        if (!stack_detail_.note.empty()) {
+            oss << "  Note: "
+                << stack_detail_.note
                 << "\n";
         }
 
@@ -864,6 +1042,134 @@ void TraceEvent::analyzeMemoryDetail() {
         }
     }
 }
+
+void TraceEvent::analyzeStackDetail() {
+    stack_detail_ = StackTraceDetail{};
+
+    const Opcode opcode = instruction_.opcode();
+
+    if (!isStackTraceOpcode(opcode)) {
+        return;
+    }
+
+    stack_detail_.active = true;
+    stack_detail_.operation =
+        action_.empty() || action_ == "UNKNOWN"
+            ? stackOperationName(opcode)
+            : action_;
+
+    stack_detail_.sp_before = before_.sp();
+    stack_detail_.sp_after = after_.sp();
+    stack_detail_.has_sp_change = before_.sp() != after_.sp();
+
+    const Operand& dst = instruction_.dst();
+
+    if (!dst.isNone()) {
+        stack_detail_.operand_text = dst.toString();
+    }
+
+    if (opcode == Opcode::PUSH) {
+        stack_detail_.is_push = true;
+        stack_detail_.stack_address = before_.sp();
+        stack_detail_.has_stack_address = true;
+
+        std::string note;
+        std::int64_t value = 0;
+
+        if (tryReadTraceOperandValue(before_, dst, value, note)) {
+            stack_detail_.value = value;
+            stack_detail_.has_value = true;
+        } else {
+            appendStackNote(
+                stack_detail_,
+                "push value unavailable: " + note
+            );
+        }
+
+        MemoryChange pushed{};
+        if (findMemoryChangeAt(changed_memory_, stack_detail_.stack_address, pushed)) {
+            stack_detail_.value = pushed.after;
+            stack_detail_.has_value = true;
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::POP) {
+        stack_detail_.is_pop = true;
+        stack_detail_.stack_address = after_.sp();
+        stack_detail_.has_stack_address = true;
+
+        if (dst.isRegister()) {
+            stack_detail_.destination = registerNameText(dst.asRegister());
+            stack_detail_.value = after_.registers().get(dst.asRegister());
+            stack_detail_.has_value = true;
+        } else if (!changed_registers_.empty()) {
+            stack_detail_.destination = changed_registers_.front().name;
+            stack_detail_.value = changed_registers_.front().after;
+            stack_detail_.has_value = true;
+        } else {
+            try {
+                stack_detail_.value =
+                    before_.memory().read(stack_detail_.stack_address);
+                stack_detail_.has_value = true;
+            } catch (const std::exception& ex) {
+                appendStackNote(
+                    stack_detail_,
+                    std::string("pop value unavailable: ") + ex.what()
+                );
+            }
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::CALL) {
+        stack_detail_.is_call = true;
+        stack_detail_.stack_address = before_.sp();
+        stack_detail_.has_stack_address = true;
+        stack_detail_.target = after_.pc();
+        stack_detail_.has_target = true;
+
+        MemoryChange pushed{};
+        if (findMemoryChangeAt(changed_memory_, stack_detail_.stack_address, pushed)) {
+            stack_detail_.return_address = pushed.after;
+            stack_detail_.has_return_address = true;
+            stack_detail_.value = pushed.after;
+            stack_detail_.has_value = true;
+        } else {
+            appendStackNote(
+                stack_detail_,
+                "return address write was not found in changed memory"
+            );
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::RET) {
+        stack_detail_.is_ret = true;
+        stack_detail_.stack_address = after_.sp();
+        stack_detail_.has_stack_address = true;
+        stack_detail_.return_address = static_cast<std::int64_t>(after_.pc());
+        stack_detail_.has_return_address = true;
+        stack_detail_.target = after_.pc();
+        stack_detail_.has_target = true;
+
+        try {
+            stack_detail_.value =
+                before_.memory().read(stack_detail_.stack_address);
+            stack_detail_.has_value = true;
+        } catch (const std::exception& ex) {
+            appendStackNote(
+                stack_detail_,
+                std::string("return value unavailable: ") + ex.what()
+            );
+        }
+    }
+}
+
+
 
 void TraceEvent::analyzeChanges() {
     analyzeRegisterChanges();

@@ -1129,6 +1129,71 @@ std::string makeExecutionDetailProbeView() {
     }
 
     oss << "\n";
+    oss << "Stack Detail\n";
+
+    const auto& stackDetail = event.stackDetail();
+
+    if (stackDetail.active) {
+        oss << "  Active = true\n";
+        oss << "  Operation = "
+            << stackDetail.operation
+            << "\n";
+
+        if (!stackDetail.operand_text.empty()) {
+            oss << "  Operand = "
+                << stackDetail.operand_text
+                << "\n";
+        }
+
+        if (stackDetail.has_stack_address) {
+            oss << "  Stack Address = "
+                << stackDetail.stack_address
+                << "\n";
+        }
+
+        if (stackDetail.has_sp_change) {
+            oss << "  SP = "
+                << stackDetail.sp_before
+                << " -> "
+                << stackDetail.sp_after
+                << "\n";
+        }
+
+        if (stackDetail.has_value) {
+            oss << "  Value = "
+                << stackDetail.value
+                << "\n";
+        }
+
+        if (stackDetail.has_return_address) {
+            oss << "  Return Address = "
+                << stackDetail.return_address
+                << "\n";
+        }
+
+        if (!stackDetail.destination.empty()) {
+            oss << "  Destination = "
+                << stackDetail.destination
+                << "\n";
+        }
+
+        if (stackDetail.has_target) {
+            oss << "  Target = "
+                << stackDetail.target
+                << "\n";
+        }
+
+        if (!stackDetail.note.empty()) {
+            oss << "  Note = "
+                << stackDetail.note
+                << "\n";
+        }
+    } else {
+        oss << "  Active = false\n";
+        oss << "  Operation = none\n";
+    }
+
+    oss << "\n";
     oss << "Interrupt Detail\n";
 
     if (interruptActive) {
@@ -1740,7 +1805,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.21\n";
+    oss << "Zero-CPU Studio v0.22\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2483,7 +2548,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.21\n"
+        "Zero-CPU Studio v0.22\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2500,6 +2565,7 @@ void onResetClicked() {
         "Memory map viewer added.\n"
         "ALU operand/result detail added.\n"
         "Memory operand detail added.\n"
+        "Stack operand detail added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"

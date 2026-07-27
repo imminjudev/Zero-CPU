@@ -69,6 +69,33 @@ struct MemoryTraceDetail {
     std::string note;
 };
 
+struct StackTraceDetail {
+    bool active = false;
+
+    std::string operation;
+    std::string operand_text;
+    std::string destination;
+    std::string note;
+
+    std::int64_t value = 0;
+    std::int64_t return_address = 0;
+    std::size_t stack_address = 0;
+    std::size_t sp_before = 0;
+    std::size_t sp_after = 0;
+    std::size_t target = 0;
+
+    bool has_value = false;
+    bool has_return_address = false;
+    bool has_stack_address = false;
+    bool has_sp_change = false;
+    bool has_target = false;
+
+    bool is_push = false;
+    bool is_pop = false;
+    bool is_call = false;
+    bool is_ret = false;
+};
+
 class TraceEvent {
 public:
     TraceEvent(
@@ -100,6 +127,9 @@ public:
     const MemoryTraceDetail& memoryDetail() const;
     std::string memoryDetailString() const;
 
+    const StackTraceDetail& stackDetail() const;
+    std::string stackDetailString() const;
+
     bool hasError() const;
     const std::string& errorMessage() const;
 
@@ -120,6 +150,7 @@ private:
     std::vector<std::string> datapath_nodes_;
     ALUTraceDetail alu_detail_;
     MemoryTraceDetail memory_detail_;
+    StackTraceDetail stack_detail_;
 
     std::string error_message_;
 
@@ -131,6 +162,7 @@ private:
     void analyzeVisualMetadata();
     void analyzeAluDetail();
     void analyzeMemoryDetail();
+    void analyzeStackDetail();
 
     void addDatapathNode(std::string node);
 
