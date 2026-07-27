@@ -68,8 +68,8 @@ constexpr std::size_t kStackViewCount = 32;
 constexpr std::size_t kBinaryMemoryPreviewStart = 512;
 constexpr std::size_t kBinaryMemoryPreviewCount = 96;
 
-constexpr const char* kDefaultSourcePath = "examples\\function_call.zasm";
-constexpr const char* kDefaultBinaryPath = "examples\\function_call.zbin";
+constexpr const char* kDefaultSourcePath = "examples\\debugger_showcase.zasm";
+constexpr const char* kDefaultBinaryPath = "examples\\debugger_showcase.zbin";
 
 enum class StudioMode {
     None,
@@ -1877,7 +1877,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.23\n";
+    oss << "Zero-CPU Studio v0.24\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2620,7 +2620,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.23\n"
+        "Zero-CPU Studio v0.24\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2639,6 +2639,7 @@ void onResetClicked() {
         "Memory operand detail added.\n"
         "Stack operand detail added.\n"
         "Control flow detail added.\n"
+        "Studio default example set to debugger showcase.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
