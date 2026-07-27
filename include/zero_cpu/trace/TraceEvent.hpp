@@ -96,6 +96,38 @@ struct StackTraceDetail {
     bool is_ret = false;
 };
 
+struct ControlFlowTraceDetail {
+    bool active = false;
+
+    std::string operation;
+    std::string operand_text;
+    std::string condition;
+    std::string note;
+
+    std::size_t from_pc = 0;
+    std::size_t to_pc = 0;
+    std::size_t target = 0;
+    std::size_t fallthrough = 0;
+    std::size_t return_address = 0;
+    std::int64_t vector = 0;
+
+    bool taken = false;
+
+    bool has_taken = false;
+    bool has_condition = false;
+    bool has_target = false;
+    bool has_fallthrough = false;
+    bool has_return_address = false;
+    bool has_vector = false;
+
+    bool is_jump = false;
+    bool is_branch = false;
+    bool is_call = false;
+    bool is_return = false;
+    bool is_interrupt = false;
+    bool is_interrupt_return = false;
+};
+
 class TraceEvent {
 public:
     TraceEvent(
@@ -130,6 +162,9 @@ public:
     const StackTraceDetail& stackDetail() const;
     std::string stackDetailString() const;
 
+    const ControlFlowTraceDetail& controlFlowDetail() const;
+    std::string controlFlowDetailString() const;
+
     bool hasError() const;
     const std::string& errorMessage() const;
 
@@ -151,6 +186,7 @@ private:
     ALUTraceDetail alu_detail_;
     MemoryTraceDetail memory_detail_;
     StackTraceDetail stack_detail_;
+    ControlFlowTraceDetail control_flow_detail_;
 
     std::string error_message_;
 
@@ -163,6 +199,7 @@ private:
     void analyzeAluDetail();
     void analyzeMemoryDetail();
     void analyzeStackDetail();
+    void analyzeControlFlowDetail();
 
     void addDatapathNode(std::string node);
 

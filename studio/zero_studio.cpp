@@ -903,6 +903,7 @@ std::string makeExecutionDetailProbeView() {
         oss << "No TraceEvent recorded yet.\n";
         oss << "ALU Detail = waiting\n";
         oss << "Memory Detail = waiting\n";
+        oss << "Control Flow Detail = waiting\n";
         oss << "Interrupt Detail = waiting\n";
         return oss.str();
     }
@@ -1186,6 +1187,77 @@ std::string makeExecutionDetailProbeView() {
         if (!stackDetail.note.empty()) {
             oss << "  Note = "
                 << stackDetail.note
+                << "\n";
+        }
+    } else {
+        oss << "  Active = false\n";
+        oss << "  Operation = none\n";
+    }
+
+    oss << "\n";
+    oss << "Control Flow Detail\n";
+
+    const auto& controlFlowDetail = event.controlFlowDetail();
+
+    if (controlFlowDetail.active) {
+        oss << "  Active = true\n";
+        oss << "  Operation = "
+            << controlFlowDetail.operation
+            << "\n";
+
+        if (!controlFlowDetail.operand_text.empty()) {
+            oss << "  Operand = "
+                << controlFlowDetail.operand_text
+                << "\n";
+        }
+
+        oss << "  From PC = "
+            << controlFlowDetail.from_pc
+            << "\n";
+
+        oss << "  To PC = "
+            << controlFlowDetail.to_pc
+            << "\n";
+
+        if (controlFlowDetail.has_condition) {
+            oss << "  Condition = "
+                << controlFlowDetail.condition
+                << "\n";
+        }
+
+        if (controlFlowDetail.has_taken) {
+            oss << "  Taken = "
+                << (controlFlowDetail.taken ? "true" : "false")
+                << "\n";
+        }
+
+        if (controlFlowDetail.has_target) {
+            oss << "  Target = "
+                << controlFlowDetail.target
+                << "\n";
+        }
+
+        if (controlFlowDetail.has_fallthrough) {
+            oss << "  Fallthrough = "
+                << controlFlowDetail.fallthrough
+                << "\n";
+        }
+
+        if (controlFlowDetail.has_return_address) {
+            oss << "  Return Address = "
+                << controlFlowDetail.return_address
+                << "\n";
+        }
+
+        if (controlFlowDetail.has_vector) {
+            oss << "  Vector = "
+                << controlFlowDetail.vector
+                << "\n";
+        }
+
+        if (!controlFlowDetail.note.empty()) {
+            oss << "  Note = "
+                << controlFlowDetail.note
                 << "\n";
         }
     } else {
@@ -1805,7 +1877,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.22\n";
+    oss << "Zero-CPU Studio v0.23\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2548,7 +2620,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.22\n"
+        "Zero-CPU Studio v0.23\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2566,6 +2638,7 @@ void onResetClicked() {
         "ALU operand/result detail added.\n"
         "Memory operand detail added.\n"
         "Stack operand detail added.\n"
+        "Control flow detail added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"

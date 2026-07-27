@@ -254,6 +254,124 @@ bool findMemoryChangeAt(
 }
 
 
+
+bool isControlFlowTraceOpcode(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::JMP:
+    case Opcode::JE:
+    case Opcode::JNE:
+    case Opcode::JG:
+    case Opcode::JL:
+    case Opcode::CALL:
+    case Opcode::RET:
+    case Opcode::INT:
+    case Opcode::IRET:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+bool isConditionalBranchOpcode(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::JE:
+    case Opcode::JNE:
+    case Opcode::JG:
+    case Opcode::JL:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+std::string controlFlowOperationName(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::JMP:
+        return "JUMP";
+    case Opcode::JE:
+    case Opcode::JNE:
+    case Opcode::JG:
+    case Opcode::JL:
+        return "CONDITIONAL_BRANCH";
+    case Opcode::CALL:
+        return "CALL";
+    case Opcode::RET:
+        return "RETURN";
+    case Opcode::INT:
+        return "SOFTWARE_INTERRUPT";
+    case Opcode::IRET:
+        return "INTERRUPT_RETURN";
+    default:
+        return "CONTROL_FLOW_UNKNOWN";
+    }
+}
+
+std::string controlFlowConditionText(Opcode opcode) {
+    switch (opcode) {
+    case Opcode::JE:
+        return "ZF == 1";
+    case Opcode::JNE:
+        return "ZF == 0";
+    case Opcode::JG:
+        return "ZF == 0 && SF == 0";
+    case Opcode::JL:
+        return "SF == 1";
+    default:
+        return "";
+    }
+}
+
+bool evaluateControlFlowCondition(Opcode opcode, const Flags& flags) {
+    switch (opcode) {
+    case Opcode::JE:
+        return flags.zero();
+    case Opcode::JNE:
+        return !flags.zero();
+    case Opcode::JG:
+        return !flags.zero() && !flags.sign();
+    case Opcode::JL:
+        return flags.sign();
+    default:
+        return true;
+    }
+}
+
+void appendControlFlowNote(
+    ControlFlowTraceDetail& detail,
+    const std::string& note
+) {
+    if (note.empty()) {
+        return;
+    }
+
+    if (!detail.note.empty()) {
+        detail.note += "; ";
+    }
+
+    detail.note += note;
+}
+
+bool tryReadControlFlowTargetOperand(
+    const Operand& operand,
+    std::size_t& target
+) {
+    if (operand.type() != OperandType::Immediate) {
+        return false;
+    }
+
+    const std::int64_t value = operand.asImmediate();
+
+    if (value < 0) {
+        return false;
+    }
+
+    target = static_cast<std::size_t>(value);
+    return true;
+}
+
+
 bool tryResolveTraceMemoryAddress(
     const CPUState& state,
     const Operand& operand,
@@ -309,12 +427,14 @@ TraceEvent::TraceEvent(
       alu_detail_(),
       memory_detail_(),
       stack_detail_(),
+      control_flow_detail_(),
       error_message_(std::move(error_message)) {
     analyzeChanges();
     analyzeVisualMetadata();
     analyzeAluDetail();
     analyzeMemoryDetail();
     analyzeStackDetail();
+    analyzeControlFlowDetail();
 }
 
 const CPUState& TraceEvent::before() const {
@@ -518,6 +638,62 @@ std::string TraceEvent::stackDetailString() const {
 }
 
 
+const ControlFlowTraceDetail& TraceEvent::controlFlowDetail() const {
+    return control_flow_detail_;
+}
+
+std::string TraceEvent::controlFlowDetailString() const {
+    if (!control_flow_detail_.active) {
+        return "Control Flow Detail = inactive";
+    }
+
+    std::ostringstream oss;
+
+    oss << control_flow_detail_.operation
+        << " | from="
+        << control_flow_detail_.from_pc
+        << " | to="
+        << control_flow_detail_.to_pc;
+
+    if (control_flow_detail_.has_taken) {
+        oss << " | taken="
+            << boolToString(control_flow_detail_.taken);
+    }
+
+    if (control_flow_detail_.has_condition) {
+        oss << " | condition="
+            << control_flow_detail_.condition;
+    }
+
+    if (control_flow_detail_.has_target) {
+        oss << " | target="
+            << control_flow_detail_.target;
+    }
+
+    if (control_flow_detail_.has_fallthrough) {
+        oss << " | fallthrough="
+            << control_flow_detail_.fallthrough;
+    }
+
+    if (control_flow_detail_.has_return_address) {
+        oss << " | return_address="
+            << control_flow_detail_.return_address;
+    }
+
+    if (control_flow_detail_.has_vector) {
+        oss << " | vector="
+            << control_flow_detail_.vector;
+    }
+
+    if (!control_flow_detail_.note.empty()) {
+        oss << " | note="
+            << control_flow_detail_.note;
+    }
+
+    return oss.str();
+}
+
+
 bool TraceEvent::hasError() const {
     return !error_message_.empty();
 }
@@ -554,6 +730,10 @@ std::string TraceEvent::toCompactString() const {
 
     if (stack_detail_.active) {
         oss << " | " << stackDetailString();
+    }
+
+    if (control_flow_detail_.active) {
+        oss << " | " << controlFlowDetailString();
     }
 
     for (const auto& change : changed_registers_) {
@@ -777,6 +957,73 @@ std::string TraceEvent::toFullString() const {
         if (!stack_detail_.note.empty()) {
             oss << "  Note: "
                 << stack_detail_.note
+                << "\n";
+        }
+
+        oss << "\n";
+    }
+
+    oss << "Control Flow Trace Detail:\n";
+    if (!control_flow_detail_.active) {
+        oss << "  None\n\n";
+    } else {
+        oss << "  Operation: "
+            << control_flow_detail_.operation
+            << "\n";
+
+        if (!control_flow_detail_.operand_text.empty()) {
+            oss << "  Operand: "
+                << control_flow_detail_.operand_text
+                << "\n";
+        }
+
+        oss << "  From PC: "
+            << control_flow_detail_.from_pc
+            << "\n";
+
+        oss << "  To PC: "
+            << control_flow_detail_.to_pc
+            << "\n";
+
+        if (control_flow_detail_.has_condition) {
+            oss << "  Condition: "
+                << control_flow_detail_.condition
+                << "\n";
+        }
+
+        if (control_flow_detail_.has_taken) {
+            oss << "  Taken: "
+                << boolToString(control_flow_detail_.taken)
+                << "\n";
+        }
+
+        if (control_flow_detail_.has_target) {
+            oss << "  Target: "
+                << control_flow_detail_.target
+                << "\n";
+        }
+
+        if (control_flow_detail_.has_fallthrough) {
+            oss << "  Fallthrough: "
+                << control_flow_detail_.fallthrough
+                << "\n";
+        }
+
+        if (control_flow_detail_.has_return_address) {
+            oss << "  Return Address: "
+                << control_flow_detail_.return_address
+                << "\n";
+        }
+
+        if (control_flow_detail_.has_vector) {
+            oss << "  Vector: "
+                << control_flow_detail_.vector
+                << "\n";
+        }
+
+        if (!control_flow_detail_.note.empty()) {
+            oss << "  Note: "
+                << control_flow_detail_.note
                 << "\n";
         }
 
@@ -1166,6 +1413,166 @@ void TraceEvent::analyzeStackDetail() {
                 std::string("return value unavailable: ") + ex.what()
             );
         }
+    }
+}
+
+
+
+void TraceEvent::analyzeControlFlowDetail() {
+    control_flow_detail_ = ControlFlowTraceDetail{};
+
+    const Opcode opcode = instruction_.opcode();
+
+    if (!isControlFlowTraceOpcode(opcode)) {
+        return;
+    }
+
+    control_flow_detail_.active = true;
+    control_flow_detail_.operation =
+        action_.empty() || action_ == "UNKNOWN"
+            ? controlFlowOperationName(opcode)
+            : action_;
+
+    control_flow_detail_.from_pc = before_.pc();
+    control_flow_detail_.to_pc = after_.pc();
+
+    const Operand& dst = instruction_.dst();
+
+    if (!dst.isNone()) {
+        control_flow_detail_.operand_text = dst.toString();
+    }
+
+    std::size_t explicitTarget = 0;
+    const bool hasExplicitTarget =
+        tryReadControlFlowTargetOperand(dst, explicitTarget);
+
+    if (opcode == Opcode::JMP) {
+        control_flow_detail_.is_jump = true;
+        control_flow_detail_.taken = true;
+        control_flow_detail_.has_taken = true;
+        control_flow_detail_.target = hasExplicitTarget
+            ? explicitTarget
+            : after_.pc();
+        control_flow_detail_.has_target = true;
+        return;
+    }
+
+    if (isConditionalBranchOpcode(opcode)) {
+        control_flow_detail_.is_branch = true;
+        control_flow_detail_.condition = controlFlowConditionText(opcode);
+        control_flow_detail_.has_condition = !control_flow_detail_.condition.empty();
+
+        control_flow_detail_.taken =
+            evaluateControlFlowCondition(opcode, before_.flags());
+        control_flow_detail_.has_taken = true;
+
+        if (hasExplicitTarget) {
+            control_flow_detail_.target = explicitTarget;
+            control_flow_detail_.has_target = true;
+        } else if (control_flow_detail_.taken) {
+            control_flow_detail_.target = after_.pc();
+            control_flow_detail_.has_target = true;
+        } else {
+            appendControlFlowNote(
+                control_flow_detail_,
+                "branch target is label-based or unavailable when not taken"
+            );
+        }
+
+        if (!control_flow_detail_.taken) {
+            control_flow_detail_.fallthrough = after_.pc();
+            control_flow_detail_.has_fallthrough = true;
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::CALL) {
+        control_flow_detail_.is_call = true;
+        control_flow_detail_.taken = true;
+        control_flow_detail_.has_taken = true;
+        control_flow_detail_.target = hasExplicitTarget
+            ? explicitTarget
+            : after_.pc();
+        control_flow_detail_.has_target = true;
+
+        if (stack_detail_.has_return_address) {
+            control_flow_detail_.return_address =
+                static_cast<std::size_t>(stack_detail_.return_address);
+            control_flow_detail_.has_return_address = true;
+        } else {
+            MemoryChange pushed{};
+            if (findMemoryChangeAt(changed_memory_, before_.sp(), pushed) &&
+                pushed.after >= 0) {
+                control_flow_detail_.return_address =
+                    static_cast<std::size_t>(pushed.after);
+                control_flow_detail_.has_return_address = true;
+            } else {
+                appendControlFlowNote(
+                    control_flow_detail_,
+                    "return address was not found in stack detail"
+                );
+            }
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::RET) {
+        control_flow_detail_.is_return = true;
+        control_flow_detail_.taken = true;
+        control_flow_detail_.has_taken = true;
+        control_flow_detail_.target = after_.pc();
+        control_flow_detail_.has_target = true;
+        control_flow_detail_.return_address = after_.pc();
+        control_flow_detail_.has_return_address = true;
+        return;
+    }
+
+    if (opcode == Opcode::INT) {
+        control_flow_detail_.is_interrupt = true;
+        control_flow_detail_.taken = true;
+        control_flow_detail_.has_taken = true;
+        control_flow_detail_.target = after_.pc();
+        control_flow_detail_.has_target = true;
+
+        std::string note;
+        std::int64_t vector = 0;
+
+        if (tryReadTraceOperandValue(before_, dst, vector, note)) {
+            control_flow_detail_.vector = vector;
+            control_flow_detail_.has_vector = true;
+        } else {
+            appendControlFlowNote(
+                control_flow_detail_,
+                "interrupt vector unavailable: " + note
+            );
+        }
+
+        MemoryChange pushed{};
+        if (findMemoryChangeAt(changed_memory_, before_.sp(), pushed) &&
+            pushed.after >= 0) {
+            control_flow_detail_.return_address =
+                static_cast<std::size_t>(pushed.after);
+            control_flow_detail_.has_return_address = true;
+        } else {
+            appendControlFlowNote(
+                control_flow_detail_,
+                "interrupt return address was not found in changed memory"
+            );
+        }
+
+        return;
+    }
+
+    if (opcode == Opcode::IRET) {
+        control_flow_detail_.is_interrupt_return = true;
+        control_flow_detail_.taken = true;
+        control_flow_detail_.has_taken = true;
+        control_flow_detail_.target = after_.pc();
+        control_flow_detail_.has_target = true;
+        control_flow_detail_.return_address = after_.pc();
+        control_flow_detail_.has_return_address = true;
     }
 }
 
