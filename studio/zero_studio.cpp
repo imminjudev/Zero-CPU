@@ -672,6 +672,91 @@ std::string currentBinaryInstructionText() {
     }
 }
 
+std::string studioDebugOutputAsAscii();
+
+std::string readWatchMemoryValue(std::size_t address) {
+    try {
+        return std::to_string(g_cpu.state().memory().read(address));
+    } catch (const std::exception& ex) {
+        return std::string("<error: ") + ex.what() + ">";
+    }
+}
+
+std::string makeWatchExpressionsView() {
+    using namespace zero_cpu;
+
+    std::ostringstream oss;
+
+    const auto& state = g_cpu.state();
+    const auto& registers = state.registers();
+
+    oss << "Watch Expressions\n";
+
+    oss << "Core\n";
+    oss << "  PC = " << state.pc() << "\n";
+    oss << "  SP = " << state.sp() << "\n";
+    oss << "  Halted = "
+        << (state.halted() ? "true" : "false")
+        << "\n";
+    oss << "  Flags = "
+        << state.flags().toString()
+        << "\n";
+
+    oss << "\n";
+    oss << "Registers\n";
+    oss << "  R0 = " << registers.get(RegisterName::R0) << "\n";
+    oss << "  R1 = " << registers.get(RegisterName::R1) << "\n";
+    oss << "  R2 = " << registers.get(RegisterName::R2) << "\n";
+    oss << "  R3 = " << registers.get(RegisterName::R3) << "\n";
+    oss << "  R4 = " << registers.get(RegisterName::R4) << "\n";
+    oss << "  R7 = " << registers.get(RegisterName::R7) << "\n";
+
+    oss << "\n";
+    oss << "Debugger Showcase Memory\n";
+    oss << "  Memory[180] = " << readWatchMemoryValue(180) << "\n";
+    oss << "  Memory[188] = " << readWatchMemoryValue(188) << "\n";
+    oss << "  Memory[196] = " << readWatchMemoryValue(196) << "\n";
+    oss << "  Memory[204] = " << readWatchMemoryValue(204) << "\n";
+    oss << "  Memory[212] = " << readWatchMemoryValue(212) << "\n";
+
+    oss << "\n";
+    oss << "Stack Watch\n";
+    oss << "  Memory[2048] = " << readWatchMemoryValue(2048) << "\n";
+    oss << "  Memory[2056] = " << readWatchMemoryValue(2056) << "\n";
+    oss << "  Memory[2064] = " << readWatchMemoryValue(2064) << "\n";
+
+    oss << "\n";
+    oss << "Devices\n";
+
+    if (g_debugOutputDevice) {
+        oss << "  DebugOutput writes = "
+            << g_debugOutputDevice->writes().size()
+            << "\n";
+        oss << "  DebugOutput ASCII = "
+            << (studioDebugOutputAsAscii().empty()
+                ? std::string("<empty>")
+                : studioDebugOutputAsAscii())
+            << "\n";
+    } else {
+        oss << "  DebugOutput = <not configured>\n";
+    }
+
+    if (g_timerDevice) {
+        oss << "  Timer tick = "
+            << g_timerDevice->tickCount()
+            << "\n";
+        oss << "  Timer interrupts = "
+            << g_timerDevice->interruptCount()
+            << "\n";
+    } else {
+        oss << "  Timer = <not configured>\n";
+    }
+
+    return oss.str();
+}
+
+
+
 std::string makeRegisterView() {
     using namespace zero_cpu;
 
@@ -2253,7 +2338,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.27\n";
+    oss << "Zero-CPU Studio v0.28\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2313,6 +2398,9 @@ std::string makeStateView() {
 
     oss << "\n";
     oss << makeSystemPanelView();
+
+    oss << "\n";
+    oss << makeWatchExpressionsView();
 
     oss << "\n";
     oss << makeRegisterView();
@@ -3035,7 +3123,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.27\n"
+        "Zero-CPU Studio v0.28\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -3058,6 +3146,7 @@ void onResetClicked() {
         "Trace export JSON added.\n"
         "Breakpoint polish added.\n"
         "Trace filter added.\n"
+        "Watch expressions panel added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
