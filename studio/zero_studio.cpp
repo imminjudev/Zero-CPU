@@ -107,6 +107,8 @@ StudioMode g_mode = StudioMode::None;
 bool g_programLoaded = false;
 std::string g_loadedPath;
 std::vector<std::size_t> g_breakpoints;
+bool g_breakpointHit = false;
+std::size_t g_lastBreakpointPc = 0;
 int g_scrollY = 0;
 
 int getMainScrollMax(HWND hwnd) {
@@ -554,10 +556,14 @@ bool hasBreakpoint(std::size_t pc) {
     ) != g_breakpoints.end();
 }
 
-void addBreakpoint(std::size_t pc) {
-    if (!hasBreakpoint(pc)) {
-        g_breakpoints.push_back(pc);
+bool addBreakpoint(std::size_t pc) {
+    if (hasBreakpoint(pc)) {
+        return false;
     }
+
+    g_breakpoints.push_back(pc);
+    std::sort(g_breakpoints.begin(), g_breakpoints.end());
+    return true;
 }
 
 std::string makeBreakpointView() {
@@ -571,7 +577,13 @@ std::string makeBreakpointView() {
     }
 
     for (std::size_t i = 0; i < g_breakpoints.size(); ++i) {
-        oss << "[" << i << "] PC = " << g_breakpoints[i] << "\n";
+        oss << "[" << i << "] PC = " << g_breakpoints[i];
+
+        if (g_programLoaded && g_breakpoints[i] == g_cpu.state().pc()) {
+            oss << "  <current>";
+        }
+
+        oss << "\n";
     }
 
     return oss.str();
@@ -2100,7 +2112,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.25\n";
+    oss << "Zero-CPU Studio v0.26\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2110,6 +2122,12 @@ std::string makeStateView() {
     }
 
     oss << "\n";
+
+    if (g_breakpointHit) {
+        oss << "Last Breakpoint Hit = PC "
+            << g_lastBreakpointPc
+            << "\n\n";
+    }
 
     oss << makeBreakpointView();
 
@@ -2729,6 +2747,9 @@ void onRunClicked() {
         const std::size_t pcBefore = g_cpu.state().pc();
 
         if (hasBreakpoint(pcBefore)) {
+            g_breakpointHit = true;
+            g_lastBreakpointPc = pcBefore;
+
             runLog << "Hit breakpoint at PC="
                    << pcBefore
                    << ". Execution paused before instruction.\n";
@@ -2800,10 +2821,16 @@ void onAddBreakpointClicked() {
         }
     }
 
-    addBreakpoint(pc);
+    const bool added = addBreakpoint(pc);
 
     std::ostringstream oss;
-    oss << "\nAdded breakpoint at PC=" << pc << "\n";
+
+    if (added) {
+        oss << "\nAdded breakpoint at PC=" << pc << "\n";
+    } else {
+        oss << "\nBreakpoint already exists at PC=" << pc << "\n";
+    }
+
     appendTraceText(oss.str());
 
     refreshStateView();
@@ -2811,12 +2838,14 @@ void onAddBreakpointClicked() {
 
 void onClearBreakpointsClicked() {
     g_breakpoints.clear();
+    g_breakpointHit = false;
+    g_lastBreakpointPc = 0;
 
     if (g_breakpointEdit != nullptr) {
         SetWindowTextA(g_breakpointEdit, "");
     }
 
-    appendTraceText("\nCleared all breakpoints.\n");
+    appendTraceText("\nCleared all breakpoints and breakpoint hit state.\n");
     refreshStateView();
 }
 
@@ -2843,7 +2872,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.25\n"
+        "Zero-CPU Studio v0.26\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2864,6 +2893,7 @@ void onResetClicked() {
         "Control flow detail added.\n"
         "Studio default example set to debugger showcase.\n"
         "Trace export JSON added.\n"
+        "Breakpoint polish added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
