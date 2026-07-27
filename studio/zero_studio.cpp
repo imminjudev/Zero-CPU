@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cctype>
 #include <exception>
 #include <fstream>
 #include <iomanip>
@@ -59,6 +60,8 @@ constexpr int kIdClearBreakpointsButton = 1016;
 constexpr int kIdRunBioOSButton = 1017;
 constexpr int kIdDatapathCanvas = 1018;
 constexpr int kIdExportTraceButton = 1019;
+constexpr int kIdTraceFilterEdit = 1020;
+constexpr int kIdApplyTraceFilterButton = 1021;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -97,6 +100,8 @@ HWND g_clearBreakpointsButton = nullptr;
 HWND g_runBioOSButton = nullptr;
 HWND g_datapathCanvas = nullptr;
 HWND g_exportTraceButton = nullptr;
+HWND g_traceFilterEdit = nullptr;
+HWND g_applyTraceFilterButton = nullptr;
 
 zero_cpu::CPU g_cpu;
 std::shared_ptr<zero_cpu::InterruptController> g_interruptController;
@@ -109,6 +114,7 @@ std::string g_loadedPath;
 std::vector<std::size_t> g_breakpoints;
 bool g_breakpointHit = false;
 std::size_t g_lastBreakpointPc = 0;
+std::string g_traceFilter;
 int g_scrollY = 0;
 
 int getMainScrollMax(HWND hwnd) {
@@ -979,6 +985,60 @@ std::string classifyStudioAddress(std::size_t address) {
     return "Unknown / unmapped";
 }
 
+std::string toLowerText(const std::string& text) {
+    std::string result;
+    result.reserve(text.size());
+
+    for (const unsigned char ch : text) {
+        result.push_back(
+            static_cast<char>(std::tolower(ch))
+        );
+    }
+
+    return result;
+}
+
+std::string makeTraceFilterHaystack(const zero_cpu::TraceEvent& event) {
+    std::ostringstream oss;
+
+    oss << event.instruction().toString()
+        << " "
+        << event.action()
+        << " "
+        << event.datapathString()
+        << " "
+        << event.aluDetailString()
+        << " "
+        << event.memoryDetailString()
+        << " "
+        << event.stackDetailString()
+        << " "
+        << event.controlFlowDetailString()
+        << " "
+        << event.toCompactString();
+
+    if (event.hasError()) {
+        oss << " "
+            << event.errorMessage();
+    }
+
+    return toLowerText(oss.str());
+}
+
+bool traceEventMatchesFilter(
+    const zero_cpu::TraceEvent& event,
+    const std::string& loweredFilter
+) {
+    if (loweredFilter.empty()) {
+        return true;
+    }
+
+    return makeTraceFilterHaystack(event).find(loweredFilter) !=
+        std::string::npos;
+}
+
+
+
 std::string makeMemoryMapViewer() {
     using namespace zero_cpu::memory_map;
 
@@ -1087,21 +1147,81 @@ std::string makeRecentInstructionTraceView() {
     }
 
     constexpr std::size_t kMaxRecentTraceEvents = 16;
-
     const std::size_t eventCount = events.size();
 
-    const std::size_t start =
-        eventCount > kMaxRecentTraceEvents
-            ? eventCount - kMaxRecentTraceEvents
-            : 0;
+    if (g_traceFilter.empty()) {
+        const std::size_t start =
+            eventCount > kMaxRecentTraceEvents
+                ? eventCount - kMaxRecentTraceEvents
+                : 0;
 
-    oss << "Showing last "
-        << (eventCount - start)
+        oss << "Showing last "
+            << (eventCount - start)
+            << " of "
+            << eventCount
+            << " events\n";
+
+        for (std::size_t i = start; i < eventCount; ++i) {
+            const auto& event = events[i];
+
+            oss << "["
+                << i
+                << "] PC "
+                << event.pcBefore()
+                << " -> "
+                << event.pcAfter()
+                << " | "
+                << event.instruction().toString()
+                << " | "
+                << event.action();
+
+            if (event.hasError()) {
+                oss << " | ERROR: "
+                    << event.errorMessage();
+            }
+
+            oss << "\n";
+        }
+
+        return oss.str();
+    }
+
+    const std::string loweredFilter = toLowerText(g_traceFilter);
+
+    std::vector<std::size_t> matches;
+
+    for (std::size_t i = 0; i < eventCount; ++i) {
+        if (traceEventMatchesFilter(events[i], loweredFilter)) {
+            matches.push_back(i);
+        }
+    }
+
+    oss << "Filter = "
+        << g_traceFilter
+        << "\n";
+
+    oss << "Matched "
+        << matches.size()
         << " of "
         << eventCount
         << " events\n";
 
-    for (std::size_t i = start; i < eventCount; ++i) {
+    if (matches.empty()) {
+        oss << "No trace events matched the filter.\n";
+        return oss.str();
+    }
+
+    const std::size_t start =
+        matches.size() > kMaxRecentTraceEvents
+            ? matches.size() - kMaxRecentTraceEvents
+            : 0;
+
+    oss << "Showing last "
+        << (matches.size() - start)
+        << " matches\n";
+
+    for (std::size_t j = start; j < matches.size(); ++j) {
+        const std::size_t i = matches[j];
         const auto& event = events[i];
 
         oss << "["
@@ -1115,6 +1235,26 @@ std::string makeRecentInstructionTraceView() {
             << " | "
             << event.action();
 
+        if (event.aluDetail().active) {
+            oss << " | "
+                << event.aluDetailString();
+        }
+
+        if (event.memoryDetail().active) {
+            oss << " | "
+                << event.memoryDetailString();
+        }
+
+        if (event.stackDetail().active) {
+            oss << " | "
+                << event.stackDetailString();
+        }
+
+        if (event.controlFlowDetail().active) {
+            oss << " | "
+                << event.controlFlowDetailString();
+        }
+
         if (event.hasError()) {
             oss << " | ERROR: "
                 << event.errorMessage();
@@ -1125,6 +1265,7 @@ std::string makeRecentInstructionTraceView() {
 
     return oss.str();
 }
+
 
 
 std::string makeExecutionDetailProbeView() {
@@ -2112,7 +2253,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.26\n";
+    oss << "Zero-CPU Studio v0.27\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2836,13 +2977,35 @@ void onAddBreakpointClicked() {
     refreshStateView();
 }
 
+void onApplyTraceFilterClicked() {
+    g_traceFilter = getWindowTextString(g_traceFilterEdit);
+
+    std::ostringstream oss;
+
+    if (g_traceFilter.empty()) {
+        oss << "\nTrace filter cleared.\n";
+    } else {
+        oss << "\nTrace filter applied: "
+            << g_traceFilter
+            << "\n";
+    }
+
+    appendTraceText(oss.str());
+    refreshStateView();
+}
+
 void onClearBreakpointsClicked() {
     g_breakpoints.clear();
     g_breakpointHit = false;
     g_lastBreakpointPc = 0;
+    g_traceFilter.clear();
 
     if (g_breakpointEdit != nullptr) {
         SetWindowTextA(g_breakpointEdit, "");
+    }
+
+    if (g_traceFilterEdit != nullptr) {
+        SetWindowTextA(g_traceFilterEdit, "");
     }
 
     appendTraceText("\nCleared all breakpoints and breakpoint hit state.\n");
@@ -2872,7 +3035,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.26\n"
+        "Zero-CPU Studio v0.27\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2894,6 +3057,7 @@ void onResetClicked() {
         "Studio default example set to debugger showcase.\n"
         "Trace export JSON added.\n"
         "Breakpoint polish added.\n"
+        "Trace filter added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
@@ -3228,6 +3392,51 @@ LRESULT CALLBACK windowProc(
         CreateWindowExA(
             0,
             "STATIC",
+            "Trace Filter:",
+            WS_CHILD | WS_VISIBLE,
+            1080,
+            84,
+            100,
+            24,
+            hwnd,
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
+        g_traceFilterEdit = CreateWindowExA(
+            WS_EX_CLIENTEDGE,
+            "EDIT",
+            "",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            1185,
+            80,
+            165,
+            30,
+            hwnd,
+            controlId(kIdTraceFilterEdit),
+            nullptr,
+            nullptr
+        );
+
+        g_applyTraceFilterButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Apply Filter",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            1360,
+            80,
+            100,
+            30,
+            hwnd,
+            controlId(kIdApplyTraceFilterButton),
+            nullptr,
+            nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
             "Source Editor (.zasm):",
             WS_CHILD | WS_VISIBLE,
             20,
@@ -3383,6 +3592,8 @@ LRESULT CALLBACK windowProc(
         applyFont(g_clearBreakpointsButton, font);
         applyFont(g_runBioOSButton, font);
         applyFont(g_exportTraceButton, font);
+        applyFont(g_traceFilterEdit, font);
+        applyFont(g_applyTraceFilterButton, font);
         applyFont(g_sourceEdit, font);
         applyFont(g_stateEdit, font);
         applyFont(g_traceEdit, font);
@@ -3527,6 +3738,11 @@ LRESULT CALLBACK windowProc(
 
         if (controlIdValue == kIdExportTraceButton) {
             onExportTraceClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdApplyTraceFilterButton) {
+            onApplyTraceFilterClicked();
             return 0;
         }
 
