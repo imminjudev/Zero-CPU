@@ -27,6 +27,7 @@ add_library(zero_cpu_core
     src/trace/TraceEvent.cpp
     src/trace/TraceLogger.cpp
     src/trace/TraceJsonWriter.cpp
+    src/trace/TraceJsonDiff.cpp
 
     src/assembler/Assembler.cpp
 

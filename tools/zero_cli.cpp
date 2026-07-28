@@ -19,6 +19,7 @@
 #include "zero_cpu/isa/InstructionEncoder.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
+#include "zero_cpu/trace/TraceJsonDiff.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -4403,6 +4404,182 @@ int runTraceJsonWriterTest() {
     return 0;
 }
 
+std::string makeTraceJsonDiffFixture(
+    std::int64_t addend,
+    const std::string& producer
+) {
+    using namespace zero_cpu;
+
+    const std::vector<Instruction> program = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(5)
+        ),
+        Instruction(
+            Opcode::ADD,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(addend)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(180),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    CPU cpu;
+    cpu.loadProgram(program, {});
+    cpu.run();
+
+    TraceJsonMetadata metadata;
+    metadata.producer = producer;
+    metadata.producer_version = "v0.5-dev";
+    metadata.execution_mode = "Assembly";
+    metadata.loaded_path = "<trace-diff-test>";
+
+    return TraceJsonWriter::toJson(
+        cpu.traceLogger().events(),
+        metadata
+    );
+}
+
+int runTraceJsonDiffTest() {
+    using namespace zero_cpu;
+
+    std::cout << "=== Trace JSON Diff Test ===\n";
+
+    const std::string expected =
+        makeTraceJsonDiffFixture(7, "expected-producer");
+
+    const std::string sameArchitecture =
+        makeTraceJsonDiffFixture(7, "actual-producer");
+
+    const std::string changedArchitecture =
+        makeTraceJsonDiffFixture(8, "actual-producer");
+
+    const TraceJsonDiffResult defaultEqual =
+        TraceJsonDiff::compareText(
+            expected,
+            sameArchitecture
+        );
+
+    TraceJsonDiffOptions strictOptions;
+    strictOptions.strict = true;
+
+    const TraceJsonDiffResult strictDifferent =
+        TraceJsonDiff::compareText(
+            expected,
+            sameArchitecture,
+            strictOptions
+        );
+
+    const TraceJsonDiffResult architectureDifferent =
+        TraceJsonDiff::compareText(
+            expected,
+            changedArchitecture
+        );
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect(
+        "default mode ignores producer metadata",
+        defaultEqual.equal
+    );
+    expect(
+        "strict mode compares producer metadata",
+        !strictDifferent.equal
+    );
+    expect(
+        "architectural change is detected",
+        !architectureDifferent.equal
+    );
+    expect(
+        "difference count is reported",
+        architectureDifferent.difference_count > 0
+    );
+    expect(
+        "first difference path is reported",
+        !architectureDifferent.first_path.empty()
+    );
+    expect(
+        "expected value is reported",
+        !architectureDifferent.expected_value.empty()
+    );
+    expect(
+        "actual value is reported",
+        !architectureDifferent.actual_value.empty()
+    );
+
+    if (!passed) {
+        std::cout << "\nTrace JSON diff test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nFirst detected architecture difference:\n";
+    std::cout << "Path = "
+              << architectureDifferent.first_path
+              << "\n";
+    std::cout << "Expected = "
+              << architectureDifferent.expected_value
+              << "\n";
+    std::cout << "Actual = "
+              << architectureDifferent.actual_value
+              << "\n";
+
+    std::cout << "\nTrace JSON diff test passed.\n";
+    return 0;
+}
+
+int runTraceDiffCommand(
+    const std::string& expectedPath,
+    const std::string& actualPath,
+    bool strict
+) {
+    zero_cpu::TraceJsonDiffOptions options;
+    options.strict = strict;
+
+    const zero_cpu::TraceJsonDiffResult result =
+        zero_cpu::TraceJsonDiff::compareFiles(
+            expectedPath,
+            actualPath,
+            options
+        );
+
+    std::cout << "=== Zero-CPU Trace Diff ===\n";
+    std::cout << "Mode: "
+              << (strict ? "strict" : "architectural")
+              << "\n";
+    std::cout << "Expected: " << expectedPath << "\n";
+    std::cout << "Actual:   " << actualPath << "\n\n";
+
+    if (result.equal) {
+        std::cout << "[PASS] " << result.message << "\n";
+        return 0;
+    }
+
+    std::cout << "[FAIL] " << result.message << "\n";
+    std::cout << "Path:     " << result.first_path << "\n";
+    std::cout << "Expected: " << result.expected_value << "\n";
+    std::cout << "Actual:   " << result.actual_value << "\n";
+
+    return 2;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -4411,6 +4588,8 @@ void printUsage() {
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli trace-json-test\n";
+    std::cout << "  zero_cli trace-diff-test\n";
+    std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
@@ -4478,6 +4657,44 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runTraceJsonWriterTest();
+            }
+
+            if (command == "trace-diff-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid trace-diff-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runTraceJsonDiffTest();
+            }
+
+            if (command == "trace-diff") {
+                if (argc != 4 && argc != 5) {
+                    std::cerr << "Invalid trace-diff command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                bool strict = false;
+
+                if (argc == 5) {
+                    if (std::string(argv[4]) != "--strict") {
+                        std::cerr << "Unknown trace-diff option: "
+                                  << argv[4]
+                                  << "\n\n";
+                        printUsage();
+                        return 1;
+                    }
+
+                    strict = true;
+                }
+
+                return runTraceDiffCommand(
+                    argv[2],
+                    argv[3],
+                    strict
+                );
             }
 
             if (command == "mmio-test") {

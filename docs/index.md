@@ -38,6 +38,15 @@ docs/trace-json-format-v2.md
 This document defines the structured schema used by trace export, regression
 fixtures, and the upcoming Trace Diff CLI.
 
+## Trace Diff CLI
+
+```text
+docs/trace-diff-cli.md
+```
+
+This command compares schema v2 traces and reports the first structural
+architectural mismatch.
+
 ## Studio Debugger
 
 ```text
