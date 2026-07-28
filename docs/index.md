@@ -20,6 +20,15 @@ overview of the project.
 docs/roadmap-v0.4.md
 ```
 
+## Architectural Semantics
+
+```text
+docs/semantics.md
+```
+
+This document defines the current CPU state transitions and instruction behavior
+used as the baseline for trace-based verification.
+
 ## Studio Debugger
 
 ```text
@@ -50,9 +59,8 @@ docs/v0.4-watch-expressions.md
 
 ```text
 docs/release-notes-v0.3.md
+docs/release-notes-v0.4.md
 ```
-
-v0.4 release notes should be added before tagging the v0.4 release.
 
 ## Suggested Future Documentation
 
@@ -63,7 +71,6 @@ docs/isa-reference.md
 docs/syscall-reference.md
 docs/memory-map.md
 docs/design-decisions.md
-docs/semantics.md
 docs/research/trace-based-verification.md
 ```
 
