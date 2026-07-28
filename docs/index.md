@@ -29,6 +29,15 @@ docs/semantics.md
 This document defines the current CPU state transitions and instruction behavior
 used as the baseline for trace-based verification.
 
+## Trace JSON Format
+
+```text
+docs/trace-json-format-v2.md
+```
+
+This document defines the structured schema used by trace export, regression
+fixtures, and the upcoming Trace Diff CLI.
+
 ## Studio Debugger
 
 ```text

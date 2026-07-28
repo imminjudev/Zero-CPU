@@ -18,6 +18,7 @@
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
+#include "zero_cpu/trace/TraceJsonWriter.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -4284,6 +4285,124 @@ int runBioOSRunnerModuleTest(const std::string& bioOSDirectory) {
     std::cout << "\nBIO-OS runner module finished successfully.\n";
     return 0;
 }
+int runTraceJsonWriterTest() {
+    using namespace zero_cpu;
+
+    std::cout << "=== Trace JSON Writer Test ===\n";
+
+    const std::vector<Instruction> program = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(5)
+        ),
+        Instruction(
+            Opcode::ADD,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(7)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(180),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    CPU cpu;
+    cpu.loadProgram(program, {});
+    cpu.run();
+
+    TraceJsonMetadata metadata;
+    metadata.producer = "zero_cli";
+    metadata.producer_version = "v0.5-dev";
+    metadata.execution_mode = "Assembly";
+    metadata.loaded_path = "<trace-json-test>";
+
+    const std::string json =
+        TraceJsonWriter::toJson(
+            cpu.traceLogger().events(),
+            metadata
+        );
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect(
+        "CPU produced four trace events",
+        cpu.traceLogger().size() == 4
+    );
+    expect(
+        "program stored 12 at Memory[180]",
+        cpu.state().memory().read(180) == 12
+    );
+    expect(
+        "schema name is zero_cpu_trace",
+        json.find("\"schema\": \"zero_cpu_trace\"") !=
+            std::string::npos
+    );
+    expect(
+        "schema version is 2",
+        json.find("\"schema_version\": 2") !=
+            std::string::npos
+    );
+    expect(
+        "event count is serialized",
+        json.find("\"event_count\": 4") !=
+            std::string::npos
+    );
+    expect(
+        "state_before is serialized",
+        json.find("\"state_before\": {") !=
+            std::string::npos
+    );
+    expect(
+        "state_after is serialized",
+        json.find("\"state_after\": {") !=
+            std::string::npos
+    );
+    expect(
+        "register changes are structured",
+        json.find("\"register_changes\": [") !=
+            std::string::npos
+    );
+    expect(
+        "flag changes are structured",
+        json.find("\"flag_changes\": [") !=
+            std::string::npos
+    );
+    expect(
+        "memory changes are structured",
+        json.find("\"memory_changes\": [") !=
+            std::string::npos
+    );
+    expect(
+        "Memory[180] address is serialized",
+        json.find("\"address\": 180") !=
+            std::string::npos
+    );
+
+    if (!passed) {
+        std::cout << "\nTrace JSON writer test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nTrace JSON writer test passed.\n";
+    return 0;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -4291,6 +4410,7 @@ void printUsage() {
     std::cout << "  zero_cli <input.zasm>\n";
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli alu-test\n";
+    std::cout << "  zero_cli trace-json-test\n";
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
@@ -4348,6 +4468,16 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runAluTest();
+            }
+
+            if (command == "trace-json-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid trace-json-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runTraceJsonWriterTest();
             }
 
             if (command == "mmio-test") {

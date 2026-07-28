@@ -6,6 +6,7 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/trace/TraceEvent.hpp"
+#include "zero_cpu/trace/TraceJsonWriter.hpp"
 #include "zero_cpu/core/DebugOutputDevice.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
@@ -312,186 +313,20 @@ void refreshStateView();
 
 constexpr const char* kDefaultTraceExportPath = "traces\\studio_trace_export.json";
 
-std::string jsonEscape(const std::string& text) {
-    std::ostringstream oss;
-
-    for (const unsigned char ch : text) {
-        switch (ch) {
-        case '"':
-            oss << "\\\"";
-            break;
-        case '\\':
-            oss << "\\\\";
-            break;
-        case '\n':
-            oss << "\\n";
-            break;
-        case '\r':
-            oss << "\\r";
-            break;
-        case '\t':
-            oss << "\\t";
-            break;
-        default:
-            if (ch < 0x20) {
-                oss << "\\u"
-                    << std::hex
-                    << std::setw(4)
-                    << std::setfill('0')
-                    << static_cast<int>(ch)
-                    << std::dec
-                    << std::setfill(' ');
-            } else {
-                oss << static_cast<char>(ch);
-            }
-            break;
-        }
-    }
-
-    return oss.str();
-}
-
-void jsonIndent(std::ostringstream& oss, int spaces) {
-    for (int i = 0; i < spaces; ++i) {
-        oss << ' ';
-    }
-}
-
-void jsonStringField(
-    std::ostringstream& oss,
-    int indent,
-    const std::string& name,
-    const std::string& value,
-    bool comma = true
-) {
-    jsonIndent(oss, indent);
-    oss << "\""
-        << jsonEscape(name)
-        << "\": \""
-        << jsonEscape(value)
-        << "\"";
-
-    if (comma) {
-        oss << ",";
-    }
-
-    oss << "\n";
-}
-
-void jsonSizeField(
-    std::ostringstream& oss,
-    int indent,
-    const std::string& name,
-    std::size_t value,
-    bool comma = true
-) {
-    jsonIndent(oss, indent);
-    oss << "\""
-        << jsonEscape(name)
-        << "\": "
-        << value;
-
-    if (comma) {
-        oss << ",";
-    }
-
-    oss << "\n";
-}
-
-void jsonBoolField(
-    std::ostringstream& oss,
-    int indent,
-    const std::string& name,
-    bool value,
-    bool comma = true
-) {
-    jsonIndent(oss, indent);
-    oss << "\""
-        << jsonEscape(name)
-        << "\": "
-        << (value ? "true" : "false");
-
-    if (comma) {
-        oss << ",";
-    }
-
-    oss << "\n";
-}
-
-void appendTraceEventJson(
-    std::ostringstream& oss,
-    const zero_cpu::TraceEvent& event,
-    std::size_t index,
-    bool comma
-) {
-    jsonIndent(oss, 4);
-    oss << "{\n";
-
-    jsonSizeField(oss, 6, "index", index);
-    jsonSizeField(oss, 6, "pc_before", event.pcBefore());
-    jsonSizeField(oss, 6, "pc_after", event.pcAfter());
-    jsonStringField(oss, 6, "instruction", event.instruction().toString());
-    jsonStringField(oss, 6, "stage", event.stage());
-    jsonStringField(oss, 6, "action", event.action());
-    jsonStringField(oss, 6, "datapath", event.datapathString());
-    jsonSizeField(oss, 6, "changed_register_count", event.changedRegisters().size());
-    jsonSizeField(oss, 6, "changed_flag_count", event.changedFlags().size());
-    jsonSizeField(oss, 6, "changed_memory_count", event.changedMemory().size());
-    jsonStringField(oss, 6, "alu_detail", event.aluDetailString());
-    jsonStringField(oss, 6, "memory_detail", event.memoryDetailString());
-    jsonStringField(oss, 6, "stack_detail", event.stackDetailString());
-    jsonStringField(oss, 6, "control_flow_detail", event.controlFlowDetailString());
-    jsonStringField(oss, 6, "compact", event.toCompactString());
-    jsonStringField(oss, 6, "full", event.toFullString());
-    jsonBoolField(oss, 6, "has_error", event.hasError());
-    jsonStringField(oss, 6, "error", event.errorMessage(), false);
-
-    jsonIndent(oss, 4);
-    oss << "}";
-
-    if (comma) {
-        oss << ",";
-    }
-
-    oss << "\n";
-}
-
-std::string makeTraceExportJson() {
-    std::ostringstream oss;
-    const auto& events = g_cpu.traceLogger().events();
-
-    oss << "{\n";
-    jsonStringField(oss, 2, "schema", "zero_cpu_studio_trace");
-    jsonSizeField(oss, 2, "schema_version", 1);
-    jsonStringField(oss, 2, "studio_version", "v0.25");
-    jsonStringField(oss, 2, "mode", modeToString(g_mode));
-    jsonStringField(oss, 2, "loaded_path", g_loadedPath);
-    jsonSizeField(oss, 2, "event_count", events.size());
-
-    jsonIndent(oss, 2);
-    oss << "\"events\": [\n";
-
-    for (std::size_t i = 0; i < events.size(); ++i) {
-        appendTraceEventJson(oss, events[i], i, i + 1 < events.size());
-    }
-
-    jsonIndent(oss, 2);
-    oss << "]\n";
-    oss << "}\n";
-
-    return oss.str();
-}
-
 void exportTraceToJsonFile(const std::string& path) {
     CreateDirectoryA("traces", nullptr);
 
-    std::ofstream file(path, std::ios::binary);
+    zero_cpu::TraceJsonMetadata metadata;
+    metadata.producer = "zero_studio";
+    metadata.producer_version = "v0.5-dev";
+    metadata.execution_mode = modeToString(g_mode);
+    metadata.loaded_path = g_loadedPath;
 
-    if (!file) {
-        throw std::runtime_error("Failed to open trace export file: " + path);
-    }
-
-    file << makeTraceExportJson();
+    zero_cpu::TraceJsonWriter::writeFile(
+        path,
+        g_cpu.traceLogger().events(),
+        metadata
+    );
 }
 
 void onExportTraceClicked() {
