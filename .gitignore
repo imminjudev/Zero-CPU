@@ -54,3 +54,4 @@ zero_cpu_register_indirect_full_files/
 # Local patch helper scripts
 scripts/patch_*.ps1
 scripts/force_patch_*.ps1
+traces/
