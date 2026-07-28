@@ -1,0 +1,22 @@
+name: Zero-CPU CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-build-and-test:
+    name: Windows build and test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: cmd
+        run: cmake -S . -B build
+
+      - name: Run test suite
+        shell: cmd
+        run: call scripts\test_all.bat
