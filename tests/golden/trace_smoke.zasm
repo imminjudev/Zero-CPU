@@ -1,0 +1,4 @@
+MOV R1, 5
+ADD R1, 7
+STORE [180], R1
+HALT

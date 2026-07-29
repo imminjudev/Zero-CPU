@@ -47,6 +47,15 @@ docs/trace-diff-cli.md
 This command compares schema v2 traces and reports the first structural
 architectural mismatch.
 
+## Golden Trace Regression
+
+```text
+docs/golden-trace-regression.md
+```
+
+This test compares a fresh deterministic execution with a committed architectural
+trace during the full test suite.
+
 ## Studio Debugger
 
 ```text

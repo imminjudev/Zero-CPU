@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -4580,6 +4581,60 @@ int runTraceDiffCommand(
     return 2;
 }
 
+int runGoldenTraceRegressionTest() {
+    using namespace zero_cpu;
+    namespace fs = std::filesystem;
+
+    constexpr const char* kSourcePath = "tests/golden/trace_smoke.zasm";
+    constexpr const char* kExpectedPath = "tests/golden/trace_smoke.json";
+    constexpr const char* kActualPath = "build/test-output/trace_smoke_actual.json";
+
+    std::cout << "=== Golden Trace Regression Test ===\n";
+
+    Assembler assembler;
+    const AssembledProgram assembled = assembler.assembleFile(kSourcePath);
+
+    CPU cpu;
+    cpu.loadProgram(assembled.instructions, assembled.labels);
+    cpu.run();
+
+    if (cpu.state().hasError()) {
+        std::cout << "[FAIL] Execution failed: "
+                  << cpu.state().errorMessage()
+                  << "\n";
+        return 1;
+    }
+
+    fs::create_directories(fs::path(kActualPath).parent_path());
+
+    TraceJsonMetadata metadata;
+    metadata.producer = "zero_cli";
+    metadata.producer_version = "v0.5-dev";
+    metadata.execution_mode = "Assembly";
+    metadata.loaded_path = kSourcePath;
+
+    TraceJsonWriter::writeFile(
+        kActualPath,
+        cpu.traceLogger().events(),
+        metadata
+    );
+
+    const TraceJsonDiffResult result =
+        TraceJsonDiff::compareFiles(kExpectedPath, kActualPath);
+
+    if (result.equal) {
+        std::cout << "[PASS] Golden trace regression match\n";
+        std::cout << "Events: " << cpu.traceLogger().size() << "\n";
+        return 0;
+    }
+
+    std::cout << "[FAIL] " << result.message << "\n";
+    std::cout << "Path:     " << result.first_path << "\n";
+    std::cout << "Expected: " << result.expected_value << "\n";
+    std::cout << "Actual:   " << result.actual_value << "\n";
+    return 1;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -4590,6 +4645,7 @@ void printUsage() {
     std::cout << "  zero_cli trace-json-test\n";
     std::cout << "  zero_cli trace-diff-test\n";
     std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
+    std::cout << "  zero_cli trace-golden-test\n";
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
@@ -4695,6 +4751,16 @@ int main(int argc, char* argv[]) {
                     argv[3],
                     strict
                 );
+            }
+
+            if (command == "trace-golden-test") {
+                if (argc != 2) {
+                    std::cerr << "Invalid trace-golden-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runGoldenTraceRegressionTest();
             }
 
             if (command == "mmio-test") {

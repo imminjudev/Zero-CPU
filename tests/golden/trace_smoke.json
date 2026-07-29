@@ -1,0 +1,270 @@
+{
+  "schema": "zero_cpu_trace",
+  "schema_version": 2,
+  "mode": "Assembly",
+  "event_count": 4,
+  "events": [
+    {
+      "index": 0,
+      "pc_before": 0,
+      "pc_after": 1,
+      "sp_before": 2048,
+      "sp_after": 2048,
+      "instruction": "MOV R1, 5",
+      "state_before": {
+        "pc": 0,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 0,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "state_after": {
+        "pc": 1,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 5,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "register_changes": [
+        {
+          "name": "R1",
+          "before": 0,
+          "after": 5
+        }
+      ],
+      "flag_changes": [],
+      "memory_changes": [],
+      "has_error": false,
+      "error": ""
+    },
+    {
+      "index": 1,
+      "pc_before": 1,
+      "pc_after": 2,
+      "sp_before": 2048,
+      "sp_after": 2048,
+      "instruction": "ADD R1, 7",
+      "state_before": {
+        "pc": 1,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 5,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "state_after": {
+        "pc": 2,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 12,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "register_changes": [
+        {
+          "name": "R1",
+          "before": 5,
+          "after": 12
+        }
+      ],
+      "flag_changes": [],
+      "memory_changes": [],
+      "has_error": false,
+      "error": ""
+    },
+    {
+      "index": 2,
+      "pc_before": 2,
+      "pc_after": 3,
+      "sp_before": 2048,
+      "sp_after": 2048,
+      "instruction": "STORE [180], R1",
+      "state_before": {
+        "pc": 2,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 12,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "state_after": {
+        "pc": 3,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 12,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "register_changes": [],
+      "flag_changes": [],
+      "memory_changes": [
+        {
+          "address": 180,
+          "before": 0,
+          "after": 12
+        }
+      ],
+      "has_error": false,
+      "error": ""
+    },
+    {
+      "index": 3,
+      "pc_before": 3,
+      "pc_after": 3,
+      "sp_before": 2048,
+      "sp_after": 2048,
+      "instruction": "HALT",
+      "state_before": {
+        "pc": 3,
+        "sp": 2048,
+        "halted": false,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 12,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "state_after": {
+        "pc": 3,
+        "sp": 2048,
+        "halted": true,
+        "has_error": false,
+        "error_message": "",
+        "registers": {
+          "R0": 0,
+          "R1": 12,
+          "R2": 0,
+          "R3": 0,
+          "R4": 0,
+          "R5": 0,
+          "R6": 0,
+          "R7": 0
+        },
+        "flags": {
+          "zero": false,
+          "sign": false,
+          "carry": false,
+          "overflow": false,
+          "raw": 0
+        }
+      },
+      "register_changes": [],
+      "flag_changes": [],
+      "memory_changes": [],
+      "has_error": false,
+      "error": ""
+    }
+  ]
+}
