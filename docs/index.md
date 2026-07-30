@@ -18,6 +18,7 @@ overview of the project.
 
 ```text
 docs/roadmap-v0.4.md
+docs/roadmap-hardware.md
 ```
 
 ## Architectural Semantics
@@ -55,6 +56,16 @@ docs/golden-trace-regression.md
 
 This test compares a fresh deterministic execution with a committed architectural
 trace during the full test suite.
+
+## Hardware Abstraction
+
+```text
+docs/hardware-abstraction-v0.6.md
+```
+
+This layer connects Zero-CPU MMIO operations to a replaceable hardware
+transport. The first implementation is a deterministic mock bus; USB serial and
+ESP32 support follow in v0.7.
 
 ## Studio Debugger
 

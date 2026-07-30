@@ -186,6 +186,10 @@ std::string memoryRouteText(std::size_t address) {
         return "Timer MMIO";
     }
 
+    if (isHardwareAddress(address)) {
+        return "Hardware Bridge MMIO";
+    }
+
     if (isMmioAddress(address)) {
         return "MMIO";
     }

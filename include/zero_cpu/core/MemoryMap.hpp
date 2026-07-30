@@ -47,6 +47,22 @@ inline constexpr std::size_t kTimerVectorOffset = 24;
 inline constexpr std::size_t kTimerPayloadOffset = 32;
 inline constexpr std::size_t kTimerInterruptCountOffset = 40;
 
+// External hardware bridge MMIO region.
+inline constexpr std::size_t kHardwareBase = 0xF200;
+inline constexpr std::size_t kHardwareSize = 0x0030;
+inline constexpr std::size_t kHardwareEndExclusive =
+    kHardwareBase + kHardwareSize;
+
+inline constexpr std::size_t kHardwareRegisterWidth = 8;
+
+// Hardware bridge register offsets.
+inline constexpr std::size_t kHardwareGpioOutputOffset = 0;
+inline constexpr std::size_t kHardwareGpioInputOffset = 8;
+inline constexpr std::size_t kHardwarePwmOutputOffset = 16;
+inline constexpr std::size_t kHardwareAdcInputOffset = 24;
+inline constexpr std::size_t kHardwareStatusOffset = 32;
+inline constexpr std::size_t kHardwareCommandOffset = 40;
+
 // Common scratch ranges used by examples and tests.
 // These are conventions, not hardware-enforced protection boundaries.
 inline constexpr std::size_t kExampleScratchBase = 100;
@@ -91,8 +107,15 @@ constexpr bool isTimerAddress(std::size_t address) {
     return address >= kTimerBase && address < kTimerEndExclusive;
 }
 
+constexpr bool isHardwareAddress(std::size_t address) {
+    return address >= kHardwareBase &&
+        address < kHardwareEndExclusive;
+}
+
 constexpr bool isMmioAddress(std::size_t address) {
-    return isDebugOutputAddress(address) || isTimerAddress(address);
+    return isDebugOutputAddress(address) ||
+        isTimerAddress(address) ||
+        isHardwareAddress(address);
 }
 
 constexpr bool isSafeLowDataAddress(std::size_t address) {

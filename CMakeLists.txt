@@ -18,6 +18,9 @@ add_library(zero_cpu_core
     src/core/TimerDevice.cpp
     src/core/CPU.cpp
 
+    src/hardware/MockHardwareBus.cpp
+    src/hardware/HardwareMMIODevice.cpp
+
     src/isa/Opcode.cpp
     src/isa/Operand.cpp
     src/isa/Instruction.cpp

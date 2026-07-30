@@ -13,6 +13,8 @@
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
+#include "zero_cpu/hardware/HardwareMMIODevice.hpp"
+#include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -1229,6 +1231,165 @@ int runAssemblyProgram(const std::string& inputPath) {
     return 0;
 }
 
+
+int runHardwareBusTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::hardware;
+
+    std::cout << "=== Zero-CPU Hardware Bus Test ===\n\n";
+
+    auto hardwareBus =
+        std::make_shared<MockHardwareBus>("mock-esp32");
+
+    hardwareBus->setRegisterValue(
+        memory_map::kHardwareGpioInputOffset,
+        42
+    );
+    hardwareBus->connect();
+
+    auto hardwareDevice =
+        std::make_shared<HardwareMMIODevice>(hardwareBus);
+
+    auto mmioBus = std::make_shared<MMIOBus>();
+    mmioBus->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        hardwareDevice
+    );
+
+    const std::vector<Instruction> program = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(
+                memory_map::kHardwareBase +
+                memory_map::kHardwareGpioOutputOffset
+            ),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(
+            Opcode::LOAD,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::memoryAddress(
+                memory_map::kHardwareBase +
+                memory_map::kHardwareGpioInputOffset
+            )
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(300),
+            Operand::registerOperand(RegisterName::R2)
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    CPU cpu;
+    cpu.setMMIOBus(mmioBus);
+    cpu.loadProgram(program, {});
+    cpu.run();
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect(
+        "mock hardware bus connected",
+        hardwareBus->connected()
+    );
+    expect(
+        "CPU halted after hardware program",
+        cpu.state().halted() &&
+            !cpu.state().hasError()
+    );
+    expect(
+        "GPIO output register received one",
+        hardwareBus->registerValue(
+            memory_map::kHardwareGpioOutputOffset
+        ) == 1
+    );
+    expect(
+        "GPIO input reached R2",
+        cpu.state().registers().get(RegisterName::R2) == 42
+    );
+    expect(
+        "GPIO input reached Memory[300]",
+        cpu.state().memory().read(300) == 42
+    );
+    expect(
+        "mock bus recorded one hardware write",
+        hardwareBus->writeCount() == 1
+    );
+    expect(
+        "mock bus recorded one hardware read",
+        hardwareBus->readCount() == 1
+    );
+    expect(
+        "hardware trace contains five CPU events",
+        cpu.traceLogger().size() == 5
+    );
+
+    const auto& transactions = hardwareBus->transactions();
+
+    expect(
+        "first transaction is GPIO output write",
+        transactions.size() >= 1 &&
+            transactions[0].type ==
+                HardwareAccessType::Write &&
+            transactions[0].offset ==
+                memory_map::kHardwareGpioOutputOffset &&
+            transactions[0].value == 1
+    );
+
+    expect(
+        "second transaction is GPIO input read",
+        transactions.size() >= 2 &&
+            transactions[1].type ==
+                HardwareAccessType::Read &&
+            transactions[1].offset ==
+                memory_map::kHardwareGpioInputOffset &&
+            transactions[1].value == 42
+    );
+
+    hardwareBus->disconnect();
+
+    bool disconnectedAccessRejected = false;
+
+    try {
+        (void)hardwareDevice->read(
+            memory_map::kHardwareGpioInputOffset
+        );
+    } catch (const std::exception&) {
+        disconnectedAccessRejected = true;
+    }
+
+    expect(
+        "disconnected hardware access is rejected",
+        disconnectedAccessRejected
+    );
+
+    if (!passed) {
+        std::cout << "\nHardware bus test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nHardware bus test passed.\n";
+    return 0;
+}
 
 int runMMIOTest() {
     using namespace zero_cpu;
@@ -4647,6 +4808,7 @@ void printUsage() {
     std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
     std::cout << "  zero_cli trace-golden-test\n";
     std::cout << "  zero_cli mmio-test\n";
+    std::cout << "  zero_cli hardware-bus-test\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
     std::cout << "  zero_cli timer-test\n";
@@ -4771,6 +4933,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runMMIOTest();
+            }
+
+            if (command == "hardware-bus-test") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid hardware-bus-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runHardwareBusTest();
             }
 
             if (command == "interrupt-test") {
