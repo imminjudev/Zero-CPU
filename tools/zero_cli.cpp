@@ -14,7 +14,10 @@
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
+#include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
+#include "zero_cpu/hardware/MockSerialTransport.hpp"
+#include "zero_cpu/hardware/SerialHardwareBus.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -1388,6 +1391,185 @@ int runHardwareBusTest() {
     }
 
     std::cout << "\nHardware bus test passed.\n";
+    return 0;
+}
+
+int runSerialHardwareTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::hardware;
+
+    std::cout << "=== Zero-CPU Serial Hardware Test ===\n\n";
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << "\n";
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    const HardwareProtocolRequest parsedWrite =
+        HardwareProtocol::parseRequest(
+            HardwareProtocol::writeRequest(0, -17)
+        );
+
+    expect(
+        "protocol parses WRITE request",
+        parsedWrite.type == HardwareProtocolRequestType::Write &&
+            parsedWrite.offset == 0 &&
+            parsedWrite.value == -17
+    );
+
+    const HardwareProtocolResponse parsedValue =
+        HardwareProtocol::parseResponse(
+            HardwareProtocol::valueResponse(42)
+        );
+
+    expect(
+        "protocol parses VALUE response",
+        parsedValue.type == HardwareProtocolResponseType::Value &&
+            parsedValue.value == 42
+    );
+
+    auto transport =
+        std::make_shared<MockSerialTransport>("mock-esp32-serial");
+
+    transport->setRegisterValue(
+        memory_map::kHardwareGpioInputOffset,
+        42
+    );
+
+    auto serialBus =
+        std::make_shared<SerialHardwareBus>(transport, 250);
+
+    serialBus->connect();
+
+    expect("serial hardware bus connected", serialBus->connected());
+    expect(
+        "connection sent PING",
+        !transport->requests().empty() &&
+            transport->requests().front() ==
+                HardwareProtocol::pingRequest()
+    );
+
+    auto hardwareDevice =
+        std::make_shared<HardwareMMIODevice>(serialBus);
+    auto mmioBus = std::make_shared<MMIOBus>();
+
+    mmioBus->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        hardwareDevice
+    );
+
+    const std::vector<Instruction> program = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(
+                memory_map::kHardwareBase +
+                memory_map::kHardwareGpioOutputOffset
+            ),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(
+            Opcode::LOAD,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::memoryAddress(
+                memory_map::kHardwareBase +
+                memory_map::kHardwareGpioInputOffset
+            )
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    CPU cpu;
+    cpu.setMMIOBus(mmioBus);
+    cpu.loadProgram(program, {});
+    cpu.run();
+
+    expect(
+        "CPU completed serial hardware program",
+        cpu.state().halted() && !cpu.state().hasError()
+    );
+    expect(
+        "serial GPIO output received one",
+        transport->registerValue(
+            memory_map::kHardwareGpioOutputOffset
+        ) == 1
+    );
+    expect(
+        "serial GPIO input reached R2",
+        cpu.state().registers().get(RegisterName::R2) == 42
+    );
+    expect(
+        "PING WRITE READ requests were recorded",
+        transport->requests().size() == 3
+    );
+
+    bool deviceErrorRejected = false;
+    transport->failNextWithError("device rejected request");
+    try {
+        (void)serialBus->readRegister(
+            memory_map::kHardwareStatusOffset
+        );
+    } catch (const std::exception&) {
+        deviceErrorRejected = true;
+    }
+    expect("device ERROR response is rejected", deviceErrorRejected);
+
+    bool malformedResponseRejected = false;
+    transport->setNextRawResponse("BROKEN RESPONSE\n");
+    try {
+        (void)serialBus->readRegister(
+            memory_map::kHardwareStatusOffset
+        );
+    } catch (const std::exception&) {
+        malformedResponseRejected = true;
+    }
+    expect("malformed serial response is rejected", malformedResponseRejected);
+
+    bool timeoutRejected = false;
+    transport->timeoutNextTransaction();
+    try {
+        (void)serialBus->readRegister(
+            memory_map::kHardwareStatusOffset
+        );
+    } catch (const std::exception&) {
+        timeoutRejected = true;
+    }
+    expect("serial timeout is rejected", timeoutRejected);
+
+    serialBus->disconnect();
+    expect("serial hardware bus disconnected", !serialBus->connected());
+
+    bool disconnectedAccessRejected = false;
+    try {
+        serialBus->writeRegister(
+            memory_map::kHardwareGpioOutputOffset,
+            0
+        );
+    } catch (const std::exception&) {
+        disconnectedAccessRejected = true;
+    }
+    expect("access after disconnect is rejected", disconnectedAccessRejected);
+
+    if (!passed) {
+        std::cout << "\nSerial hardware test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nSerial hardware test passed.\n";
     return 0;
 }
 
@@ -4809,6 +4991,7 @@ void printUsage() {
     std::cout << "  zero_cli trace-golden-test\n";
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli hardware-bus-test\n";
+    std::cout << "  zero_cli serial-hardware-test\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
     std::cout << "  zero_cli timer-test\n";
@@ -4944,6 +5127,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runHardwareBusTest();
+            }
+
+            if (command == "serial-hardware-test") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid serial-hardware-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runSerialHardwareTest();
             }
 
             if (command == "interrupt-test") {

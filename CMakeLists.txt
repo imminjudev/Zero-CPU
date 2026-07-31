@@ -20,6 +20,9 @@ add_library(zero_cpu_core
 
     src/hardware/MockHardwareBus.cpp
     src/hardware/HardwareMMIODevice.cpp
+    src/hardware/HardwareProtocol.cpp
+    src/hardware/MockSerialTransport.cpp
+    src/hardware/SerialHardwareBus.cpp
 
     src/isa/Opcode.cpp
     src/isa/Operand.cpp

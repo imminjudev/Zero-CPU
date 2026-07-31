@@ -67,6 +67,15 @@ This layer connects Zero-CPU MMIO operations to a replaceable hardware
 transport. The first implementation is a deterministic mock bus; USB serial and
 ESP32 support follow in v0.7.
 
+## Serial Hardware Protocol
+
+```text
+docs/serial-hardware-v0.6.md
+```
+
+This layer defines the versioned request/response protocol, serial transport
+boundary, deterministic ESP32 simulator, and `SerialHardwareBus` implementation.
+
 ## Studio Debugger
 
 ```text
