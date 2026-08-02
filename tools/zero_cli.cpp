@@ -18,6 +18,7 @@
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/hardware/MockSerialTransport.hpp"
 #include "zero_cpu/hardware/SerialHardwareBus.hpp"
+#include "zero_cpu/hardware/WindowsSerialTransport.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -1570,6 +1571,144 @@ int runSerialHardwareTest() {
     }
 
     std::cout << "\nSerial hardware test passed.\n";
+    return 0;
+}
+
+int runHardwareLiveTest(
+    const std::string& portName,
+    std::uint32_t baudRate
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::hardware;
+
+    std::cout << "=== Zero-CPU ESP32 Live Hardware Test ===\n\n";
+    std::cout << "Port: " << portName << "\n";
+    std::cout << "Baud: " << baudRate << "\n\n";
+
+    auto transport = std::make_shared<WindowsSerialTransport>(
+        portName,
+        baudRate
+    );
+    auto hardwareBus = std::make_shared<SerialHardwareBus>(
+        transport,
+        2000
+    );
+
+    try {
+        hardwareBus->connect();
+    } catch (const std::exception& ex) {
+        std::cout << "[FAIL] Could not connect to ESP32 bridge\n";
+        std::cout << "Error: " << ex.what() << "\n\n";
+        std::cout << "Close Arduino Serial Monitor and verify the COM port.\n";
+        return 1;
+    }
+
+    std::cout << "[PASS] ZEROCPU/1 PING -> PONG\n";
+
+    auto hardwareDevice =
+        std::make_shared<HardwareMMIODevice>(hardwareBus);
+    auto mmioBus = std::make_shared<MMIOBus>();
+
+    mmioBus->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        hardwareDevice
+    );
+
+    const std::size_t gpioOutputAddress =
+        memory_map::kHardwareBase +
+        memory_map::kHardwareGpioOutputOffset;
+
+    const std::size_t statusAddress =
+        memory_map::kHardwareBase +
+        memory_map::kHardwareStatusOffset;
+
+    const std::vector<Instruction> program = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(gpioOutputAddress),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(
+            Opcode::LOAD,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::memoryAddress(gpioOutputAddress)
+        ),
+        Instruction(
+            Opcode::LOAD,
+            Operand::registerOperand(RegisterName::R3),
+            Operand::memoryAddress(statusAddress)
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(0)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(gpioOutputAddress),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    CPU cpu;
+    cpu.setMMIOBus(mmioBus);
+    cpu.loadProgram(program, {});
+    cpu.run();
+
+    bool passed = true;
+
+    auto expect = [&passed](
+        const std::string& name,
+        bool condition
+    ) {
+        std::cout << (condition ? "[PASS] " : "[FAIL] ")
+                  << name << "\n";
+        if (!condition) {
+            passed = false;
+        }
+    };
+
+    expect(
+        "CPU completed live hardware program",
+        cpu.state().halted() && !cpu.state().hasError()
+    );
+    expect(
+        "ESP32 GPIO output readback was one",
+        cpu.state().registers().get(RegisterName::R2) == 1
+    );
+    expect(
+        "ESP32 device status was ready",
+        cpu.state().registers().get(RegisterName::R3) == 1
+    );
+
+    try {
+        expect(
+            "ESP32 GPIO output was returned to zero",
+            hardwareBus->readRegister(
+                memory_map::kHardwareGpioOutputOffset
+            ) == 0
+        );
+    } catch (const std::exception& ex) {
+        std::cout << "[FAIL] Final GPIO read failed: "
+                  << ex.what() << "\n";
+        passed = false;
+    }
+
+    hardwareBus->disconnect();
+
+    if (!passed) {
+        std::cout << "\nESP32 live hardware test failed.\n";
+        return 1;
+    }
+
+    std::cout << "\nESP32 live hardware test passed.\n";
     return 0;
 }
 
@@ -4992,6 +5131,7 @@ void printUsage() {
     std::cout << "  zero_cli mmio-test\n";
     std::cout << "  zero_cli hardware-bus-test\n";
     std::cout << "  zero_cli serial-hardware-test\n";
+    std::cout << "  zero_cli hardware-live-test <COM-port> [baud]\n";
     std::cout << "  zero_cli interrupt-test\n";
     std::cout << "  zero_cli cpu-interrupt-test\n";
     std::cout << "  zero_cli timer-test\n";
@@ -5127,6 +5267,33 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runHardwareBusTest();
+            }
+
+            if (command == "hardware-live-test") {
+                if (argc != 3 && argc != 4) {
+                    std::cerr
+                        << "Invalid hardware-live-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                std::uint32_t baudRate = 115200;
+
+                if (argc == 4) {
+                    try {
+                        const unsigned long parsed = std::stoul(argv[3]);
+                        if (parsed == 0 ||
+                            parsed > std::numeric_limits<std::uint32_t>::max()) {
+                            throw std::out_of_range("baud rate");
+                        }
+                        baudRate = static_cast<std::uint32_t>(parsed);
+                    } catch (const std::exception&) {
+                        std::cerr << "Invalid baud rate: " << argv[3] << "\n";
+                        return 1;
+                    }
+                }
+
+                return runHardwareLiveTest(argv[2], baudRate);
             }
 
             if (command == "serial-hardware-test") {

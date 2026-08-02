@@ -76,6 +76,15 @@ docs/serial-hardware-v0.6.md
 This layer defines the versioned request/response protocol, serial transport
 boundary, deterministic ESP32 simulator, and `SerialHardwareBus` implementation.
 
+## Windows Serial ESP32 Bridge
+
+```text
+docs/windows-serial-hardware-v0.7.md
+```
+
+This layer opens a physical Windows COM port, performs the versioned ESP32
+handshake, and runs Zero-CPU MMIO instructions against the real bridge firmware.
+
 ## Studio Debugger
 
 ```text

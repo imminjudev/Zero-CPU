@@ -23,6 +23,7 @@ add_library(zero_cpu_core
     src/hardware/HardwareProtocol.cpp
     src/hardware/MockSerialTransport.cpp
     src/hardware/SerialHardwareBus.cpp
+    src/hardware/WindowsSerialTransport.cpp
 
     src/isa/Opcode.cpp
     src/isa/Operand.cpp
