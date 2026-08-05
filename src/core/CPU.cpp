@@ -126,7 +126,7 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
 }
 
 void CPU::step() {
-    if (state_.halted()) {
+    if (state_.halted() || state_.hasError()) {
         return;
     }
 
@@ -240,12 +240,20 @@ void CPU::step() {
 void CPU::run(std::size_t maxSteps) {
     std::size_t count = 0;
 
-    while (!state_.halted() && count < maxSteps) {
+    while (
+        !state_.halted() &&
+        !state_.hasError() &&
+        count < maxSteps
+    ) {
         step();
         ++count;
     }
 
-    if (!state_.halted() && count >= maxSteps) {
+    if (
+        !state_.halted() &&
+        !state_.hasError() &&
+        count >= maxSteps
+    ) {
         setRuntimeError("Maximum step count reached");
     }
 }
@@ -1814,6 +1822,27 @@ std::size_t CPU::resolveLabelAddress(const Operand& operand) const {
 
 void CPU::pushValue(std::int64_t value) {
     const std::size_t sp = state_.sp();
+    const std::size_t stackBase = CPUState::kDefaultStackBase;
+    const std::size_t memorySize = state_.memory().size();
+
+    if (sp < stackBase) {
+        throw std::runtime_error(
+            "Stack pointer is below stack base"
+        );
+    }
+
+    if ((sp - stackBase) % kStackSlotSize != 0) {
+        throw std::runtime_error(
+            "Stack pointer is not slot-aligned"
+        );
+    }
+
+    if (
+        sp > memorySize ||
+        kStackSlotSize > memorySize - sp
+    ) {
+        throw std::runtime_error("Stack overflow");
+    }
 
     state_.memory().write(sp, value);
     state_.setSp(sp + kStackSlotSize);
@@ -1821,15 +1850,36 @@ void CPU::pushValue(std::int64_t value) {
 
 std::int64_t CPU::popValue() {
     const std::size_t sp = state_.sp();
+    const std::size_t stackBase = CPUState::kDefaultStackBase;
+    const std::size_t memorySize = state_.memory().size();
 
-    if (sp < kStackSlotSize) {
+    if (sp < stackBase) {
+        throw std::runtime_error(
+            "Stack pointer is below stack base"
+        );
+    }
+
+    if ((sp - stackBase) % kStackSlotSize != 0) {
+        throw std::runtime_error(
+            "Stack pointer is not slot-aligned"
+        );
+    }
+
+    if (sp > memorySize) {
+        throw std::runtime_error(
+            "Stack pointer is outside memory"
+        );
+    }
+
+    if (sp == stackBase) {
         throw std::runtime_error("Stack underflow");
     }
 
     const std::size_t newSp = sp - kStackSlotSize;
-    state_.setSp(newSp);
+    const std::int64_t value = state_.memory().read(newSp);
 
-    return state_.memory().read(newSp);
+    state_.setSp(newSp);
+    return value;
 }
 
 void CPU::requireNoOperand(const Instruction& instruction) const {

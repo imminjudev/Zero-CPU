@@ -1540,6 +1540,418 @@ int runDifferentialTest() {
     return 0;
 }
 
+zero_cpu::binary::BinaryProgram makeErrorTestBinary(
+    const std::vector<zero_cpu::Instruction>& instructions,
+    const zero_cpu::CPU::LabelTable& labels = {}
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code =
+        encoder.encodeProgram(instructions, labels);
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size =
+        static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+    return program;
+}
+
+bool expectStableRuntimeError(
+    const std::string& name,
+    zero_cpu::CPU& cpu,
+    const std::string& expectedMessagePart,
+    std::size_t expectedSp =
+        std::numeric_limits<std::size_t>::max()
+) {
+    using namespace zero_cpu;
+
+    cpu.run(64);
+
+    bool passed = true;
+
+    if (!cpu.state().hasError()) {
+        std::cout << "[FAIL] "
+                  << name
+                  << " | CPU did not enter error state\n";
+        passed = false;
+    }
+
+    if (
+        cpu.state().errorMessage().find(expectedMessagePart) ==
+        std::string::npos
+    ) {
+        std::cout << "[FAIL] "
+                  << name
+                  << " | expected error containing '"
+                  << expectedMessagePart
+                  << "' but got '"
+                  << cpu.state().errorMessage()
+                  << "'\n";
+        passed = false;
+    }
+
+    if (!cpu.state().halted()) {
+        std::cout << "[FAIL] "
+                  << name
+                  << " | error state did not halt the CPU\n";
+        passed = false;
+    }
+
+    if (
+        expectedSp != std::numeric_limits<std::size_t>::max() &&
+        cpu.state().sp() != expectedSp
+    ) {
+        std::cout << "[FAIL] "
+                  << name
+                  << " | SP expected "
+                  << expectedSp
+                  << " but got "
+                  << cpu.state().sp()
+                  << "\n";
+        passed = false;
+    }
+
+    const std::size_t pcBefore = cpu.state().pc();
+    const std::size_t spBefore = cpu.state().sp();
+    const bool haltedBefore = cpu.state().halted();
+    const std::string errorBefore = cpu.state().errorMessage();
+    const std::uint32_t flagsBefore = cpu.state().flags().raw();
+    const auto registersBefore =
+        cpu.state().registers().snapshot();
+    const auto memoryBefore =
+        cpu.state().memory().snapshot();
+    const std::size_t traceCountBefore =
+        cpu.traceLogger().size();
+
+    cpu.step();
+
+    const bool stable =
+        cpu.state().pc() == pcBefore &&
+        cpu.state().sp() == spBefore &&
+        cpu.state().halted() == haltedBefore &&
+        cpu.state().hasError() &&
+        cpu.state().errorMessage() == errorBefore &&
+        cpu.state().flags().raw() == flagsBefore &&
+        cpu.state().registers().snapshot() == registersBefore &&
+        cpu.state().memory().snapshot() == memoryBefore &&
+        cpu.traceLogger().size() == traceCountBefore;
+
+    if (!stable) {
+        std::cout << "[FAIL] "
+                  << name
+                  << " | state changed after step() in error state\n";
+        passed = false;
+    }
+
+    if (passed) {
+        std::cout << "[PASS] "
+                  << name
+                  << " | "
+                  << cpu.state().errorMessage()
+                  << "\n";
+    }
+
+    return passed;
+}
+
+int runErrorInvariantTest() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    std::cout
+        << "=== Zero-CPU Error and Invariant Test ===\n\n";
+
+    int failures = 0;
+
+    auto check = [&](const std::string& name,
+                     CPU& cpu,
+                     const std::string& expectedMessage,
+                     std::size_t expectedSp =
+                         std::numeric_limits<std::size_t>::max()) {
+        if (
+            !expectStableRuntimeError(
+                name,
+                cpu,
+                expectedMessage,
+                expectedSp
+            )
+        ) {
+            ++failures;
+        }
+    };
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::POP,
+                    Operand::registerOperand(RegisterName::R1)
+                )
+            },
+            {}
+        );
+        check(
+            "vector empty POP",
+            cpu,
+            "Stack underflow",
+            CPUState::kDefaultStackBase
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::PUSH,
+                    Operand::immediate(1)
+                )
+            },
+            {}
+        );
+        cpu.state().setSp(cpu.state().memory().size());
+        check(
+            "vector stack overflow",
+            cpu,
+            "Stack overflow",
+            cpu.state().memory().size()
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::PUSH,
+                    Operand::immediate(1)
+                )
+            },
+            {}
+        );
+        cpu.state().setSp(CPUState::kDefaultStackBase + 1);
+        check(
+            "vector misaligned stack pointer",
+            cpu,
+            "Stack pointer is not slot-aligned",
+            CPUState::kDefaultStackBase + 1
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::LOAD,
+                    Operand::registerOperand(RegisterName::R1),
+                    Operand::memoryAddress(
+                        Memory::kDefaultMemorySize
+                    )
+                )
+            },
+            {}
+        );
+        check(
+            "vector out-of-range memory read",
+            cpu,
+            "Memory access out of range"
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::MOV,
+                    Operand::registerOperand(RegisterName::R1),
+                    Operand::immediate(-1)
+                ),
+                Instruction(
+                    Opcode::LOAD,
+                    Operand::registerOperand(RegisterName::R2),
+                    Operand::registerIndirectAddress(RegisterName::R1)
+                )
+            },
+            {}
+        );
+        check(
+            "vector negative indirect address",
+            cpu,
+            "Negative register-indirect memory address"
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::MOV,
+                    Operand::memoryAddress(96),
+                    Operand::immediate(1)
+                )
+            },
+            {}
+        );
+        check(
+            "vector non-register destination",
+            cpu,
+            "Destination must be register"
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {
+                Instruction(
+                    Opcode::ADD,
+                    Operand::registerOperand(RegisterName::R1)
+                )
+            },
+            {}
+        );
+        check(
+            "vector missing second operand",
+            cpu,
+            "Instruction requires two operands"
+        );
+    }
+
+    {
+        CPU cpu;
+        cpu.loadProgram(
+            {Instruction(Opcode::NOP)},
+            {}
+        );
+        check(
+            "vector PC leaves program without HALT",
+            cpu,
+            "PC out of program range"
+        );
+    }
+
+    {
+        BinaryProgram program = makeErrorTestBinary(
+            {Instruction(Opcode::HALT)}
+        );
+        program.code[0] = 0xFF;
+
+        CPU cpu;
+        cpu.loadBinaryProgram(program);
+        check(
+            "binary invalid opcode byte",
+            cpu,
+            "Invalid opcode byte"
+        );
+    }
+
+    {
+        BinaryProgram program = makeErrorTestBinary(
+            {
+                Instruction(
+                    Opcode::MOV,
+                    Operand::registerOperand(RegisterName::R1),
+                    Operand::immediate(1)
+                )
+            }
+        );
+        program.code[4] = 9;
+
+        CPU cpu;
+        cpu.loadBinaryProgram(program);
+        check(
+            "binary invalid register payload",
+            cpu,
+            "Invalid binary register payload"
+        );
+    }
+
+    {
+        BinaryProgram program = makeErrorTestBinary(
+            {
+                Instruction(
+                    Opcode::NOP,
+                    Operand::immediate(1)
+                )
+            }
+        );
+
+        CPU cpu;
+        cpu.loadBinaryProgram(program);
+        check(
+            "binary NOP with operand",
+            cpu,
+            "Binary instruction requires no operands"
+        );
+    }
+
+    {
+        BinaryProgram program = makeErrorTestBinary(
+            {
+                Instruction(
+                    Opcode::POP,
+                    Operand::registerOperand(RegisterName::R1)
+                )
+            }
+        );
+
+        CPU cpu;
+        cpu.loadBinaryProgram(program);
+        check(
+            "binary empty POP",
+            cpu,
+            "Stack underflow",
+            CPUState::kDefaultStackBase
+        );
+    }
+
+    {
+        BinaryProgram program = makeErrorTestBinary(
+            {
+                Instruction(
+                    Opcode::LOAD,
+                    Operand::registerOperand(RegisterName::R1),
+                    Operand::memoryAddress(
+                        Memory::kDefaultMemorySize
+                    )
+                )
+            }
+        );
+
+        CPU cpu;
+        cpu.loadBinaryProgram(program);
+        check(
+            "binary out-of-range memory read",
+            cpu,
+            "Memory access out of range"
+        );
+    }
+
+    std::cout << "\n";
+
+    if (failures == 0) {
+        std::cout
+            << "Error and invariant test finished successfully.\n";
+        return 0;
+    }
+
+    std::cout
+        << "Error and invariant test failed. Failure count: "
+        << failures
+        << "\n";
+    return 1;
+}
+
 int runBinaryTest(const std::string& outputPath) {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
@@ -5973,6 +6385,7 @@ void printUsage() {
     std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli signed-branch-test\n";
     std::cout << "  zero_cli differential-test\n";
+    std::cout << "  zero_cli error-invariant-test\n";
     std::cout << "  zero_cli trace-json-test\n";
     std::cout << "  zero_cli trace-diff-test\n";
     std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
@@ -6037,6 +6450,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runAluTest();
+            }
+
+            if (command == "error-invariant-test") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid error-invariant-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runErrorInvariantTest();
             }
 
             if (command == "differential-test") {
