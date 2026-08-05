@@ -796,6 +796,254 @@ int runAluTest() {
     return 1;
 }
 
+struct SignedBranchTestCase {
+    const char* name = "";
+    zero_cpu::Opcode opcode = zero_cpu::Opcode::Invalid;
+    std::int64_t lhs = 0;
+    std::int64_t rhs = 0;
+    bool expectedTaken = false;
+};
+
+std::vector<zero_cpu::Instruction> makeSignedBranchProgram(
+    const SignedBranchTestCase& testCase
+) {
+    using namespace zero_cpu;
+
+    return {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(testCase.lhs)
+        ),
+        Instruction(
+            Opcode::CMP,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(testCase.rhs)
+        ),
+        Instruction(
+            testCase.opcode,
+            Operand::label("taken")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::immediate(0)
+        ),
+        Instruction(
+            Opcode::JMP,
+            Operand::label("done")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::immediate(1)
+        ),
+        Instruction(Opcode::HALT)
+    };
+}
+
+zero_cpu::CPU::LabelTable signedBranchLabels() {
+    return {
+        {"taken", 5},
+        {"done", 6}
+    };
+}
+
+bool runSignedBranchVectorCase(const SignedBranchTestCase& testCase) {
+    using namespace zero_cpu;
+
+    CPU cpu;
+    cpu.loadProgram(
+        makeSignedBranchProgram(testCase),
+        signedBranchLabels()
+    );
+    cpu.run();
+
+    if (cpu.state().hasError()) {
+        throw std::runtime_error(
+            std::string("Vector execution failed: ") +
+            cpu.state().errorMessage()
+        );
+    }
+
+    if (!cpu.state().halted()) {
+        throw std::runtime_error("Vector execution did not halt");
+    }
+
+    return cpu.state().registers().get(RegisterName::R2) == 1;
+}
+
+bool runSignedBranchBinaryCase(const SignedBranchTestCase& testCase) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    const std::vector<Instruction> instructions =
+        makeSignedBranchProgram(testCase);
+    const CPU::LabelTable labels = signedBranchLabels();
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code =
+        encoder.encodeProgram(instructions, labels);
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size =
+        static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+
+    CPU cpu;
+    cpu.loadBinaryProgram(program);
+    cpu.run();
+
+    if (cpu.state().hasError()) {
+        throw std::runtime_error(
+            std::string("Binary execution failed: ") +
+            cpu.state().errorMessage()
+        );
+    }
+
+    if (!cpu.state().halted()) {
+        throw std::runtime_error("Binary execution did not halt");
+    }
+
+    return cpu.state().registers().get(RegisterName::R2) == 1;
+}
+
+int runSignedBranchTest() {
+    using namespace zero_cpu;
+
+    std::cout << "=== Zero-CPU Signed Branch Correctness Test ===\n\n";
+    std::cout << "Rules after CMP lhs, rhs:\n";
+    std::cout << "  JL: SF != OF\n";
+    std::cout << "  JG: ZF == 0 and SF == OF\n\n";
+
+    const std::vector<SignedBranchTestCase> cases = {
+        {
+            "JL ordinary negative less",
+            Opcode::JL,
+            -5,
+            2,
+            true
+        },
+        {
+            "JL ordinary positive greater",
+            Opcode::JL,
+            5,
+            -2,
+            false
+        },
+        {
+            "JL overflow boundary: INT64_MIN < 1",
+            Opcode::JL,
+            std::numeric_limits<std::int64_t>::min(),
+            1,
+            true
+        },
+        {
+            "JL overflow boundary: INT64_MAX < -1",
+            Opcode::JL,
+            std::numeric_limits<std::int64_t>::max(),
+            -1,
+            false
+        },
+        {
+            "JL equality is false",
+            Opcode::JL,
+            42,
+            42,
+            false
+        },
+        {
+            "JG ordinary positive greater",
+            Opcode::JG,
+            5,
+            -2,
+            true
+        },
+        {
+            "JG ordinary negative less",
+            Opcode::JG,
+            -5,
+            2,
+            false
+        },
+        {
+            "JG overflow boundary: INT64_MAX > -1",
+            Opcode::JG,
+            std::numeric_limits<std::int64_t>::max(),
+            -1,
+            true
+        },
+        {
+            "JG overflow boundary: INT64_MIN > 1",
+            Opcode::JG,
+            std::numeric_limits<std::int64_t>::min(),
+            1,
+            false
+        },
+        {
+            "JG equality is false",
+            Opcode::JG,
+            42,
+            42,
+            false
+        }
+    };
+
+    int failures = 0;
+
+    for (const SignedBranchTestCase& testCase : cases) {
+        try {
+            const bool vectorTaken =
+                runSignedBranchVectorCase(testCase);
+            const bool binaryTaken =
+                runSignedBranchBinaryCase(testCase);
+
+            const bool passed =
+                vectorTaken == testCase.expectedTaken &&
+                binaryTaken == testCase.expectedTaken &&
+                vectorTaken == binaryTaken;
+
+            std::cout << (passed ? "[PASS] " : "[FAIL] ")
+                      << testCase.name
+                      << " | vector="
+                      << (vectorTaken ? "taken" : "not-taken")
+                      << " binary="
+                      << (binaryTaken ? "taken" : "not-taken")
+                      << " expected="
+                      << (testCase.expectedTaken ? "taken" : "not-taken")
+                      << "\n";
+
+            if (!passed) {
+                ++failures;
+            }
+        } catch (const std::exception& ex) {
+            std::cout << "[FAIL] "
+                      << testCase.name
+                      << " | "
+                      << ex.what()
+                      << "\n";
+            ++failures;
+        }
+    }
+
+    std::cout << "\n";
+
+    if (failures == 0) {
+        std::cout
+            << "Signed branch correctness test finished successfully.\n";
+        return 0;
+    }
+
+    std::cout << "Signed branch correctness test failed. Failure count: "
+              << failures
+              << "\n";
+    return 1;
+}
+
 int runBinaryTest(const std::string& outputPath) {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
@@ -5124,6 +5372,7 @@ void printUsage() {
     std::cout << "  zero_cli <input.zasm>\n";
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli alu-test\n";
+    std::cout << "  zero_cli signed-branch-test\n";
     std::cout << "  zero_cli trace-json-test\n";
     std::cout << "  zero_cli trace-diff-test\n";
     std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
@@ -5188,6 +5437,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runAluTest();
+            }
+
+            if (command == "signed-branch-test") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid signed-branch-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runSignedBranchTest();
             }
 
             if (command == "trace-json-test") {

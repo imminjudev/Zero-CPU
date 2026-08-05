@@ -57,6 +57,14 @@ void restoreFlags(Flags& flags, std::int64_t value) {
     flags.setOverflow((value & (1LL << 3)) != 0);
 }
 
+bool signedLessThanFromFlags(const Flags& flags) {
+    return flags.sign() != flags.overflow();
+}
+
+bool signedGreaterThanFromFlags(const Flags& flags) {
+    return !flags.zero() && flags.sign() == flags.overflow();
+}
+
 std::size_t checkedReturnAddress(
     std::int64_t returnAddress,
     const char* context
@@ -811,7 +819,7 @@ void CPU::executeBinaryInstruction(
     case Opcode::JG: {
         requireSingleBinaryOperand(instruction);
 
-        if (!state_.flags().zero() && !state_.flags().sign()) {
+        if (signedGreaterThanFromFlags(state_.flags())) {
             state_.setPc(
                 readBinaryCodeAddress(
                     instruction.dst_type,
@@ -828,7 +836,7 @@ void CPU::executeBinaryInstruction(
     case Opcode::JL: {
         requireSingleBinaryOperand(instruction);
 
-        if (state_.flags().sign()) {
+        if (signedLessThanFromFlags(state_.flags())) {
             state_.setPc(
                 readBinaryCodeAddress(
                     instruction.dst_type,
@@ -1556,7 +1564,7 @@ void CPU::executeJne(const Instruction& instruction) {
 void CPU::executeJg(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
-    if (!state_.flags().zero() && !state_.flags().sign()) {
+    if (signedGreaterThanFromFlags(state_.flags())) {
         state_.setPc(resolveLabelAddress(instruction.dst()));
     } else {
         advancePcUnlessHalted();
@@ -1566,7 +1574,7 @@ void CPU::executeJg(const Instruction& instruction) {
 void CPU::executeJl(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
-    if (state_.flags().sign()) {
+    if (signedLessThanFromFlags(state_.flags())) {
         state_.setPc(resolveLabelAddress(instruction.dst()));
     } else {
         advancePcUnlessHalted();
