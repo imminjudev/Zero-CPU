@@ -24,6 +24,10 @@ public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;
 
     static constexpr std::size_t kStackSlotSize = 8;
+    static constexpr std::size_t kInterruptFrameSlotCount = 3;
+    static constexpr std::size_t kInterruptFrameSize =
+        kStackSlotSize * kInterruptFrameSlotCount;
+
     static constexpr std::size_t kDefaultBinaryCodeBase = 512;
     static constexpr std::size_t kDefaultMaxSteps = 100000;
 
@@ -188,8 +192,14 @@ private:
 
     std::size_t resolveLabelAddress(const Operand& operand) const;
 
+    void requireStackPushSlots(std::size_t slotCount) const;
+    void requireStackPopSlots(std::size_t slotCount) const;
+
     void pushValue(std::int64_t value);
     std::int64_t popValue();
+
+    void pushInterruptFrame(std::size_t returnAddress);
+    void restoreInterruptFrame(const char* returnAddressError);
 
     void requireNoOperand(const Instruction& instruction) const;
     void requireSingleOperand(const Instruction& instruction) const;

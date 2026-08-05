@@ -2,6 +2,7 @@
 #include "zero_cpu/binary/BinaryProgram.hpp"
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
+#include "zero_cpu/core/PrivilegeLevel.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -300,8 +301,12 @@ void prepareCommonState(
             stackBase + CPU::kStackSlotSize,
             0
         );
+        cpu.state().memory().write(
+            stackBase + CPU::kStackSlotSize * 2,
+            privilegeLevelToRaw(PrivilegeLevel::Kernel)
+        );
         cpu.state().setSp(
-            stackBase + CPU::kStackSlotSize * 2
+            stackBase + CPU::kInterruptFrameSize
         );
         break;
     }

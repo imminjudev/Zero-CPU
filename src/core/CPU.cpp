@@ -368,8 +368,7 @@ bool CPU::servicePendingInterruptIfNeeded() {
     }
 
     const std::size_t returnAddress = state_.pc();
-    pushValue(static_cast<std::int64_t>(returnAddress));
-    pushValue(packFlags(state_.flags()));
+    pushInterruptFrame(returnAddress);
 
     state_.registers().set(
         RegisterName::R0,
@@ -926,16 +925,8 @@ void CPU::executeBinaryInstruction(
 
     case Opcode::IRET: {
         requireNoBinaryOperands(instruction);
-
-        const std::int64_t flagsValue = popValue();
-        restoreFlags(state_.flags(), flagsValue);
-
-        const std::int64_t returnAddress = popValue();
-        state_.setPc(
-            checkedReturnAddress(
-                returnAddress,
-                "Negative binary interrupt return address"
-            )
+        restoreInterruptFrame(
+            "Negative binary interrupt return address"
         );
         break;
     }
@@ -996,8 +987,7 @@ void CPU::executeBinaryInstruction(
         const std::size_t returnAddress =
             state_.pc() + binary::kInstructionSize;
 
-        pushValue(static_cast<std::int64_t>(returnAddress));
-        pushValue(packFlags(state_.flags()));
+        pushInterruptFrame(returnAddress);
 
         state_.registers().set(
             RegisterName::R0,
@@ -1313,6 +1303,7 @@ void CPU::requireInstructionPrivilege(
 
     switch (opcode) {
     case Opcode::HALT:
+    case Opcode::IRET:
     case Opcode::EI:
     case Opcode::DI:
         throw std::runtime_error(
@@ -1659,16 +1650,8 @@ void CPU::executeRet(const Instruction& instruction) {
 
 void CPU::executeIret(const Instruction& instruction) {
     requireNoOperand(instruction);
-
-    const std::int64_t flagsValue = popValue();
-    restoreFlags(state_.flags(), flagsValue);
-
-    const std::int64_t returnAddress = popValue();
-    state_.setPc(
-        checkedReturnAddress(
-            returnAddress,
-            "Negative interrupt return address"
-        )
+    restoreInterruptFrame(
+        "Negative interrupt return address"
     );
 }
 
@@ -1721,8 +1704,7 @@ void CPU::executeInt(const Instruction& instruction) {
 
     const std::size_t returnAddress = state_.pc() + 1;
 
-    pushValue(static_cast<std::int64_t>(returnAddress));
-    pushValue(packFlags(state_.flags()));
+    pushInterruptFrame(returnAddress);
 
     state_.registers().set(
         RegisterName::R0,
@@ -1846,6 +1828,72 @@ std::size_t CPU::resolveLabelAddress(const Operand& operand) const {
     return it->second;
 }
 
+void CPU::requireStackPushSlots(
+    std::size_t slotCount
+) const {
+    const std::size_t sp = state_.sp();
+    const std::size_t stackBase = CPUState::kDefaultStackBase;
+    const std::size_t memorySize = state_.memory().size();
+
+    if (sp < stackBase) {
+        throw std::runtime_error(
+            "Stack pointer is below stack base"
+        );
+    }
+
+    if ((sp - stackBase) % kStackSlotSize != 0) {
+        throw std::runtime_error(
+            "Stack pointer is not slot-aligned"
+        );
+    }
+
+    if (sp > memorySize) {
+        throw std::runtime_error(
+            "Stack pointer is outside memory"
+        );
+    }
+
+    const std::size_t availableSlots =
+        (memorySize - sp) / kStackSlotSize;
+
+    if (slotCount > availableSlots) {
+        throw std::runtime_error("Stack overflow");
+    }
+}
+
+void CPU::requireStackPopSlots(
+    std::size_t slotCount
+) const {
+    const std::size_t sp = state_.sp();
+    const std::size_t stackBase = CPUState::kDefaultStackBase;
+    const std::size_t memorySize = state_.memory().size();
+
+    if (sp < stackBase) {
+        throw std::runtime_error(
+            "Stack pointer is below stack base"
+        );
+    }
+
+    if ((sp - stackBase) % kStackSlotSize != 0) {
+        throw std::runtime_error(
+            "Stack pointer is not slot-aligned"
+        );
+    }
+
+    if (sp > memorySize) {
+        throw std::runtime_error(
+            "Stack pointer is outside memory"
+        );
+    }
+
+    const std::size_t usedSlots =
+        (sp - stackBase) / kStackSlotSize;
+
+    if (slotCount > usedSlots) {
+        throw std::runtime_error("Stack underflow");
+    }
+}
+
 void CPU::pushValue(std::int64_t value) {
     const std::size_t sp = state_.sp();
     const std::size_t stackBase = CPUState::kDefaultStackBase;
@@ -1906,6 +1954,55 @@ std::int64_t CPU::popValue() {
 
     state_.setSp(newSp);
     return value;
+}
+
+void CPU::pushInterruptFrame(std::size_t returnAddress) {
+    requireStackPushSlots(kInterruptFrameSlotCount);
+
+    const std::int64_t savedPrivilege =
+        privilegeLevelToRaw(state_.privilegeLevel());
+
+    pushValue(static_cast<std::int64_t>(returnAddress));
+    pushValue(packFlags(state_.flags()));
+    pushValue(savedPrivilege);
+
+    state_.setPrivilegeLevel(PrivilegeLevel::Kernel);
+}
+
+void CPU::restoreInterruptFrame(
+    const char* returnAddressError
+) {
+    requireStackPopSlots(kInterruptFrameSlotCount);
+
+    const std::size_t sp = state_.sp();
+
+    const std::size_t privilegeAddress =
+        sp - kStackSlotSize;
+    const std::size_t flagsAddress =
+        privilegeAddress - kStackSlotSize;
+    const std::size_t returnAddressAddress =
+        flagsAddress - kStackSlotSize;
+
+    const std::int64_t privilegeValue =
+        state_.memory().read(privilegeAddress);
+    const std::int64_t flagsValue =
+        state_.memory().read(flagsAddress);
+    const std::int64_t returnAddressValue =
+        state_.memory().read(returnAddressAddress);
+
+    const PrivilegeLevel restoredPrivilege =
+        privilegeLevelFromRaw(privilegeValue);
+
+    const std::size_t restoredPc =
+        checkedReturnAddress(
+            returnAddressValue,
+            returnAddressError
+        );
+
+    state_.setSp(sp - kInterruptFrameSize);
+    restoreFlags(state_.flags(), flagsValue);
+    state_.setPrivilegeLevel(restoredPrivilege);
+    state_.setPc(restoredPc);
 }
 
 void CPU::requireNoOperand(const Instruction& instruction) const {
