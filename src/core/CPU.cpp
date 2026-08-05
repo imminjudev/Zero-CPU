@@ -3,6 +3,7 @@
 #include "zero_cpu/core/ClockedDevice.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
 
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
@@ -390,7 +391,37 @@ void CPU::tickClockedDevices() {
     }
 }
 
+void CPU::requireDataMemoryAccess(
+    std::size_t address,
+    const char* operation
+) const {
+    if (!state_.isUserMode()) {
+        return;
+    }
+
+    constexpr std::size_t kDataAccessSize =
+        sizeof(std::int64_t);
+
+    if (
+        memory_map::isUserDataRange(
+            address,
+            kDataAccessSize
+        )
+    ) {
+        return;
+    }
+
+    throw std::runtime_error(
+        "Memory protection violation: User mode cannot "
+        + std::string(operation)
+        + " address "
+        + std::to_string(address)
+    );
+}
+
 std::int64_t CPU::readDataMemory(std::size_t address) {
+    requireDataMemoryAccess(address, "read");
+
     if (mmio_bus_ && mmio_bus_->hasDeviceAt(address)) {
         return mmio_bus_->read(address);
     }
@@ -399,6 +430,8 @@ std::int64_t CPU::readDataMemory(std::size_t address) {
 }
 
 void CPU::writeDataMemory(std::size_t address, std::int64_t value) {
+    requireDataMemoryAccess(address, "write");
+
     if (mmio_bus_ && mmio_bus_->hasDeviceAt(address)) {
         mmio_bus_->write(address, value);
         return;

@@ -12,6 +12,13 @@ inline constexpr std::size_t kLowMemorySize = 0x0200;
 inline constexpr std::size_t kLowMemoryEndExclusive =
     kLowMemoryBase + kLowMemorySize;
 
+// User-mode LOAD/STORE data accesses are restricted to low memory.
+// Kernel mode remains unrestricted.
+inline constexpr std::size_t kUserDataBase = kLowMemoryBase;
+inline constexpr std::size_t kUserDataSize = kLowMemorySize;
+inline constexpr std::size_t kUserDataEndExclusive =
+    kUserDataBase + kUserDataSize;
+
 // .zbin code is loaded at this address by convention.
 inline constexpr std::size_t kBinaryCodeBase = 0x0200;
 
@@ -73,6 +80,21 @@ inline constexpr std::size_t kLastLowScratchBase = 500;
 
 constexpr bool isLowMemoryAddress(std::size_t address) {
     return address >= kLowMemoryBase && address < kLowMemoryEndExclusive;
+}
+
+constexpr bool isUserDataRange(
+    std::size_t address,
+    std::size_t count
+) {
+    if (address < kUserDataBase) {
+        return false;
+    }
+
+    if (address > kUserDataEndExclusive) {
+        return false;
+    }
+
+    return count <= kUserDataEndExclusive - address;
 }
 
 constexpr bool isDefaultCodeAddress(std::size_t address) {

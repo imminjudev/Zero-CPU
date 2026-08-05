@@ -91,6 +91,11 @@ private:
     bool servicePendingInterruptIfNeeded();
     void tickClockedDevices();
 
+    void requireDataMemoryAccess(
+        std::size_t address,
+        const char* operation
+    ) const;
+
     std::int64_t readDataMemory(std::size_t address);
     void writeDataMemory(std::size_t address, std::int64_t value);
 
