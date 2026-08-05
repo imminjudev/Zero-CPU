@@ -165,7 +165,7 @@ void BinaryReader::validateHeader(const BinaryHeader& header) const {
         throw std::runtime_error("Code size is not a multiple of instruction size");
     }
 
-    if (header.entry_point > header.code_size) {
+    if (header.entry_point >= header.code_size) {
         throw std::runtime_error("Entry point is outside code section");
     }
 }

@@ -1086,6 +1086,109 @@ int runBinaryTest(const std::string& outputPath) {
     printDecodedInstructions(loaded.code);
     std::cout << "\n";
 
+
+    std::cout << "=== Binary Entry-Point Validation ===\n";
+
+    struct EntryCase {
+        const char* name;
+        std::uint32_t entryPoint;
+        std::size_t instructionCount;
+        bool accepted;
+    };
+
+    const std::vector<EntryCase> entryCases = {
+        {"entry 0", 0, 1, true},
+        {
+            "entry 24",
+            static_cast<std::uint32_t>(kInstructionSize),
+            2,
+            true
+        },
+        {"misaligned entry 4", 4, 2, false},
+        {"misaligned entry 20", 20, 2, false},
+        {
+            "entry equals code size",
+            static_cast<std::uint32_t>(kInstructionSize * 2),
+            2,
+            false
+        }
+    };
+
+    bool entryValidationPassed = true;
+
+    for (const EntryCase& testCase : entryCases) {
+        std::vector<Instruction> caseInstructions;
+
+        for (std::size_t i = 0; i < testCase.instructionCount; ++i) {
+            caseInstructions.emplace_back(
+                i + 1 == testCase.instructionCount
+                    ? Opcode::HALT
+                    : Opcode::NOP
+            );
+        }
+
+        std::vector<std::uint8_t> caseCode =
+            encoder.encodeProgram(caseInstructions, {});
+
+        BinaryProgram caseProgram;
+        caseProgram.header.major_version = kMajorVersion;
+        caseProgram.header.minor_version = kMinorVersion;
+        caseProgram.header.endianness = BinaryEndianness::Little;
+        caseProgram.header.entry_point = testCase.entryPoint;
+        caseProgram.header.code_size =
+            static_cast<std::uint32_t>(caseCode.size());
+        caseProgram.code = std::move(caseCode);
+
+        bool readerAccepted = false;
+        bool loaderAccepted = false;
+
+        try {
+            BinaryWriter caseWriter;
+            BinaryReader caseReader;
+            const std::vector<std::uint8_t> caseBytes =
+                caseWriter.writeToBytes(caseProgram);
+            (void)caseReader.readFromBytes(caseBytes);
+            readerAccepted = true;
+        } catch (const std::exception&) {
+            readerAccepted = false;
+        }
+
+        try {
+            Memory caseMemory;
+            BinaryLoader caseLoader;
+            (void)caseLoader.loadIntoMemory(caseProgram, caseMemory, 0);
+            loaderAccepted = true;
+        } catch (const std::exception&) {
+            loaderAccepted = false;
+        }
+
+        const bool passed =
+            readerAccepted == testCase.accepted &&
+            loaderAccepted == testCase.accepted &&
+            readerAccepted == loaderAccepted;
+
+        std::cout << (passed ? "[PASS] " : "[FAIL] ")
+                  << testCase.name
+                  << " | reader="
+                  << (readerAccepted ? "accepted" : "rejected")
+                  << " loader="
+                  << (loaderAccepted ? "accepted" : "rejected")
+                  << " expected="
+                  << (testCase.accepted ? "accepted" : "rejected")
+                  << "\n";
+
+        if (!passed) {
+            entryValidationPassed = false;
+        }
+    }
+
+    std::cout << "\n";
+
+    if (!entryValidationPassed) {
+        std::cout << "Binary entry-point validation failed.\n";
+        return 1;
+    }
+
     std::cout << "Binary encoder/writer/reader/decoder test finished successfully.\n";
 
     return 0;

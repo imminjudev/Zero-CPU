@@ -23,7 +23,7 @@ inline constexpr std::uint8_t kMinorVersion = 2;
 
 inline constexpr std::size_t kHeaderSize = 16;
 inline constexpr std::size_t kInstructionSize = 24;
-inline constexpr std::size_t kInstructionAlignment = 4;
+inline constexpr std::size_t kInstructionAlignment = kInstructionSize;
 
 inline constexpr std::size_t kMagicOffset = 0;
 inline constexpr std::size_t kMajorVersionOffset = 4;
