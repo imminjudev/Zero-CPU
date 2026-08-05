@@ -195,7 +195,9 @@ bool isFunctionCallOpcode(Opcode opcode) {
 }
 
 bool isControlOpcode(Opcode opcode) {
-    return opcode == Opcode::NOP
+    return opcode == Opcode::EI
+        || opcode == Opcode::DI
+        || opcode == Opcode::NOP
         || opcode == Opcode::HALT;
 }
 

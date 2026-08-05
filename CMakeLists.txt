@@ -120,7 +120,30 @@ target_link_libraries(zero_cli
 zero_cpu_enable_sanitizers(zero_cli)
 
 
+add_executable(zero_isa_conformance
+    tests/isa_conformance.cpp
+)
+
+target_link_libraries(zero_isa_conformance
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(zero_isa_conformance)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.isa_conformance
+        COMMAND $<TARGET_FILE:zero_isa_conformance>
+    )
+
+    set_tests_properties(zero_cpu.isa_conformance
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;isa;conformance"
+    )
+
     function(zero_cpu_add_cli_test test_name)
         add_test(
             NAME ${test_name}
