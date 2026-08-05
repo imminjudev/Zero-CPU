@@ -56,3 +56,7 @@ scripts/patch_*.ps1
 scripts/force_patch_*.ps1
 traces/
 build-asan/
+
+# Coverage
+build-coverage/
+coverage/

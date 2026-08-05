@@ -15,6 +15,54 @@ option(
     OFF
 )
 
+
+option(
+    ZERO_CPU_ENABLE_COVERAGE
+    "Enable GCC coverage instrumentation for Zero-CPU targets"
+    OFF
+)
+
+if (
+    ZERO_CPU_ENABLE_SANITIZERS
+    AND ZERO_CPU_ENABLE_COVERAGE
+)
+    message(
+        FATAL_ERROR
+        "ZERO_CPU_ENABLE_SANITIZERS and "
+        "ZERO_CPU_ENABLE_COVERAGE cannot be enabled together."
+    )
+endif()
+
+function(zero_cpu_enable_coverage target_name)
+    if (NOT ZERO_CPU_ENABLE_COVERAGE)
+        return()
+    endif()
+
+    if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        message(
+            FATAL_ERROR
+            "ZERO_CPU_ENABLE_COVERAGE requires GCC. "
+            "Current compiler: ${CMAKE_CXX_COMPILER_ID}"
+        )
+    endif()
+
+    get_target_property(target_type ${target_name} TYPE)
+
+    target_compile_options(${target_name}
+        PRIVATE
+            --coverage
+            -O0
+            -g
+    )
+
+    if (NOT target_type STREQUAL "STATIC_LIBRARY")
+        target_link_options(${target_name}
+            PRIVATE
+                --coverage
+        )
+    endif()
+endfunction()
+
 function(zero_cpu_enable_sanitizers target_name)
     if (NOT ZERO_CPU_ENABLE_SANITIZERS)
         return()
@@ -108,6 +156,7 @@ target_include_directories(zero_cpu_core
 )
 
 zero_cpu_enable_sanitizers(zero_cpu_core)
+zero_cpu_enable_coverage(zero_cpu_core)
 
 add_executable(zero_cli
     tools/zero_cli.cpp
@@ -119,6 +168,7 @@ target_link_libraries(zero_cli
 )
 
 zero_cpu_enable_sanitizers(zero_cli)
+zero_cpu_enable_coverage(zero_cli)
 
 
 add_executable(zero_isa_conformance
@@ -131,6 +181,7 @@ target_link_libraries(zero_isa_conformance
 )
 
 zero_cpu_enable_sanitizers(zero_isa_conformance)
+zero_cpu_enable_coverage(zero_isa_conformance)
 
 
 add_executable(zero_privilege_state_test
@@ -143,6 +194,7 @@ target_link_libraries(zero_privilege_state_test
 )
 
 zero_cpu_enable_sanitizers(zero_privilege_state_test)
+zero_cpu_enable_coverage(zero_privilege_state_test)
 
 
 add_executable(zero_privileged_instruction_test
@@ -157,6 +209,9 @@ target_link_libraries(zero_privileged_instruction_test
 zero_cpu_enable_sanitizers(
     zero_privileged_instruction_test
 )
+zero_cpu_enable_coverage(
+    zero_privileged_instruction_test
+)
 
 
 add_executable(zero_interrupt_privilege_test
@@ -169,6 +224,9 @@ target_link_libraries(zero_interrupt_privilege_test
 )
 
 zero_cpu_enable_sanitizers(
+    zero_interrupt_privilege_test
+)
+zero_cpu_enable_coverage(
     zero_interrupt_privilege_test
 )
 
@@ -361,4 +419,5 @@ if (WIN32)
     )
 
     zero_cpu_enable_sanitizers(zero_studio)
+    zero_cpu_enable_coverage(zero_studio)
 endif()
