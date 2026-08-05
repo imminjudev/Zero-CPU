@@ -1044,6 +1044,502 @@ int runSignedBranchTest() {
     return 1;
 }
 
+struct DifferentialProgram {
+    std::vector<zero_cpu::Instruction> instructions;
+    zero_cpu::CPU::LabelTable labels;
+};
+
+DifferentialProgram makeDifferentialProgram() {
+    using namespace zero_cpu;
+
+    DifferentialProgram program;
+
+    program.instructions = {
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::immediate(10)
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::immediate(3)
+        ),
+        Instruction(
+            Opcode::ADD,
+            Operand::registerOperand(RegisterName::R1),
+            Operand::registerOperand(RegisterName::R2)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(96),
+            Operand::registerOperand(RegisterName::R1)
+        ),
+        Instruction(
+            Opcode::LOAD,
+            Operand::registerOperand(RegisterName::R3),
+            Operand::memoryAddress(96)
+        ),
+        Instruction(
+            Opcode::SUB,
+            Operand::registerOperand(RegisterName::R3),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::PUSH,
+            Operand::registerOperand(RegisterName::R3)
+        ),
+        Instruction(
+            Opcode::POP,
+            Operand::registerOperand(RegisterName::R4)
+        ),
+        Instruction(
+            Opcode::CMP,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(12)
+        ),
+        Instruction(
+            Opcode::JE,
+            Operand::label("equal")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R5),
+            Operand::immediate(-1)
+        ),
+        Instruction(
+            Opcode::JMP,
+            Operand::label("after_equal")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R5),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::AND,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(15)
+        ),
+        Instruction(
+            Opcode::OR,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::XOR,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(6)
+        ),
+        Instruction(
+            Opcode::NOT,
+            Operand::registerOperand(RegisterName::R2)
+        ),
+        Instruction(
+            Opcode::TEST,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::CMP,
+            Operand::registerOperand(RegisterName::R4),
+            Operand::immediate(5)
+        ),
+        Instruction(
+            Opcode::JG,
+            Operand::label("greater")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R6),
+            Operand::immediate(-1)
+        ),
+        Instruction(
+            Opcode::JMP,
+            Operand::label("after_greater")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R6),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::CMP,
+            Operand::registerOperand(RegisterName::R2),
+            Operand::immediate(0)
+        ),
+        Instruction(
+            Opcode::JL,
+            Operand::label("negative")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R7),
+            Operand::immediate(-1)
+        ),
+        Instruction(
+            Opcode::JMP,
+            Operand::label("done")
+        ),
+        Instruction(
+            Opcode::MOV,
+            Operand::registerOperand(RegisterName::R7),
+            Operand::immediate(1)
+        ),
+        Instruction(
+            Opcode::STORE,
+            Operand::memoryAddress(104),
+            Operand::registerOperand(RegisterName::R7)
+        ),
+        Instruction(Opcode::HALT)
+    };
+
+    program.labels = {
+        {"equal", 12},
+        {"after_equal", 13},
+        {"greater", 22},
+        {"after_greater", 23},
+        {"negative", 27},
+        {"done", 29}
+    };
+
+    return program;
+}
+
+zero_cpu::binary::BinaryProgram encodeDifferentialProgram(
+    const DifferentialProgram& source
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    InstructionEncoder encoder;
+    std::vector<std::uint8_t> code =
+        encoder.encodeProgram(source.instructions, source.labels);
+
+    BinaryProgram program;
+    program.header.major_version = kMajorVersion;
+    program.header.minor_version = kMinorVersion;
+    program.header.endianness = BinaryEndianness::Little;
+    program.header.entry_point = 0;
+    program.header.code_size =
+        static_cast<std::uint32_t>(code.size());
+    program.code = std::move(code);
+    return program;
+}
+
+bool compareDifferentialStates(
+    const zero_cpu::CPU& vectorCpu,
+    const zero_cpu::CPU& binaryCpu,
+    std::size_t step,
+    const std::string& phase
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::binary;
+
+    bool passed = true;
+
+    const std::size_t binaryPc = binaryCpu.state().pc();
+    std::size_t normalizedBinaryPc =
+        std::numeric_limits<std::size_t>::max();
+
+    if (
+        binaryPc >= binaryCpu.binaryCodeBase() &&
+        (binaryPc - binaryCpu.binaryCodeBase()) %
+                kInstructionSize ==
+            0
+    ) {
+        normalizedBinaryPc =
+            (binaryPc - binaryCpu.binaryCodeBase()) /
+            kInstructionSize;
+    }
+
+    auto reportMismatch = [&](const std::string& message) {
+        std::cout << "[FAIL] step "
+                  << step
+                  << " "
+                  << phase
+                  << " | "
+                  << message
+                  << "\n";
+        passed = false;
+    };
+
+    if (vectorCpu.state().pc() != normalizedBinaryPc) {
+        reportMismatch(
+            "PC vector=" +
+            std::to_string(vectorCpu.state().pc()) +
+            " binary-index=" +
+            std::to_string(normalizedBinaryPc) +
+            " binary-address=" +
+            std::to_string(binaryPc)
+        );
+    }
+
+    const auto vectorRegisters =
+        vectorCpu.state().registers().snapshot();
+    const auto binaryRegisters =
+        binaryCpu.state().registers().snapshot();
+
+    for (std::size_t i = 0; i < vectorRegisters.size(); ++i) {
+        if (vectorRegisters[i] != binaryRegisters[i]) {
+            reportMismatch(
+                "R" +
+                std::to_string(i) +
+                " vector=" +
+                std::to_string(vectorRegisters[i]) +
+                " binary=" +
+                std::to_string(binaryRegisters[i])
+            );
+        }
+    }
+
+    if (
+        vectorCpu.state().flags().raw() !=
+        binaryCpu.state().flags().raw()
+    ) {
+        reportMismatch(
+            "FLAGS vector=" +
+            std::to_string(vectorCpu.state().flags().raw()) +
+            " binary=" +
+            std::to_string(binaryCpu.state().flags().raw())
+        );
+    }
+
+    if (vectorCpu.state().sp() != binaryCpu.state().sp()) {
+        reportMismatch(
+            "SP vector=" +
+            std::to_string(vectorCpu.state().sp()) +
+            " binary=" +
+            std::to_string(binaryCpu.state().sp())
+        );
+    }
+
+    if (vectorCpu.state().halted() != binaryCpu.state().halted()) {
+        reportMismatch("halted state differs");
+    }
+
+    if (vectorCpu.state().hasError() != binaryCpu.state().hasError()) {
+        reportMismatch("error state differs");
+    }
+
+    if (
+        vectorCpu.state().errorMessage() !=
+        binaryCpu.state().errorMessage()
+    ) {
+        reportMismatch(
+            "error message vector='" +
+            vectorCpu.state().errorMessage() +
+            "' binary='" +
+            binaryCpu.state().errorMessage() +
+            "'"
+        );
+    }
+
+    const std::vector<std::int64_t> vectorMemory =
+        vectorCpu.state().memory().snapshot();
+    const std::vector<std::int64_t> binaryMemory =
+        binaryCpu.state().memory().snapshot();
+
+    if (vectorMemory.size() != binaryMemory.size()) {
+        reportMismatch("memory sizes differ");
+        return false;
+    }
+
+    const std::size_t codeBegin = binaryCpu.binaryCodeBase();
+    const std::size_t codeEnd =
+        codeBegin + binaryCpu.binaryCodeSize();
+
+    for (std::size_t address = 0; address < vectorMemory.size(); ++address) {
+        if (address >= codeBegin && address < codeEnd) {
+            continue;
+        }
+
+        if (vectorMemory[address] != binaryMemory[address]) {
+            reportMismatch(
+                "memory[" +
+                std::to_string(address) +
+                "] vector=" +
+                std::to_string(vectorMemory[address]) +
+                " binary=" +
+                std::to_string(binaryMemory[address])
+            );
+            break;
+        }
+    }
+
+    return passed;
+}
+
+int runDifferentialTest() {
+    using namespace zero_cpu;
+
+    std::cout
+        << "=== Zero-CPU Vector/Binary Differential Test ===\n\n";
+
+    const DifferentialProgram source = makeDifferentialProgram();
+    const binary::BinaryProgram encoded =
+        encodeDifferentialProgram(source);
+
+    CPU vectorCpu;
+    vectorCpu.loadProgram(source.instructions, source.labels);
+
+    CPU binaryCpu;
+    binaryCpu.loadBinaryProgram(encoded);
+
+    constexpr std::size_t kMaxDifferentialSteps = 100;
+    std::size_t step = 0;
+
+    if (
+        !compareDifferentialStates(
+            vectorCpu,
+            binaryCpu,
+            step,
+            "initial"
+        )
+    ) {
+        return 1;
+    }
+
+    while (step < kMaxDifferentialSteps) {
+        if (
+            vectorCpu.state().halted() ||
+            binaryCpu.state().halted() ||
+            vectorCpu.state().hasError() ||
+            binaryCpu.state().hasError()
+        ) {
+            break;
+        }
+
+        const std::size_t instructionIndex =
+            vectorCpu.state().pc();
+
+        if (instructionIndex >= source.instructions.size()) {
+            std::cout
+                << "[FAIL] vector PC left program before halt\n";
+            return 1;
+        }
+
+        const std::string instructionText =
+            source.instructions[instructionIndex].toString();
+
+        vectorCpu.step();
+        binaryCpu.step();
+        ++step;
+
+        if (
+            !compareDifferentialStates(
+                vectorCpu,
+                binaryCpu,
+                step,
+                instructionText
+            )
+        ) {
+            return 1;
+        }
+
+        std::cout << "[PASS] step "
+                  << step
+                  << " | "
+                  << instructionText
+                  << "\n";
+    }
+
+    if (step >= kMaxDifferentialSteps) {
+        std::cout << "[FAIL] differential step limit reached\n";
+        return 1;
+    }
+
+    if (
+        !vectorCpu.state().halted() ||
+        !binaryCpu.state().halted()
+    ) {
+        std::cout << "[FAIL] both execution paths did not halt\n";
+        return 1;
+    }
+
+    if (
+        vectorCpu.state().hasError() ||
+        binaryCpu.state().hasError()
+    ) {
+        std::cout << "[FAIL] execution ended with an error\n";
+        return 1;
+    }
+
+    bool finalPassed = true;
+
+    auto expect = [&](const std::string& name,
+                      std::int64_t actual,
+                      std::int64_t expected) {
+        const bool passed = actual == expected;
+        std::cout << (passed ? "[PASS] " : "[FAIL] ")
+                  << name
+                  << " = "
+                  << actual
+                  << " expected "
+                  << expected
+                  << "\n";
+        if (!passed) {
+            finalPassed = false;
+        }
+    };
+
+    expect(
+        "R1",
+        vectorCpu.state().registers().get(RegisterName::R1),
+        13
+    );
+    expect(
+        "R2",
+        vectorCpu.state().registers().get(RegisterName::R2),
+        -4
+    );
+    expect(
+        "R4",
+        vectorCpu.state().registers().get(RegisterName::R4),
+        11
+    );
+    expect(
+        "R5",
+        vectorCpu.state().registers().get(RegisterName::R5),
+        1
+    );
+    expect(
+        "R6",
+        vectorCpu.state().registers().get(RegisterName::R6),
+        1
+    );
+    expect(
+        "R7",
+        vectorCpu.state().registers().get(RegisterName::R7),
+        1
+    );
+    expect(
+        "Memory[96]",
+        vectorCpu.state().memory().read(96),
+        13
+    );
+    expect(
+        "Memory[104]",
+        vectorCpu.state().memory().read(104),
+        1
+    );
+    expect(
+        "SP",
+        static_cast<std::int64_t>(vectorCpu.state().sp()),
+        static_cast<std::int64_t>(CPUState::kDefaultStackBase)
+    );
+
+    if (!finalPassed) {
+        std::cout
+            << "\nDifferential final-state validation failed.\n";
+        return 1;
+    }
+
+    std::cout
+        << "\nVector/binary differential test finished successfully.\n";
+    return 0;
+}
+
 int runBinaryTest(const std::string& outputPath) {
     using namespace zero_cpu;
     using namespace zero_cpu::binary;
@@ -5476,6 +5972,7 @@ void printUsage() {
     std::cout << "  zero_cli binary-test [output.zbin]\n";
     std::cout << "  zero_cli alu-test\n";
     std::cout << "  zero_cli signed-branch-test\n";
+    std::cout << "  zero_cli differential-test\n";
     std::cout << "  zero_cli trace-json-test\n";
     std::cout << "  zero_cli trace-diff-test\n";
     std::cout << "  zero_cli trace-diff <expected.json> <actual.json> [--strict]\n";
@@ -5540,6 +6037,17 @@ int main(int argc, char* argv[]) {
                 }
 
                 return runAluTest();
+            }
+
+            if (command == "differential-test") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid differential-test command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runDifferentialTest();
             }
 
             if (command == "signed-branch-test") {
