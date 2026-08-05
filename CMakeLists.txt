@@ -147,6 +147,8 @@ add_library(zero_cpu_core
     src/binary/BinaryReader.cpp
     src/binary/BinaryLoader.cpp
 
+    src/kernel/ProcessState.cpp
+    src/kernel/ProcessContext.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -281,7 +283,38 @@ zero_cpu_enable_coverage(
     zero_kernel_stack_test
 )
 
+
+add_executable(zero_process_context_test
+    tests/process_context.cpp
+)
+
+target_link_libraries(zero_process_context_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_process_context_test
+)
+
+zero_cpu_enable_coverage(
+    zero_process_context_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.process_context
+        COMMAND $<TARGET_FILE:zero_process_context_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.process_context
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;process;context"
+    )
+
     add_test(
         NAME zero_cpu.kernel_stack
         COMMAND $<TARGET_FILE:zero_kernel_stack_test>
