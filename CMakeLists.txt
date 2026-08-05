@@ -151,6 +151,7 @@ add_library(zero_cpu_core
     src/kernel/ProcessContext.cpp
     src/kernel/ProcessControlBlock.cpp
     src/kernel/ProcessTable.cpp
+    src/kernel/RoundRobinScheduler.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -321,7 +322,39 @@ zero_cpu_enable_coverage(
     zero_process_table_test
 )
 
+
+add_executable(zero_round_robin_scheduler_test
+    tests/round_robin_scheduler.cpp
+)
+
+target_link_libraries(
+    zero_round_robin_scheduler_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_round_robin_scheduler_test
+)
+
+zero_cpu_enable_coverage(
+    zero_round_robin_scheduler_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.round_robin_scheduler
+        COMMAND $<TARGET_FILE:zero_round_robin_scheduler_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.round_robin_scheduler
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;scheduler;round-robin"
+    )
+
     add_test(
         NAME zero_cpu.process_table
         COMMAND $<TARGET_FILE:zero_process_table_test>
