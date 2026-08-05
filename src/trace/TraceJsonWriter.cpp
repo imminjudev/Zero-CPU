@@ -203,6 +203,12 @@ void appendState(
 
     sizeField(oss, fieldIndent + 2, "pc", state.pc());
     sizeField(oss, fieldIndent + 2, "sp", state.sp());
+    stringField(
+        oss,
+        fieldIndent + 2,
+        "privilege",
+        privilegeLevelToString(state.privilegeLevel())
+    );
     boolField(oss, fieldIndent + 2, "halted", state.halted());
     boolField(oss, fieldIndent + 2, "has_error", state.hasError());
     stringField(

@@ -6097,8 +6097,8 @@ int runTraceJsonWriterTest() {
             std::string::npos
     );
     expect(
-        "schema version is 2",
-        json.find("\"schema_version\": 2") !=
+        "schema version is 3",
+        json.find("\"schema_version\": 3") !=
             std::string::npos
     );
     expect(

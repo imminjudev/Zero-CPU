@@ -66,6 +66,7 @@ add_library(zero_cpu_core
     src/core/Flags.cpp
     src/core/RegisterFile.cpp
     src/core/Memory.cpp
+    src/core/PrivilegeLevel.cpp
     src/core/CPUState.cpp
     src/core/ALU.cpp
     src/core/MMIOBus.cpp
@@ -131,7 +132,31 @@ target_link_libraries(zero_isa_conformance
 
 zero_cpu_enable_sanitizers(zero_isa_conformance)
 
+
+add_executable(zero_privilege_state_test
+    tests/privilege_state.cpp
+)
+
+target_link_libraries(zero_privilege_state_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(zero_privilege_state_test)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.privilege_state
+        COMMAND $<TARGET_FILE:zero_privilege_state_test>
+    )
+
+    set_tests_properties(zero_cpu.privilege_state
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;privilege;state"
+    )
+
     add_test(
         NAME zero_cpu.isa_conformance
         COMMAND $<TARGET_FILE:zero_isa_conformance>

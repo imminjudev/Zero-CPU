@@ -503,7 +503,7 @@ void validateTraceDocument(
         );
     }
 
-    if (requiredNumber(root, "schema_version") != 2) {
+    if (requiredNumber(root, "schema_version") != 3) {
         throw std::runtime_error(
             label + " trace uses unsupported schema version"
         );

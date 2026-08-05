@@ -2,6 +2,7 @@
 
 #include "zero_cpu/core/Flags.hpp"
 #include "zero_cpu/core/Memory.hpp"
+#include "zero_cpu/core/PrivilegeLevel.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 
 #include <cstddef>
@@ -23,6 +24,11 @@ public:
 
     Flags& flags();
     const Flags& flags() const;
+
+    PrivilegeLevel privilegeLevel() const;
+    void setPrivilegeLevel(PrivilegeLevel value);
+    bool isKernelMode() const;
+    bool isUserMode() const;
 
     std::size_t pc() const;
     void setPc(std::size_t value);
@@ -48,6 +54,9 @@ private:
     RegisterFile registers_;
     Memory memory_;
     Flags flags_;
+
+    PrivilegeLevel privilege_level_ =
+        PrivilegeLevel::Kernel;
 
     std::size_t pc_ = 0;
     std::size_t sp_ = kDefaultStackBase;

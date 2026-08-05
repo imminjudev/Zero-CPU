@@ -32,6 +32,22 @@ const Flags& CPUState::flags() const {
     return flags_;
 }
 
+PrivilegeLevel CPUState::privilegeLevel() const {
+    return privilege_level_;
+}
+
+void CPUState::setPrivilegeLevel(PrivilegeLevel value) {
+    privilege_level_ = value;
+}
+
+bool CPUState::isKernelMode() const {
+    return privilege_level_ == PrivilegeLevel::Kernel;
+}
+
+bool CPUState::isUserMode() const {
+    return privilege_level_ == PrivilegeLevel::User;
+}
+
 std::size_t CPUState::pc() const {
     return pc_;
 }
@@ -88,6 +104,8 @@ void CPUState::reset() {
     memory_.reset();
     flags_.reset();
 
+    privilege_level_ = PrivilegeLevel::Kernel;
+
     pc_ = 0;
     sp_ = kDefaultStackBase;
 
@@ -101,6 +119,9 @@ std::string CPUState::summary() const {
 
     oss << "PC = " << pc_ << "\n";
     oss << "SP = " << sp_ << "\n";
+    oss << "Privilege = "
+        << privilegeLevelToString(privilege_level_)
+        << "\n";
     oss << "Halted = " << (halted_ ? "true" : "false") << "\n";
 
     if (has_error_) {

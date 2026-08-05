@@ -17,7 +17,7 @@ struct TraceJsonMetadata {
 
 class TraceJsonWriter {
 public:
-    inline static constexpr std::size_t kSchemaVersion = 2;
+    inline static constexpr std::size_t kSchemaVersion = 3;
 
     static std::string toJson(
         const std::vector<TraceEvent>& events,

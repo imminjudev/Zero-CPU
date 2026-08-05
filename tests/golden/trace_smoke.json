@@ -1,6 +1,6 @@
 {
   "schema": "zero_cpu_trace",
-  "schema_version": 2,
+  "schema_version": 3,
   "mode": "Assembly",
   "event_count": 4,
   "events": [
@@ -14,6 +14,7 @@
       "state_before": {
         "pc": 0,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -38,6 +39,7 @@
       "state_after": {
         "pc": 1,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -81,6 +83,7 @@
       "state_before": {
         "pc": 1,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -105,6 +108,7 @@
       "state_after": {
         "pc": 2,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -148,6 +152,7 @@
       "state_before": {
         "pc": 2,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -172,6 +177,7 @@
       "state_after": {
         "pc": 3,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -215,6 +221,7 @@
       "state_before": {
         "pc": 3,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": false,
         "has_error": false,
         "error_message": "",
@@ -239,6 +246,7 @@
       "state_after": {
         "pc": 3,
         "sp": 2048,
+        "privilege": "Kernel",
         "halted": true,
         "has_error": false,
         "error_message": "",
