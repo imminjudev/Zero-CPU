@@ -247,7 +247,37 @@ zero_cpu_enable_coverage(
     zero_memory_protection_test
 )
 
+
+add_executable(zero_execution_protection_test
+    tests/execution_protection.cpp
+)
+
+target_link_libraries(zero_execution_protection_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_execution_protection_test
+)
+zero_cpu_enable_coverage(
+    zero_execution_protection_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.execution_protection
+        COMMAND $<TARGET_FILE:zero_execution_protection_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.execution_protection
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;privilege;execution"
+    )
+
     add_test(
         NAME zero_cpu.memory_protection
         COMMAND $<TARGET_FILE:zero_memory_protection_test>

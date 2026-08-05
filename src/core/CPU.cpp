@@ -87,6 +87,10 @@ void CPU::reset() {
     binary_code_base_ = 0;
     binary_entry_point_ = 0;
     binary_code_size_ = 0;
+
+    has_user_code_range_ = false;
+    user_code_begin_ = 0;
+    user_code_end_exclusive_ = 0;
 }
 
 void CPU::loadProgram(
@@ -102,6 +106,10 @@ void CPU::loadProgram(
     binary_code_base_ = 0;
     binary_entry_point_ = 0;
     binary_code_size_ = 0;
+
+    has_user_code_range_ = !program_.empty();
+    user_code_begin_ = 0;
+    user_code_end_exclusive_ = program_.size();
 }
 
 void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
@@ -124,6 +132,11 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
     binary_code_base_ = image.code_base;
     binary_entry_point_ = image.entry_point;
     binary_code_size_ = image.code_size;
+
+    has_user_code_range_ = binary_code_size_ != 0;
+    user_code_begin_ = binary_code_base_;
+    user_code_end_exclusive_ =
+        binary_code_base_ + binary_code_size_;
 }
 
 void CPU::step() {
@@ -169,6 +182,7 @@ void CPU::step() {
         std::string error_message;
 
         try {
+            requireCurrentPcExecutable();
             instruction = traceInstructionForCurrentBinaryPc();
             stepBinary();
 
@@ -193,30 +207,20 @@ void CPU::step() {
     }
 
     const std::size_t pc = state_.pc();
-
-    if (pc >= program_.size()) {
-        const CPUState before = state_;
-        const std::string error_message = "PC out of program range";
-
-        setRuntimeError(error_message);
-
-        trace_logger_.record(
-            TraceEvent(
-                before,
-                Instruction(Opcode::Invalid),
-                state_,
-                error_message
-            )
-        );
-
-        return;
-    }
-
     const CPUState before = state_;
-    const Instruction instruction = program_[pc];
+    Instruction instruction(Opcode::Invalid);
     std::string error_message;
 
     try {
+        requireCurrentPcExecutable();
+
+        if (pc >= program_.size()) {
+            throw std::runtime_error(
+                "PC out of program range"
+            );
+        }
+
+        instruction = program_[pc];
         execute(instruction);
 
         if (!state_.halted() && !state_.hasError()) {
@@ -297,6 +301,68 @@ std::size_t CPU::binaryEntryPoint() const {
 
 std::size_t CPU::binaryCodeSize() const {
     return binary_code_size_;
+}
+
+void CPU::setUserCodeRange(
+    std::size_t begin,
+    std::size_t endExclusive
+) {
+    if (begin >= endExclusive) {
+        throw std::runtime_error(
+            "User code range must be non-empty"
+        );
+    }
+
+    if (has_binary_program_) {
+        const std::size_t codeEnd =
+            binary_code_base_ + binary_code_size_;
+
+        if (
+            begin < binary_code_base_
+            || endExclusive > codeEnd
+        ) {
+            throw std::runtime_error(
+                "User code range is outside loaded binary code"
+            );
+        }
+
+        if (
+            (begin - binary_code_base_)
+                % binary::kInstructionSize != 0
+            || (endExclusive - binary_code_base_)
+                % binary::kInstructionSize != 0
+        ) {
+            throw std::runtime_error(
+                "User binary code range must be "
+                "instruction-aligned"
+            );
+        }
+    } else {
+        if (
+            program_.empty()
+            || endExclusive > program_.size()
+        ) {
+            throw std::runtime_error(
+                "User code range is outside loaded program"
+            );
+        }
+    }
+
+    has_user_code_range_ = true;
+    user_code_begin_ = begin;
+    user_code_end_exclusive_ = endExclusive;
+}
+
+bool CPU::hasUserCodeRange() const {
+    return has_user_code_range_;
+}
+
+std::size_t CPU::userCodeBegin() const {
+    return user_code_begin_;
+}
+
+std::size_t CPU::userCodeEndExclusive() const {
+    return user_code_end_exclusive_;
 }
 
 void CPU::setMMIOBus(std::shared_ptr<MMIOBus> bus) {
@@ -417,6 +483,58 @@ void CPU::requireDataMemoryAccess(
         + " address "
         + std::to_string(address)
     );
+}
+
+bool CPU::isLoadedCodeAddress(
+    std::size_t address
+) const {
+    if (has_binary_program_) {
+        return isBinaryPcInCode(address);
+    }
+
+    return address < program_.size();
+}
+
+void CPU::requireExecutionAddress(
+    std::size_t address,
+    PrivilegeLevel privilege
+) const {
+    if (privilege != PrivilegeLevel::User) {
+        return;
+    }
+
+    const bool insideUserRange =
+        has_user_code_range_
+        && address >= user_code_begin_
+        && address < user_code_end_exclusive_;
+
+    if (
+        insideUserRange
+        && isLoadedCodeAddress(address)
+    ) {
+        return;
+    }
+
+    throw std::runtime_error(
+        "Execution protection violation: User mode "
+        "cannot execute address "
+        + std::to_string(address)
+    );
+}
+
+void CPU::requireCurrentPcExecutable() const {
+    requireExecutionAddress(
+        state_.pc(),
+        state_.privilegeLevel()
+    );
+}
+
+void CPU::setPcForExecution(std::size_t address) {
+    requireExecutionAddress(
+        address,
+        state_.privilegeLevel()
+    );
+    state_.setPc(address);
 }
 
 std::int64_t CPU::readDataMemory(std::size_t address) {
@@ -820,7 +938,7 @@ void CPU::executeBinaryInstruction(
                 instruction.dst_payload
             );
 
-        state_.setPc(target);
+        setPcForExecution(target);
         break;
     }
 
@@ -828,7 +946,7 @@ void CPU::executeBinaryInstruction(
         requireSingleBinaryOperand(instruction);
 
         if (state_.flags().zero()) {
-            state_.setPc(
+            setPcForExecution(
                 readBinaryCodeAddress(
                     instruction.dst_type,
                     instruction.dst_payload
@@ -845,7 +963,7 @@ void CPU::executeBinaryInstruction(
         requireSingleBinaryOperand(instruction);
 
         if (!state_.flags().zero()) {
-            state_.setPc(
+            setPcForExecution(
                 readBinaryCodeAddress(
                     instruction.dst_type,
                     instruction.dst_payload
@@ -862,7 +980,7 @@ void CPU::executeBinaryInstruction(
         requireSingleBinaryOperand(instruction);
 
         if (signedGreaterThanFromFlags(state_.flags())) {
-            state_.setPc(
+            setPcForExecution(
                 readBinaryCodeAddress(
                     instruction.dst_type,
                     instruction.dst_payload
@@ -879,7 +997,7 @@ void CPU::executeBinaryInstruction(
         requireSingleBinaryOperand(instruction);
 
         if (signedLessThanFromFlags(state_.flags())) {
-            state_.setPc(
+            setPcForExecution(
                 readBinaryCodeAddress(
                     instruction.dst_type,
                     instruction.dst_payload
@@ -938,6 +1056,15 @@ void CPU::executeBinaryInstruction(
         const std::size_t returnAddress =
             state_.pc() + binary::kInstructionSize;
 
+        requireExecutionAddress(
+            target,
+            state_.privilegeLevel()
+        );
+        requireExecutionAddress(
+            returnAddress,
+            state_.privilegeLevel()
+        );
+
         pushValue(static_cast<std::int64_t>(returnAddress));
         state_.setPc(target);
         break;
@@ -946,13 +1073,22 @@ void CPU::executeBinaryInstruction(
     case Opcode::RET: {
         requireNoBinaryOperands(instruction);
 
-        const std::int64_t returnAddress = popValue();
-        state_.setPc(
+        const std::int64_t returnAddressValue =
+            peekValue();
+
+        const std::size_t returnAddress =
             checkedReturnAddress(
-                returnAddress,
+                returnAddressValue,
                 "Negative binary return address"
-            )
+            );
+
+        requireExecutionAddress(
+            returnAddress,
+            state_.privilegeLevel()
         );
+
+        (void)popValue();
+        state_.setPc(returnAddress);
         break;
     }
 
@@ -1596,14 +1732,18 @@ void CPU::executeCmp(const Instruction& instruction) {
 
 void CPU::executeJmp(const Instruction& instruction) {
     requireSingleOperand(instruction);
-    state_.setPc(resolveLabelAddress(instruction.dst()));
+    setPcForExecution(
+        resolveLabelAddress(instruction.dst())
+    );
 }
 
 void CPU::executeJe(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
     if (state_.flags().zero()) {
-        state_.setPc(resolveLabelAddress(instruction.dst()));
+        setPcForExecution(
+            resolveLabelAddress(instruction.dst())
+        );
     } else {
         advancePcUnlessHalted();
     }
@@ -1613,7 +1753,9 @@ void CPU::executeJne(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
     if (!state_.flags().zero()) {
-        state_.setPc(resolveLabelAddress(instruction.dst()));
+        setPcForExecution(
+            resolveLabelAddress(instruction.dst())
+        );
     } else {
         advancePcUnlessHalted();
     }
@@ -1623,7 +1765,9 @@ void CPU::executeJg(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
     if (signedGreaterThanFromFlags(state_.flags())) {
-        state_.setPc(resolveLabelAddress(instruction.dst()));
+        setPcForExecution(
+            resolveLabelAddress(instruction.dst())
+        );
     } else {
         advancePcUnlessHalted();
     }
@@ -1633,7 +1777,9 @@ void CPU::executeJl(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
     if (signedLessThanFromFlags(state_.flags())) {
-        state_.setPc(resolveLabelAddress(instruction.dst()));
+        setPcForExecution(
+            resolveLabelAddress(instruction.dst())
+        );
     } else {
         advancePcUnlessHalted();
     }
@@ -1663,22 +1809,42 @@ void CPU::executePop(const Instruction& instruction) {
 void CPU::executeCall(const Instruction& instruction) {
     requireSingleOperand(instruction);
 
+    const std::size_t target =
+        resolveLabelAddress(instruction.dst());
     const std::size_t returnAddress = state_.pc() + 1;
-    pushValue(static_cast<std::int64_t>(returnAddress));
 
-    state_.setPc(resolveLabelAddress(instruction.dst()));
+    requireExecutionAddress(
+        target,
+        state_.privilegeLevel()
+    );
+    requireExecutionAddress(
+        returnAddress,
+        state_.privilegeLevel()
+    );
+
+    pushValue(static_cast<std::int64_t>(returnAddress));
+    state_.setPc(target);
 }
 
 void CPU::executeRet(const Instruction& instruction) {
     requireNoOperand(instruction);
 
-    const std::int64_t returnAddress = popValue();
-    state_.setPc(
+    const std::int64_t returnAddressValue =
+        peekValue();
+
+    const std::size_t returnAddress =
         checkedReturnAddress(
-            returnAddress,
+            returnAddressValue,
             "Negative return address"
-        )
+        );
+
+    requireExecutionAddress(
+        returnAddress,
+        state_.privilegeLevel()
     );
+
+    (void)popValue();
+    state_.setPc(returnAddress);
 }
 
 void CPU::executeIret(const Instruction& instruction) {
@@ -1989,6 +2155,14 @@ std::int64_t CPU::popValue() {
     return value;
 }
 
+std::int64_t CPU::peekValue() const {
+    requireStackPopSlots(1);
+
+    return state_.memory().read(
+        state_.sp() - kStackSlotSize
+    );
+}
+
 void CPU::pushInterruptFrame(std::size_t returnAddress) {
     requireStackPushSlots(kInterruptFrameSlotCount);
 
@@ -2031,6 +2205,11 @@ void CPU::restoreInterruptFrame(
             returnAddressValue,
             returnAddressError
         );
+
+    requireExecutionAddress(
+        restoredPc,
+        restoredPrivilege
+    );
 
     state_.setSp(sp - kInterruptFrameSize);
     restoreFlags(state_.flags(), flagsValue);

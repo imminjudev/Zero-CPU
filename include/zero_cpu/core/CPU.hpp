@@ -59,6 +59,14 @@ public:
     std::size_t binaryEntryPoint() const;
     std::size_t binaryCodeSize() const;
 
+    void setUserCodeRange(
+        std::size_t begin,
+        std::size_t endExclusive
+    );
+    bool hasUserCodeRange() const;
+    std::size_t userCodeBegin() const;
+    std::size_t userCodeEndExclusive() const;
+
     void setMMIOBus(std::shared_ptr<MMIOBus> bus);
     void clearMMIOBus();
     bool hasMMIOBus() const;
@@ -84,6 +92,10 @@ private:
     std::size_t binary_entry_point_ = 0;
     std::size_t binary_code_size_ = 0;
 
+    bool has_user_code_range_ = false;
+    std::size_t user_code_begin_ = 0;
+    std::size_t user_code_end_exclusive_ = 0;
+
     std::shared_ptr<MMIOBus> mmio_bus_;
     std::shared_ptr<InterruptController> interrupt_controller_;
     std::vector<std::shared_ptr<ClockedDevice>> clocked_devices_;
@@ -95,6 +107,16 @@ private:
         std::size_t address,
         const char* operation
     ) const;
+
+    bool isLoadedCodeAddress(std::size_t address) const;
+
+    void requireExecutionAddress(
+        std::size_t address,
+        PrivilegeLevel privilege
+    ) const;
+
+    void requireCurrentPcExecutable() const;
+    void setPcForExecution(std::size_t address);
 
     std::int64_t readDataMemory(std::size_t address);
     void writeDataMemory(std::size_t address, std::int64_t value);
@@ -202,6 +224,7 @@ private:
 
     void pushValue(std::int64_t value);
     std::int64_t popValue();
+    std::int64_t peekValue() const;
 
     void pushInterruptFrame(std::size_t returnAddress);
     void restoreInterruptFrame(const char* returnAddressError);
