@@ -522,6 +522,8 @@ Operand CPU::traceOperandFromEncoded(
 void CPU::executeBinaryInstruction(
     const DecodedInstruction& instruction
 ) {
+    requireInstructionPrivilege(instruction.opcode);
+
     switch (instruction.opcode) {
     case Opcode::NOP:
         requireNoBinaryOperands(instruction);
@@ -1302,7 +1304,31 @@ void CPU::advanceBinaryPcUnlessHalted() {
     }
 }
 
+void CPU::requireInstructionPrivilege(
+    Opcode opcode
+) const {
+    if (!state_.isUserMode()) {
+        return;
+    }
+
+    switch (opcode) {
+    case Opcode::HALT:
+    case Opcode::EI:
+    case Opcode::DI:
+        throw std::runtime_error(
+            "Privilege violation: "
+            + opcodeToString(opcode)
+            + " requires Kernel mode"
+        );
+
+    default:
+        return;
+    }
+}
+
 void CPU::execute(const Instruction& instruction) {
+    requireInstructionPrivilege(instruction.opcode());
+
     switch (instruction.opcode()) {
     case Opcode::NOP:
         executeNop(instruction);

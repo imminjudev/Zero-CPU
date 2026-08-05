@@ -144,7 +144,34 @@ target_link_libraries(zero_privilege_state_test
 
 zero_cpu_enable_sanitizers(zero_privilege_state_test)
 
+
+add_executable(zero_privileged_instruction_test
+    tests/privileged_instruction.cpp
+)
+
+target_link_libraries(zero_privileged_instruction_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_privileged_instruction_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.privileged_instruction
+        COMMAND $<TARGET_FILE:zero_privileged_instruction_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.privileged_instruction
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;privilege;instruction"
+    )
+
     add_test(
         NAME zero_cpu.privilege_state
         COMMAND $<TARGET_FILE:zero_privilege_state_test>

@@ -104,6 +104,8 @@ private:
         const DecodedInstruction& instruction
     );
 
+    void requireInstructionPrivilege(Opcode opcode) const;
+
     RegisterName decodeBinaryRegister(std::int64_t payload) const;
 
     std::int64_t readBinaryOperandValue(
