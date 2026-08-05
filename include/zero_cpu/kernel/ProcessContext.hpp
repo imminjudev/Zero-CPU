@@ -49,6 +49,11 @@ void validateProcessContext(
     const ProcessContext& context
 );
 
+void validateProcessContextForCPU(
+    const ProcessContext& context,
+    const CPU& cpu
+);
+
 ProcessContext captureProcessContext(
     ProcessId pid,
     const CPU& cpu

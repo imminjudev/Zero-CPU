@@ -312,10 +312,10 @@ std::size_t CPU::binaryCodeSize() const {
     return binary_code_size_;
 }
 
-void CPU::setUserCodeRange(
+void CPU::validateUserCodeRange(
     std::size_t begin,
     std::size_t endExclusive
-) {
+) const {
     if (begin >= endExclusive) {
         throw std::runtime_error(
             "User code range must be non-empty"
@@ -356,10 +356,26 @@ void CPU::setUserCodeRange(
             );
         }
     }
+}
+
+void CPU::setUserCodeRange(
+    std::size_t begin,
+    std::size_t endExclusive
+) {
+    validateUserCodeRange(
+        begin,
+        endExclusive
+    );
 
     has_user_code_range_ = true;
     user_code_begin_ = begin;
     user_code_end_exclusive_ = endExclusive;
+}
+
+void CPU::clearUserCodeRange() {
+    has_user_code_range_ = false;
+    user_code_begin_ = 0;
+    user_code_end_exclusive_ = 0;
 }
 
 bool CPU::hasUserCodeRange() const {

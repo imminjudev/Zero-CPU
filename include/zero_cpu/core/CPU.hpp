@@ -59,10 +59,18 @@ public:
     std::size_t binaryEntryPoint() const;
     std::size_t binaryCodeSize() const;
 
+    void validateUserCodeRange(
+        std::size_t begin,
+        std::size_t endExclusive
+    ) const;
+
     void setUserCodeRange(
         std::size_t begin,
         std::size_t endExclusive
     );
+
+    void clearUserCodeRange();
+
     bool hasUserCodeRange() const;
     std::size_t userCodeBegin() const;
     std::size_t userCodeEndExclusive() const;

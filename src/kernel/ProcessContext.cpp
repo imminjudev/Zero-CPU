@@ -162,6 +162,20 @@ void validateProcessContext(
     validateKernelStackPointer(context);
 }
 
+void validateProcessContextForCPU(
+    const ProcessContext& context,
+    const CPU& cpu
+) {
+    validateProcessContext(context);
+
+    if (context.has_user_code_range) {
+        cpu.validateUserCodeRange(
+            context.user_code_begin,
+            context.user_code_end_exclusive
+        );
+    }
+}
+
 ProcessContext captureProcessContext(
     ProcessId pid,
     const CPU& cpu
@@ -214,7 +228,11 @@ void restoreProcessContext(
     const ProcessContext& context,
     CPU& cpu
 ) {
-    validateProcessContext(context);
+    validateProcessContextForCPU(
+        context,
+        cpu
+    );
+
     requireContextSwitchableCPU(cpu);
 
     if (context.has_user_code_range) {
@@ -222,6 +240,8 @@ void restoreProcessContext(
             context.user_code_begin,
             context.user_code_end_exclusive
         );
+    } else {
+        cpu.clearUserCodeRange();
     }
 
     cpu.setKernelStackPointer(
