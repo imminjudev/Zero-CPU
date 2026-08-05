@@ -3,6 +3,7 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/core/CPUState.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/PrivilegeLevel.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
@@ -161,8 +162,11 @@ bool interruptRoundTrip(
     cpu.state().flags().setOverflow(true);
     cpu.state().setPrivilegeLevel(startingPrivilege);
 
-    const std::size_t stackBase =
-        CPUState::kDefaultStackBase;
+    const std::size_t originalSp = cpu.state().sp();
+    const std::size_t expectedFrameBase =
+        startingPrivilege == PrivilegeLevel::User
+            ? memory_map::kKernelStackBase
+            : originalSp;
     const std::size_t originalPc = cpu.state().pc();
     const std::uint32_t originalFlags =
         cpu.state().flags().raw();
@@ -200,14 +204,14 @@ bool interruptRoundTrip(
 
     if (
         cpu.state().sp()
-        != stackBase + CPU::kInterruptFrameSize
+        != expectedFrameBase + CPU::kInterruptFrameSize
     ) {
         detail = "interrupt frame size mismatch";
         return false;
     }
 
     if (
-        cpu.state().memory().read(stackBase)
+        cpu.state().memory().read(expectedFrameBase)
         != static_cast<std::int64_t>(expectedReturnPc)
     ) {
         detail = "saved return address mismatch";
@@ -216,7 +220,7 @@ bool interruptRoundTrip(
 
     if (
         cpu.state().memory().read(
-            stackBase + CPU::kStackSlotSize
+            expectedFrameBase + CPU::kStackSlotSize
         )
         != expectedSavedFlags
     ) {
@@ -226,11 +230,21 @@ bool interruptRoundTrip(
 
     if (
         cpu.state().memory().read(
-            stackBase + CPU::kStackSlotSize * 2
+            expectedFrameBase + CPU::kStackSlotSize * 2
         )
         != privilegeLevelToRaw(startingPrivilege)
     ) {
         detail = "saved privilege mismatch";
+        return false;
+    }
+
+    if (
+        cpu.state().memory().read(
+            expectedFrameBase + CPU::kStackSlotSize * 3
+        )
+        != static_cast<std::int64_t>(originalSp)
+    ) {
+        detail = "saved SP mismatch";
         return false;
     }
 
@@ -270,7 +284,7 @@ bool interruptRoundTrip(
         return false;
     }
 
-    if (cpu.state().sp() != stackBase) {
+    if (cpu.state().sp() != originalSp) {
         detail = "IRET did not restore SP";
         return false;
     }
@@ -331,8 +345,10 @@ bool nestedInterruptRoundTrip(
     );
     cpu.setInterruptController(controller);
 
-    const std::size_t stackBase =
+    const std::size_t userStackPointer =
         CPUState::kDefaultStackBase;
+    const std::size_t stackBase =
+        memory_map::kKernelStackBase;
     const std::size_t originalPc = cpu.state().pc();
 
     cpu.state().setPrivilegeLevel(PrivilegeLevel::User);
@@ -399,7 +415,7 @@ bool nestedInterruptRoundTrip(
         cpu.state().hasError()
         || !cpu.state().isUserMode()
         || cpu.state().pc() != originalPc
-        || cpu.state().sp() != stackBase
+        || cpu.state().sp() != userStackPointer
     ) {
         detail = "outer IRET did not restore User frame";
         return false;
@@ -436,6 +452,10 @@ bool directUserIretIsDenied(
     cpu.state().memory().write(
         stackBase + CPU::kStackSlotSize * 2,
         privilegeLevelToRaw(PrivilegeLevel::User)
+    );
+    cpu.state().memory().write(
+        stackBase + CPU::kStackSlotSize * 3,
+        static_cast<std::int64_t>(stackBase)
     );
     cpu.state().setSp(
         stackBase + CPU::kInterruptFrameSize
@@ -512,6 +532,10 @@ bool invalidPrivilegeFrameIsAtomic(
         stackBase + CPU::kStackSlotSize * 2,
         7
     );
+    cpu.state().memory().write(
+        stackBase + CPU::kStackSlotSize * 3,
+        static_cast<std::int64_t>(stackBase)
+    );
     cpu.state().setSp(
         stackBase + CPU::kInterruptFrameSize
     );
@@ -558,21 +582,19 @@ bool interruptOverflowIsAtomic(std::string& detail) {
     controller->setVectorHandler(50, 1);
     cpu.setInterruptController(controller);
 
-    const std::size_t memorySize =
-        cpu.state().memory().size();
-    const std::size_t spBefore =
-        memorySize - CPU::kStackSlotSize * 2;
+    const std::size_t kernelSpBefore =
+        memory_map::kKernelStackEndExclusive
+        - CPU::kStackSlotSize * 3;
+    const std::size_t userSpBefore =
+        CPUState::kDefaultStackBase;
     const std::size_t pcBefore = cpu.state().pc();
 
-    cpu.state().setSp(spBefore);
+    cpu.setKernelStackPointer(kernelSpBefore);
+    cpu.state().setSp(userSpBefore);
     cpu.state().setPrivilegeLevel(PrivilegeLevel::User);
 
-    const std::int64_t firstBefore =
-        cpu.state().memory().read(spBefore);
-    const std::int64_t secondBefore =
-        cpu.state().memory().read(
-            spBefore + CPU::kStackSlotSize
-        );
+    const std::vector<std::int64_t> memoryBefore =
+        cpu.state().memory().snapshot();
 
     controller->request(50, 0, "overflow");
     cpu.step();
@@ -587,13 +609,11 @@ bool interruptOverflowIsAtomic(std::string& detail) {
 
     if (
         !cpu.state().isUserMode()
-        || cpu.state().sp() != spBefore
+        || cpu.state().sp() != userSpBefore
         || cpu.state().pc() != pcBefore
-        || cpu.state().memory().read(spBefore)
-            != firstBefore
-        || cpu.state().memory().read(
-            spBefore + CPU::kStackSlotSize
-        ) != secondBefore
+        || cpu.state().memory().snapshot() != memoryBefore
+        || cpu.kernelStackPointer() != kernelSpBefore
+        || cpu.usingKernelInterruptStack()
     ) {
         detail = "overflow partially wrote interrupt frame";
         return false;

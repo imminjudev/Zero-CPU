@@ -91,6 +91,9 @@ void CPU::reset() {
     has_user_code_range_ = false;
     user_code_begin_ = 0;
     user_code_end_exclusive_ = 0;
+
+    kernel_stack_pointer_ = memory_map::kKernelStackBase;
+    using_kernel_interrupt_stack_ = false;
 }
 
 void CPU::loadProgram(
@@ -110,6 +113,9 @@ void CPU::loadProgram(
     has_user_code_range_ = !program_.empty();
     user_code_begin_ = 0;
     user_code_end_exclusive_ = program_.size();
+
+    kernel_stack_pointer_ = memory_map::kKernelStackBase;
+    using_kernel_interrupt_stack_ = false;
 }
 
 void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
@@ -137,6 +143,9 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
     user_code_begin_ = binary_code_base_;
     user_code_end_exclusive_ =
         binary_code_base_ + binary_code_size_;
+
+    kernel_stack_pointer_ = memory_map::kKernelStackBase;
+    using_kernel_interrupt_stack_ = false;
 }
 
 void CPU::step() {
@@ -363,6 +372,30 @@ std::size_t CPU::userCodeBegin() const {
 
 std::size_t CPU::userCodeEndExclusive() const {
     return user_code_end_exclusive_;
+}
+
+void CPU::setKernelStackPointer(std::size_t value) {
+    if (using_kernel_interrupt_stack_) {
+        throw std::runtime_error(
+            "Cannot change Kernel stack pointer while active"
+        );
+    }
+
+    requireStackPointerInRange(
+        value,
+        memory_map::kKernelStackBase,
+        memory_map::kKernelStackEndExclusive
+    );
+
+    kernel_stack_pointer_ = value;
+}
+
+std::size_t CPU::kernelStackPointer() const {
+    return kernel_stack_pointer_;
+}
+
+bool CPU::usingKernelInterruptStack() const {
+    return using_kernel_interrupt_stack_;
 }
 
 void CPU::setMMIOBus(std::shared_ptr<MMIOBus> bus) {
@@ -2027,13 +2060,35 @@ std::size_t CPU::resolveLabelAddress(const Operand& operand) const {
     return it->second;
 }
 
-void CPU::requireStackPushSlots(
-    std::size_t slotCount
-) const {
-    const std::size_t sp = state_.sp();
-    const std::size_t stackBase = CPUState::kDefaultStackBase;
-    const std::size_t memorySize = state_.memory().size();
+std::size_t CPU::activeStackBase() const {
+    if (state_.isUserMode()) {
+        return memory_map::kUserStackBase;
+    }
 
+    if (using_kernel_interrupt_stack_) {
+        return memory_map::kKernelStackBase;
+    }
+
+    return CPUState::kDefaultStackBase;
+}
+
+std::size_t CPU::activeStackEndExclusive() const {
+    if (state_.isUserMode()) {
+        return memory_map::kUserStackEndExclusive;
+    }
+
+    if (using_kernel_interrupt_stack_) {
+        return memory_map::kKernelStackEndExclusive;
+    }
+
+    return state_.memory().size();
+}
+
+void CPU::requireStackPointerInRange(
+    std::size_t sp,
+    std::size_t stackBase,
+    std::size_t stackEndExclusive
+) const {
     if (sp < stackBase) {
         throw std::runtime_error(
             "Stack pointer is below stack base"
@@ -2046,44 +2101,44 @@ void CPU::requireStackPushSlots(
         );
     }
 
-    if (sp > memorySize) {
+    if (sp > stackEndExclusive) {
         throw std::runtime_error(
             "Stack pointer is outside memory"
         );
     }
+}
+
+void CPU::requireStackPushSlotsAt(
+    std::size_t sp,
+    std::size_t stackBase,
+    std::size_t stackEndExclusive,
+    std::size_t slotCount
+) const {
+    requireStackPointerInRange(
+        sp,
+        stackBase,
+        stackEndExclusive
+    );
 
     const std::size_t availableSlots =
-        (memorySize - sp) / kStackSlotSize;
+        (stackEndExclusive - sp) / kStackSlotSize;
 
     if (slotCount > availableSlots) {
         throw std::runtime_error("Stack overflow");
     }
 }
 
-void CPU::requireStackPopSlots(
+void CPU::requireStackPopSlotsAt(
+    std::size_t sp,
+    std::size_t stackBase,
+    std::size_t stackEndExclusive,
     std::size_t slotCount
 ) const {
-    const std::size_t sp = state_.sp();
-    const std::size_t stackBase = CPUState::kDefaultStackBase;
-    const std::size_t memorySize = state_.memory().size();
-
-    if (sp < stackBase) {
-        throw std::runtime_error(
-            "Stack pointer is below stack base"
-        );
-    }
-
-    if ((sp - stackBase) % kStackSlotSize != 0) {
-        throw std::runtime_error(
-            "Stack pointer is not slot-aligned"
-        );
-    }
-
-    if (sp > memorySize) {
-        throw std::runtime_error(
-            "Stack pointer is outside memory"
-        );
-    }
+    requireStackPointerInRange(
+        sp,
+        stackBase,
+        stackEndExclusive
+    );
 
     const std::size_t usedSlots =
         (sp - stackBase) / kStackSlotSize;
@@ -2093,65 +2148,54 @@ void CPU::requireStackPopSlots(
     }
 }
 
+void CPU::requireStackPushSlots(
+    std::size_t slotCount
+) const {
+    requireStackPushSlotsAt(
+        state_.sp(),
+        activeStackBase(),
+        activeStackEndExclusive(),
+        slotCount
+    );
+}
+
+void CPU::requireStackPopSlots(
+    std::size_t slotCount
+) const {
+    requireStackPopSlotsAt(
+        state_.sp(),
+        activeStackBase(),
+        activeStackEndExclusive(),
+        slotCount
+    );
+}
+
 void CPU::pushValue(std::int64_t value) {
+    requireStackPushSlots(1);
+
     const std::size_t sp = state_.sp();
-    const std::size_t stackBase = CPUState::kDefaultStackBase;
-    const std::size_t memorySize = state_.memory().size();
-
-    if (sp < stackBase) {
-        throw std::runtime_error(
-            "Stack pointer is below stack base"
-        );
-    }
-
-    if ((sp - stackBase) % kStackSlotSize != 0) {
-        throw std::runtime_error(
-            "Stack pointer is not slot-aligned"
-        );
-    }
-
-    if (
-        sp > memorySize ||
-        kStackSlotSize > memorySize - sp
-    ) {
-        throw std::runtime_error("Stack overflow");
-    }
-
     state_.memory().write(sp, value);
     state_.setSp(sp + kStackSlotSize);
+
+    if (using_kernel_interrupt_stack_) {
+        kernel_stack_pointer_ = state_.sp();
+    }
 }
 
 std::int64_t CPU::popValue() {
-    const std::size_t sp = state_.sp();
-    const std::size_t stackBase = CPUState::kDefaultStackBase;
-    const std::size_t memorySize = state_.memory().size();
+    requireStackPopSlots(1);
 
-    if (sp < stackBase) {
-        throw std::runtime_error(
-            "Stack pointer is below stack base"
-        );
-    }
-
-    if ((sp - stackBase) % kStackSlotSize != 0) {
-        throw std::runtime_error(
-            "Stack pointer is not slot-aligned"
-        );
-    }
-
-    if (sp > memorySize) {
-        throw std::runtime_error(
-            "Stack pointer is outside memory"
-        );
-    }
-
-    if (sp == stackBase) {
-        throw std::runtime_error("Stack underflow");
-    }
-
-    const std::size_t newSp = sp - kStackSlotSize;
-    const std::int64_t value = state_.memory().read(newSp);
+    const std::size_t newSp =
+        state_.sp() - kStackSlotSize;
+    const std::int64_t value =
+        state_.memory().read(newSp);
 
     state_.setSp(newSp);
+
+    if (using_kernel_interrupt_stack_) {
+        kernel_stack_pointer_ = newSp;
+    }
+
     return value;
 }
 
@@ -2164,16 +2208,61 @@ std::int64_t CPU::peekValue() const {
 }
 
 void CPU::pushInterruptFrame(std::size_t returnAddress) {
-    requireStackPushSlots(kInterruptFrameSlotCount);
+    const PrivilegeLevel interruptedPrivilege =
+        state_.privilegeLevel();
+    const std::size_t interruptedSp = state_.sp();
+
+    std::size_t frameBase = interruptedSp;
+
+    if (interruptedPrivilege == PrivilegeLevel::User) {
+        requireStackPointerInRange(
+            interruptedSp,
+            memory_map::kUserStackBase,
+            memory_map::kUserStackEndExclusive
+        );
+
+        frameBase = kernel_stack_pointer_;
+
+        requireStackPushSlotsAt(
+            frameBase,
+            memory_map::kKernelStackBase,
+            memory_map::kKernelStackEndExclusive,
+            kInterruptFrameSlotCount
+        );
+    } else {
+        requireStackPushSlots(kInterruptFrameSlotCount);
+    }
 
     const std::int64_t savedPrivilege =
-        privilegeLevelToRaw(state_.privilegeLevel());
+        privilegeLevelToRaw(interruptedPrivilege);
 
-    pushValue(static_cast<std::int64_t>(returnAddress));
-    pushValue(packFlags(state_.flags()));
-    pushValue(savedPrivilege);
+    state_.memory().write(
+        frameBase,
+        static_cast<std::int64_t>(returnAddress)
+    );
+    state_.memory().write(
+        frameBase + kStackSlotSize,
+        packFlags(state_.flags())
+    );
+    state_.memory().write(
+        frameBase + kStackSlotSize * 2,
+        savedPrivilege
+    );
+    state_.memory().write(
+        frameBase + kStackSlotSize * 3,
+        static_cast<std::int64_t>(interruptedSp)
+    );
 
+    state_.setSp(frameBase + kInterruptFrameSize);
     state_.setPrivilegeLevel(PrivilegeLevel::Kernel);
+
+    if (interruptedPrivilege == PrivilegeLevel::User) {
+        using_kernel_interrupt_stack_ = true;
+    }
+
+    if (using_kernel_interrupt_stack_) {
+        kernel_stack_pointer_ = state_.sp();
+    }
 }
 
 void CPU::restoreInterruptFrame(
@@ -2182,20 +2271,26 @@ void CPU::restoreInterruptFrame(
     requireStackPopSlots(kInterruptFrameSlotCount);
 
     const std::size_t sp = state_.sp();
+    const std::size_t frameBase =
+        sp - kInterruptFrameSize;
 
-    const std::size_t privilegeAddress =
-        sp - kStackSlotSize;
-    const std::size_t flagsAddress =
-        privilegeAddress - kStackSlotSize;
     const std::size_t returnAddressAddress =
-        flagsAddress - kStackSlotSize;
+        frameBase;
+    const std::size_t flagsAddress =
+        frameBase + kStackSlotSize;
+    const std::size_t privilegeAddress =
+        frameBase + kStackSlotSize * 2;
+    const std::size_t savedSpAddress =
+        frameBase + kStackSlotSize * 3;
 
-    const std::int64_t privilegeValue =
-        state_.memory().read(privilegeAddress);
-    const std::int64_t flagsValue =
-        state_.memory().read(flagsAddress);
     const std::int64_t returnAddressValue =
         state_.memory().read(returnAddressAddress);
+    const std::int64_t flagsValue =
+        state_.memory().read(flagsAddress);
+    const std::int64_t privilegeValue =
+        state_.memory().read(privilegeAddress);
+    const std::int64_t savedSpValue =
+        state_.memory().read(savedSpAddress);
 
     const PrivilegeLevel restoredPrivilege =
         privilegeLevelFromRaw(privilegeValue);
@@ -2206,15 +2301,59 @@ void CPU::restoreInterruptFrame(
             returnAddressError
         );
 
+    if (savedSpValue < 0) {
+        throw std::runtime_error(
+            "Negative saved stack pointer"
+        );
+    }
+
+    const std::size_t restoredSp =
+        static_cast<std::size_t>(savedSpValue);
+
     requireExecutionAddress(
         restoredPc,
         restoredPrivilege
     );
 
-    state_.setSp(sp - kInterruptFrameSize);
+    if (restoredPrivilege == PrivilegeLevel::User) {
+        requireStackPointerInRange(
+            restoredSp,
+            memory_map::kUserStackBase,
+            memory_map::kUserStackEndExclusive
+        );
+    } else if (using_kernel_interrupt_stack_) {
+        requireStackPointerInRange(
+            restoredSp,
+            memory_map::kKernelStackBase,
+            memory_map::kKernelStackEndExclusive
+        );
+    } else {
+        requireStackPointerInRange(
+            restoredSp,
+            CPUState::kDefaultStackBase,
+            state_.memory().size()
+        );
+    }
+
     restoreFlags(state_.flags(), flagsValue);
     state_.setPrivilegeLevel(restoredPrivilege);
     state_.setPc(restoredPc);
+
+    if (restoredPrivilege == PrivilegeLevel::User) {
+        if (using_kernel_interrupt_stack_) {
+            kernel_stack_pointer_ = frameBase;
+        }
+
+        using_kernel_interrupt_stack_ = false;
+        state_.setSp(restoredSp);
+        return;
+    }
+
+    state_.setSp(restoredSp);
+
+    if (using_kernel_interrupt_stack_) {
+        kernel_stack_pointer_ = restoredSp;
+    }
 }
 
 void CPU::requireNoOperand(const Instruction& instruction) const {

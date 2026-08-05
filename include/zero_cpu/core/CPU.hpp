@@ -24,7 +24,7 @@ public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;
 
     static constexpr std::size_t kStackSlotSize = 8;
-    static constexpr std::size_t kInterruptFrameSlotCount = 3;
+    static constexpr std::size_t kInterruptFrameSlotCount = 4;
     static constexpr std::size_t kInterruptFrameSize =
         kStackSlotSize * kInterruptFrameSlotCount;
 
@@ -67,6 +67,10 @@ public:
     std::size_t userCodeBegin() const;
     std::size_t userCodeEndExclusive() const;
 
+    void setKernelStackPointer(std::size_t value);
+    std::size_t kernelStackPointer() const;
+    bool usingKernelInterruptStack() const;
+
     void setMMIOBus(std::shared_ptr<MMIOBus> bus);
     void clearMMIOBus();
     bool hasMMIOBus() const;
@@ -95,6 +99,9 @@ private:
     bool has_user_code_range_ = false;
     std::size_t user_code_begin_ = 0;
     std::size_t user_code_end_exclusive_ = 0;
+
+    std::size_t kernel_stack_pointer_ = 0;
+    bool using_kernel_interrupt_stack_ = false;
 
     std::shared_ptr<MMIOBus> mmio_bus_;
     std::shared_ptr<InterruptController> interrupt_controller_;
@@ -218,6 +225,29 @@ private:
     );
 
     std::size_t resolveLabelAddress(const Operand& operand) const;
+
+    std::size_t activeStackBase() const;
+    std::size_t activeStackEndExclusive() const;
+
+    void requireStackPointerInRange(
+        std::size_t sp,
+        std::size_t stackBase,
+        std::size_t stackEndExclusive
+    ) const;
+
+    void requireStackPushSlotsAt(
+        std::size_t sp,
+        std::size_t stackBase,
+        std::size_t stackEndExclusive,
+        std::size_t slotCount
+    ) const;
+
+    void requireStackPopSlotsAt(
+        std::size_t sp,
+        std::size_t stackBase,
+        std::size_t stackEndExclusive,
+        std::size_t slotCount
+    ) const;
 
     void requireStackPushSlots(std::size_t slotCount) const;
     void requireStackPopSlots(std::size_t slotCount) const;

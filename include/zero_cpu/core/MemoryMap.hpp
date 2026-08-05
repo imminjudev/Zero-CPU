@@ -34,6 +34,15 @@ inline constexpr std::size_t kBioOSStackBase = 0x0FA0;
 // Current default memory size used by the core Memory model.
 inline constexpr std::size_t kDefaultMemorySize = 0x1000;
 
+// Protected stack layout. User code keeps the original stack base, while
+// privilege transitions use the high BIO-OS stack region as a Kernel-only
+// interrupt stack.
+inline constexpr std::size_t kUserStackBase = kDefaultStackBase;
+inline constexpr std::size_t kUserStackEndExclusive = kBioOSStackBase;
+inline constexpr std::size_t kKernelStackBase = kBioOSStackBase;
+inline constexpr std::size_t kKernelStackEndExclusive =
+    kDefaultMemorySize;
+
 // DebugOutputDevice MMIO region.
 inline constexpr std::size_t kDebugOutputBase = 0xF000;
 inline constexpr std::size_t kDebugOutputSize = 0x0010;
@@ -107,6 +116,16 @@ constexpr bool isBioOSCodeAddress(std::size_t address) {
 
 constexpr bool isCodeAddress(std::size_t address) {
     return isDefaultCodeAddress(address);
+}
+
+constexpr bool isUserStackPointer(std::size_t value) {
+    return value >= kUserStackBase
+        && value <= kUserStackEndExclusive;
+}
+
+constexpr bool isKernelStackPointer(std::size_t value) {
+    return value >= kKernelStackBase
+        && value <= kKernelStackEndExclusive;
 }
 
 constexpr bool isDefaultStackAddress(std::size_t address) {

@@ -305,6 +305,10 @@ void prepareCommonState(
             stackBase + CPU::kStackSlotSize * 2,
             privilegeLevelToRaw(PrivilegeLevel::Kernel)
         );
+        cpu.state().memory().write(
+            stackBase + CPU::kStackSlotSize * 3,
+            static_cast<std::int64_t>(stackBase)
+        );
         cpu.state().setSp(
             stackBase + CPU::kInterruptFrameSize
         );

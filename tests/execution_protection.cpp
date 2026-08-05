@@ -767,6 +767,10 @@ bool iretToKernelAsUserDenied(
         stackBase + CPU::kStackSlotSize * 2,
         privilegeLevelToRaw(PrivilegeLevel::User)
     );
+    cpu.state().memory().write(
+        stackBase + CPU::kStackSlotSize * 3,
+        static_cast<std::int64_t>(stackBase)
+    );
     cpu.state().setSp(
         stackBase + CPU::kInterruptFrameSize
     );
