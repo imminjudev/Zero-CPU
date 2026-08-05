@@ -81,6 +81,16 @@ bool InterruptController::hasPending() const {
     return findDeliverable() != pending_.end();
 }
 
+bool InterruptController::hasPending(
+    std::uint8_t vector,
+    const std::string& source
+) const {
+    return findDeliverable(
+        vector,
+        source
+    ) != pending_.end();
+}
+
 std::size_t InterruptController::pendingCount() const {
     return pending_.size();
 }
@@ -94,6 +104,26 @@ InterruptRequest InterruptController::acknowledge() {
 
     if (it == pending_.end()) {
         throw std::runtime_error("No deliverable interrupt request");
+    }
+
+    InterruptRequest request = *it;
+    pending_.erase(it);
+    return request;
+}
+
+InterruptRequest InterruptController::acknowledge(
+    std::uint8_t vector,
+    const std::string& source
+) {
+    auto it = findDeliverable(
+        vector,
+        source
+    );
+
+    if (it == pending_.end()) {
+        throw std::runtime_error(
+            "No matching deliverable interrupt request"
+        );
     }
 
     InterruptRequest request = *it;
@@ -122,6 +152,62 @@ std::deque<InterruptRequest>::const_iterator InterruptController::findDeliverabl
 
     for (auto it = pending_.begin(); it != pending_.end(); ++it) {
         if (!masks_[it->vector] && hasVectorHandler(it->vector)) {
+            return it;
+        }
+    }
+
+    return pending_.end();
+}
+
+std::deque<InterruptRequest>::iterator
+InterruptController::findDeliverable(
+    std::uint8_t vector,
+    const std::string& source
+) {
+    if (
+        !global_enabled_
+        || masks_[vector]
+    ) {
+        return pending_.end();
+    }
+
+    for (
+        auto it = pending_.begin();
+        it != pending_.end();
+        ++it
+    ) {
+        if (
+            it->vector == vector
+            && it->source == source
+        ) {
+            return it;
+        }
+    }
+
+    return pending_.end();
+}
+
+std::deque<InterruptRequest>::const_iterator
+InterruptController::findDeliverable(
+    std::uint8_t vector,
+    const std::string& source
+) const {
+    if (
+        !global_enabled_
+        || masks_[vector]
+    ) {
+        return pending_.end();
+    }
+
+    for (
+        auto it = pending_.begin();
+        it != pending_.end();
+        ++it
+    ) {
+        if (
+            it->vector == vector
+            && it->source == source
+        ) {
             return it;
         }
     }

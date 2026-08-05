@@ -43,10 +43,21 @@ public:
     );
 
     bool hasPending() const;
+
+    bool hasPending(
+        std::uint8_t vector,
+        const std::string& source
+    ) const;
+
     std::size_t pendingCount() const;
     std::vector<InterruptRequest> pendingRequests() const;
 
     InterruptRequest acknowledge();
+
+    InterruptRequest acknowledge(
+        std::uint8_t vector,
+        const std::string& source
+    );
 
 private:
     std::array<std::optional<std::size_t>, kVectorCount> vector_table_;
@@ -56,6 +67,18 @@ private:
 
     std::deque<InterruptRequest>::iterator findDeliverable();
     std::deque<InterruptRequest>::const_iterator findDeliverable() const;
+
+    std::deque<InterruptRequest>::iterator
+    findDeliverable(
+        std::uint8_t vector,
+        const std::string& source
+    );
+
+    std::deque<InterruptRequest>::const_iterator
+    findDeliverable(
+        std::uint8_t vector,
+        const std::string& source
+    ) const;
 };
 
 } // namespace zero_cpu
