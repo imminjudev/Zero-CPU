@@ -55,3 +55,4 @@ zero_cpu_register_indirect_full_files/
 scripts/patch_*.ps1
 scripts/force_patch_*.ps1
 traces/
+build-asan/
