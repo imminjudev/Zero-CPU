@@ -1,0 +1,117 @@
+#include "zero_cpu/kernel/ProcessControlBlock.hpp"
+
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+namespace zero_cpu::kernel {
+
+ProcessControlBlock::ProcessControlBlock(
+    ProcessContext context,
+    ProcessState state
+)
+    : context_(std::move(context)),
+      state_(state) {
+    validateProcessContext(context_);
+
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "ProcessControlBlock cannot start Terminated"
+        );
+    }
+}
+
+ProcessId ProcessControlBlock::pid() const {
+    return context_.pid;
+}
+
+const ProcessContext&
+ProcessControlBlock::context() const {
+    return context_;
+}
+
+ProcessState ProcessControlBlock::state() const {
+    return state_;
+}
+
+bool ProcessControlBlock::hasExitCode() const {
+    return has_exit_code_;
+}
+
+std::int64_t ProcessControlBlock::exitCode() const {
+    if (!has_exit_code_) {
+        throw std::runtime_error(
+            "Process has no exit code"
+        );
+    }
+
+    return exit_code_;
+}
+
+void ProcessControlBlock::replaceContext(
+    const ProcessContext& context
+) {
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Cannot update a terminated process context"
+        );
+    }
+
+    validateProcessContext(context);
+
+    if (context.pid != context_.pid) {
+        throw std::runtime_error(
+            "Process context PID mismatch"
+        );
+    }
+
+    context_ = context;
+}
+
+void ProcessControlBlock::transitionTo(
+    ProcessState state
+) {
+    if (state == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Use terminate() to terminate a process"
+        );
+    }
+
+    if (!canTransitionProcessState(state_, state)) {
+        throw std::runtime_error(
+            "Invalid process state transition: "
+            + std::string(processStateToString(state_))
+            + " -> "
+            + processStateToString(state)
+        );
+    }
+
+    state_ = state;
+}
+
+void ProcessControlBlock::terminate(
+    std::int64_t exitCode
+) {
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Process is already terminated"
+        );
+    }
+
+    if (
+        !canTransitionProcessState(
+            state_,
+            ProcessState::Terminated
+        )
+    ) {
+        throw std::runtime_error(
+            "Process cannot transition to Terminated"
+        );
+    }
+
+    state_ = ProcessState::Terminated;
+    has_exit_code_ = true;
+    exit_code_ = exitCode;
+}
+
+} // namespace zero_cpu::kernel

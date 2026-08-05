@@ -149,6 +149,8 @@ add_library(zero_cpu_core
 
     src/kernel/ProcessState.cpp
     src/kernel/ProcessContext.cpp
+    src/kernel/ProcessControlBlock.cpp
+    src/kernel/ProcessTable.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -301,7 +303,38 @@ zero_cpu_enable_coverage(
     zero_process_context_test
 )
 
+
+add_executable(zero_process_table_test
+    tests/process_table.cpp
+)
+
+target_link_libraries(zero_process_table_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_process_table_test
+)
+
+zero_cpu_enable_coverage(
+    zero_process_table_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.process_table
+        COMMAND $<TARGET_FILE:zero_process_table_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.process_table
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;process;table"
+    )
+
     add_test(
         NAME zero_cpu.process_context
         COMMAND $<TARGET_FILE:zero_process_context_test>
