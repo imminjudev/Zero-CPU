@@ -45,12 +45,21 @@ struct ProcessContext {
         memory_map::kKernelStackBase;
 };
 
+void validateProcessContextSnapshot(
+    const ProcessContext& context
+);
+
 void validateProcessContext(
     const ProcessContext& context
 );
 
 void validateProcessContextForCPU(
     const ProcessContext& context,
+    const CPU& cpu
+);
+
+ProcessContext captureProcessContextSnapshot(
+    ProcessId pid,
     const CPU& cpu
 );
 

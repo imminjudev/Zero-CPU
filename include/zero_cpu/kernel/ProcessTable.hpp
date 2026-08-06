@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <string>
 #include <vector>
 
 namespace zero_cpu {
@@ -52,6 +53,19 @@ public:
     void terminate(
         ProcessId pid,
         std::int64_t exitCode
+    );
+
+    void terminate(
+        ProcessId pid,
+        const ProcessContext& finalContext,
+        std::int64_t exitCode
+    );
+
+    void fault(
+        ProcessId pid,
+        const ProcessContext& finalContext,
+        std::int64_t exitCode,
+        const std::string& message
     );
 
     bool hasRunningProcess() const;

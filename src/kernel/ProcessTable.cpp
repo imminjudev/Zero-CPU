@@ -182,6 +182,62 @@ void ProcessTable::terminate(
     }
 }
 
+void ProcessTable::terminate(
+    ProcessId pid,
+    const ProcessContext& finalContext,
+    std::int64_t exitCode
+) {
+    ProcessControlBlock& process =
+        requireProcess(pid);
+
+    const bool wasRunning =
+        process.state() == ProcessState::Running;
+
+    ProcessControlBlock staged = process;
+
+    staged.replaceFinalContext(finalContext);
+
+    staged.terminate(
+        exitCode,
+        ProcessTerminationKind::NormalExit
+    );
+
+    process = std::move(staged);
+
+    if (wasRunning) {
+        running_pid_ = 0;
+    }
+}
+
+void ProcessTable::fault(
+    ProcessId pid,
+    const ProcessContext& finalContext,
+    std::int64_t exitCode,
+    const std::string& message
+) {
+    ProcessControlBlock& process =
+        requireProcess(pid);
+
+    const bool wasRunning =
+        process.state() == ProcessState::Running;
+
+    ProcessControlBlock staged = process;
+
+    staged.replaceFinalContext(finalContext);
+
+    staged.terminate(
+        exitCode,
+        ProcessTerminationKind::CpuFault,
+        message
+    );
+
+    process = std::move(staged);
+
+    if (wasRunning) {
+        running_pid_ = 0;
+    }
+}
+
 bool ProcessTable::hasRunningProcess() const {
     return running_pid_ != 0;
 }

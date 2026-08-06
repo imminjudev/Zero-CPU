@@ -154,6 +154,8 @@ add_library(zero_cpu_core
     src/kernel/RoundRobinScheduler.cpp
     src/kernel/ProcessDispatcher.cpp
     src/kernel/TimerPreemptiveScheduler.cpp
+    src/kernel/ProcessTermination.cpp
+    src/kernel/ProcessLifecycleManager.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -381,7 +383,39 @@ zero_cpu_enable_coverage(
     zero_timer_preemptive_scheduler_test
 )
 
+
+add_executable(zero_process_lifecycle_test
+    tests/process_lifecycle.cpp
+)
+
+target_link_libraries(
+    zero_process_lifecycle_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_process_lifecycle_test
+)
+
+zero_cpu_enable_coverage(
+    zero_process_lifecycle_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.process_lifecycle
+        COMMAND $<TARGET_FILE:zero_process_lifecycle_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.process_lifecycle
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;process;lifecycle"
+    )
+
     add_test(
         NAME zero_cpu.timer_preemptive_scheduler
         COMMAND $<TARGET_FILE:zero_timer_preemptive_scheduler_test>

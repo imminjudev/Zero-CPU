@@ -48,6 +48,28 @@ std::int64_t ProcessControlBlock::exitCode() const {
     return exit_code_;
 }
 
+ProcessTerminationKind
+ProcessControlBlock::terminationKind() const {
+    if (!has_exit_code_) {
+        throw std::runtime_error(
+            "Process has no termination metadata"
+        );
+    }
+
+    return termination_kind_;
+}
+
+const std::string&
+ProcessControlBlock::terminationMessage() const {
+    if (!has_exit_code_) {
+        throw std::runtime_error(
+            "Process has no termination metadata"
+        );
+    }
+
+    return termination_message_;
+}
+
 void ProcessControlBlock::replaceContext(
     const ProcessContext& context
 ) {
@@ -62,6 +84,26 @@ void ProcessControlBlock::replaceContext(
     if (context.pid != context_.pid) {
         throw std::runtime_error(
             "Process context PID mismatch"
+        );
+    }
+
+    context_ = context;
+}
+
+void ProcessControlBlock::replaceFinalContext(
+    const ProcessContext& context
+) {
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Cannot update a terminated process context"
+        );
+    }
+
+    validateProcessContextSnapshot(context);
+
+    if (context.pid != context_.pid) {
+        throw std::runtime_error(
+            "Process final context PID mismatch"
         );
     }
 
@@ -90,7 +132,9 @@ void ProcessControlBlock::transitionTo(
 }
 
 void ProcessControlBlock::terminate(
-    std::int64_t exitCode
+    std::int64_t exitCode,
+    ProcessTerminationKind kind,
+    std::string message
 ) {
     if (state_ == ProcessState::Terminated) {
         throw std::runtime_error(
@@ -112,6 +156,8 @@ void ProcessControlBlock::terminate(
     state_ = ProcessState::Terminated;
     has_exit_code_ = true;
     exit_code_ = exitCode;
+    termination_kind_ = kind;
+    termination_message_ = std::move(message);
 }
 
 } // namespace zero_cpu::kernel

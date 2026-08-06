@@ -20,7 +20,7 @@ void validatePrivilege(PrivilegeLevel privilege) {
     );
 }
 
-void validateUserCodeRange(
+void validateUserCodeRangeShape(
     const ProcessContext& context
 ) {
     if (!context.has_user_code_range) {
@@ -41,7 +41,11 @@ void validateUserCodeRange(
             "Process context User code range must be non-empty"
         );
     }
+}
 
+void validateUserProgramCounter(
+    const ProcessContext& context
+) {
     if (
         context.privilege == PrivilegeLevel::User
         && (
@@ -147,7 +151,7 @@ void requireContextSwitchableCPU(const CPU& cpu) {
 
 } // namespace
 
-void validateProcessContext(
+void validateProcessContextSnapshot(
     const ProcessContext& context
 ) {
     if (context.pid == 0) {
@@ -157,9 +161,16 @@ void validateProcessContext(
     }
 
     validatePrivilege(context.privilege);
-    validateUserCodeRange(context);
+    validateUserCodeRangeShape(context);
     validateUserStackRange(context);
     validateKernelStackPointer(context);
+}
+
+void validateProcessContext(
+    const ProcessContext& context
+) {
+    validateProcessContextSnapshot(context);
+    validateUserProgramCounter(context);
 }
 
 void validateProcessContextForCPU(
@@ -176,7 +187,7 @@ void validateProcessContextForCPU(
     }
 }
 
-ProcessContext captureProcessContext(
+ProcessContext captureProcessContextSnapshot(
     ProcessId pid,
     const CPU& cpu
 ) {
@@ -219,6 +230,20 @@ ProcessContext captureProcessContext(
 
     context.kernel_stack_pointer =
         cpu.kernelStackPointer();
+
+    validateProcessContextSnapshot(context);
+    return context;
+}
+
+ProcessContext captureProcessContext(
+    ProcessId pid,
+    const CPU& cpu
+) {
+    ProcessContext context =
+        captureProcessContextSnapshot(
+            pid,
+            cpu
+        );
 
     validateProcessContext(context);
     return context;
