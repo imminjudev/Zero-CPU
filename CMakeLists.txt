@@ -463,7 +463,39 @@ zero_cpu_enable_coverage(
     zero_binary_data_section_test
 )
 
+
+add_executable(zero_assembler_data_directives_test
+    tests/assembler_data_directives.cpp
+)
+
+target_link_libraries(
+    zero_assembler_data_directives_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_assembler_data_directives_test
+)
+
+zero_cpu_enable_coverage(
+    zero_assembler_data_directives_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.assembler_data_directives
+        COMMAND $<TARGET_FILE:zero_assembler_data_directives_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.assembler_data_directives
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;assembler;binary;data;labels"
+    )
+
     add_test(
         NAME zero_cpu.binary_data_section
         COMMAND $<TARGET_FILE:zero_binary_data_section_test>

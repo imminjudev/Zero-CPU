@@ -2324,6 +2324,15 @@ bool assembleSourceToBinary(
         program.header.entry_point = 0;
         program.header.code_size = static_cast<std::uint32_t>(code.size());
         program.code = std::move(code);
+        program.header.data_base =
+            static_cast<std::uint32_t>(
+                assembled.data_base
+            );
+        program.header.data_size =
+            static_cast<std::uint32_t>(
+                assembled.data.size()
+            );
+        program.data = assembled.data;
 
         binary::BinaryWriter writer;
         writer.writeFile(outputPath, program);

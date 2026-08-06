@@ -456,6 +456,14 @@ void printBinaryHeader(const zero_cpu::binary::BinaryProgram& program) {
               << program.header.code_size
               << " bytes\n";
 
+    std::cout << "Data Base: "
+              << program.header.data_base
+              << "\n";
+
+    std::cout << "Data Size: "
+              << program.header.data_size
+              << " bytes\n";
+
     std::cout << "Instruction Count: "
               << program.code.size() / kInstructionSize
               << "\n";
@@ -2428,6 +2436,15 @@ int assembleToBinary(
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     binary::BinaryWriter writer;
     writer.writeFile(outputPath, program);
@@ -3217,6 +3234,15 @@ int runCPUInterruptTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -3484,6 +3510,15 @@ int runCPUTimerInterruptTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -3621,6 +3656,15 @@ int runCPUEiDiTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -3767,6 +3811,15 @@ int runSoftwareInterruptTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -3914,6 +3967,15 @@ int runMiniKernelSyscallTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4069,6 +4131,15 @@ int runMiniKernelSyscall2Test() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4229,6 +4300,15 @@ int runMiniKernelSyscall3Test() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4394,6 +4474,15 @@ int runMiniKernelSyscall4TimerReadTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4559,6 +4648,15 @@ int runMiniKernelSyscall5TimerEnableTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4735,6 +4833,15 @@ int runMiniKernelSyscall6TimerDisableTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -4900,6 +5007,15 @@ int runMiniKernelSyscall7TimerConfigureTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -5080,6 +5196,15 @@ int runMiniKernelTimerLifecycleTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -5439,6 +5564,15 @@ int runBioOSCombinedBootTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -5746,6 +5880,15 @@ int runInterruptFlagsRestoreTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
@@ -5877,6 +6020,15 @@ int runRegisterIndirectMemoryTest() {
     program.header.entry_point = 0;
     program.header.code_size = static_cast<std::uint32_t>(code.size());
     program.code = std::move(code);
+    program.header.data_base =
+        static_cast<std::uint32_t>(
+            assembled.data_base
+        );
+    program.header.data_size =
+        static_cast<std::uint32_t>(
+            assembled.data.size()
+        );
+    program.data = assembled.data;
 
     BinaryWriter writer;
     writer.writeFile(binaryPath, program);
