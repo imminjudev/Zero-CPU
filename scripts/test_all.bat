@@ -9,7 +9,7 @@ echo Zero-CPU Test Suite
 echo ========================================
 echo.
 
-echo [1/51] Building project...
+echo [1/52] Building project...
 cmake --build build
 if errorlevel 1 goto fail
 
@@ -298,143 +298,158 @@ if not exist "%ZERO_EXECUTABLE_ENTRY_TEST%" (
     goto fail
 )
 
+set "ZERO_MULTI_PROCESS_RUNNER_TEST=build\Debug\zero_multi_process_runner_test.exe"
+
+if not exist "%ZERO_MULTI_PROCESS_RUNNER_TEST%" (
+    set "ZERO_MULTI_PROCESS_RUNNER_TEST=build\Release\zero_multi_process_runner_test.exe"
+)
+
+if not exist "%ZERO_MULTI_PROCESS_RUNNER_TEST%" (
+    echo.
+    echo ERROR: zero_multi_process_runner_test.exe not found.
+    echo Tried:
+    echo   build\Debug\zero_multi_process_runner_test.exe
+    echo   build\Release\zero_multi_process_runner_test.exe
+    goto fail
+)
+
 echo.
 echo Using CLI:
 echo   %ZERO_CLI%
 echo.
 
 echo.
-echo [2/51] Running syscall table command...
+echo [2/52] Running syscall table command...
 "%ZERO_CLI%" syscall-table
 if errorlevel 1 goto fail
 
-echo [3/51] Running ALU unit test...
+echo [3/52] Running ALU unit test...
 "%ZERO_CLI%" alu-test
 if errorlevel 1 goto fail
 
 echo.
-echo [4/51] Running trace JSON writer test...
+echo [4/52] Running trace JSON writer test...
 "%ZERO_CLI%" trace-json-test
 if errorlevel 1 goto fail
 
 echo.
-echo [5/51] Running trace JSON diff test...
+echo [5/52] Running trace JSON diff test...
 "%ZERO_CLI%" trace-diff-test
 if errorlevel 1 goto fail
 
 echo.
-echo [6/51] Running golden trace regression test...
+echo [6/52] Running golden trace regression test...
 "%ZERO_CLI%" trace-golden-test
 if errorlevel 1 goto fail
 
 echo.
-echo [7/51] Running MMIO bus test...
+echo [7/52] Running MMIO bus test...
 "%ZERO_CLI%" mmio-test
 if errorlevel 1 goto fail
 
 echo.
-echo [8/51] Running hardware bus integration test...
+echo [8/52] Running hardware bus integration test...
 "%ZERO_CLI%" hardware-bus-test
 if errorlevel 1 goto fail
 
 echo.
-echo [9/51] Running serial hardware protocol test...
+echo [9/52] Running serial hardware protocol test...
 "%ZERO_CLI%" serial-hardware-test
 if errorlevel 1 goto fail
 
 echo.
-echo [10/51] Running interrupt controller test...
+echo [10/52] Running interrupt controller test...
 "%ZERO_CLI%" interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo [11/51] Running CPU interrupt delivery test...
+echo [11/52] Running CPU interrupt delivery test...
 "%ZERO_CLI%" cpu-interrupt-test
 if errorlevel 1 goto fail
 
 echo.
-echo [12/51] Running timer device test...
+echo [12/52] Running timer device test...
 "%ZERO_CLI%" timer-test
 if errorlevel 1 goto fail
 
 echo.
-echo [13/51] Running CPU timer interrupt test...
+echo [13/52] Running CPU timer interrupt test...
 "%ZERO_CLI%" cpu-timer-test
 if errorlevel 1 goto fail
 
 echo.
-echo [14/51] Running CPU EI/DI interrupt control test...
+echo [14/52] Running CPU EI/DI interrupt control test...
 "%ZERO_CLI%" cpu-ei-di-test
 if errorlevel 1 goto fail
 
 echo.
-echo [15/51] Running software interrupt test...
+echo [15/52] Running software interrupt test...
 "%ZERO_CLI%" software-interrupt-test
 if errorlevel 1 goto fail
 
 
 echo.
-echo [16/51] Running interrupt FLAGS restore test...
+echo [16/52] Running interrupt FLAGS restore test...
 "%ZERO_CLI%" interrupt-flags-restore-test
 if errorlevel 1 goto fail
 
 echo.
-echo [17/51] Running register-indirect memory test...
+echo [17/52] Running register-indirect memory test...
 "%ZERO_CLI%" register-indirect-test
 if errorlevel 1 goto fail
 
 echo.
-echo [18/51] Running mini kernel syscall test...
+echo [18/52] Running mini kernel syscall test...
 "%ZERO_CLI%" mini-kernel-syscall-test
 if errorlevel 1 goto fail
 
 echo.
-echo [19/51] Running mini kernel syscall 2 test...
+echo [19/52] Running mini kernel syscall 2 test...
 "%ZERO_CLI%" mini-kernel-syscall2-test
 if errorlevel 1 goto fail
 
 echo.
-echo [20/51] Running mini kernel syscall 3 exit test...
+echo [20/52] Running mini kernel syscall 3 exit test...
 "%ZERO_CLI%" mini-kernel-syscall3-test
 if errorlevel 1 goto fail
 
 echo.
-echo [21/51] Running mini kernel syscall 4 timer read test...
+echo [21/52] Running mini kernel syscall 4 timer read test...
 "%ZERO_CLI%" mini-kernel-syscall4-timer-read-test
 if errorlevel 1 goto fail
 
 echo.
-echo [22/51] Running mini kernel syscall 5 timer enable test...
+echo [22/52] Running mini kernel syscall 5 timer enable test...
 "%ZERO_CLI%" mini-kernel-syscall5-timer-enable-test
 if errorlevel 1 goto fail
 
 echo.
-echo [23/51] Running mini kernel syscall 6 timer disable test...
+echo [23/52] Running mini kernel syscall 6 timer disable test...
 "%ZERO_CLI%" mini-kernel-syscall6-timer-disable-test
 if errorlevel 1 goto fail
 
 echo.
-echo [24/51] Running mini kernel syscall 7 timer configure test...
+echo [24/52] Running mini kernel syscall 7 timer configure test...
 "%ZERO_CLI%" mini-kernel-syscall7-timer-configure-test
 if errorlevel 1 goto fail
 
 echo.
-echo [25/51] Running mini kernel timer lifecycle test...
+echo [25/52] Running mini kernel timer lifecycle test...
 "%ZERO_CLI%" mini-kernel-timer-lifecycle-test
 if errorlevel 1 goto fail
 
 echo.
-echo [26/51] Running BIO-OS combined boot test...
+echo [26/52] Running BIO-OS combined boot test...
 "%ZERO_CLI%" bio-os-combined-boot-test
 if errorlevel 1 goto fail
 
 echo.
-echo [27/51] Running binary format round-trip test...
+echo [27/52] Running binary format round-trip test...
 "%ZERO_CLI%" binary-test
 if errorlevel 1 goto fail
 
 echo.
-echo [28/51] Assembling and running function_call.zasm...
+echo [28/52] Assembling and running function_call.zasm...
 "%ZERO_CLI%" assemble "examples\function_call.zasm" "examples\function_call.zbin"
 if errorlevel 1 goto fail
 
@@ -442,7 +457,7 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo.
-echo [29/51] Assembling and running alu_flags.zasm...
+echo [29/52] Assembling and running alu_flags.zasm...
 "%ZERO_CLI%" assemble "examples\alu_flags.zasm" "examples\alu_flags.zbin"
 if errorlevel 1 goto fail
 
@@ -450,7 +465,7 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo.
-echo [30/51] Assembling and running mmio_output.zasm...
+echo [30/52] Assembling and running mmio_output.zasm...
 "%ZERO_CLI%" assemble "examples\mmio_output.zasm" "examples\mmio_output.zbin"
 if errorlevel 1 goto fail
 
@@ -458,107 +473,107 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo.
-echo [31/51] Running signed branch correctness test...
+echo [31/52] Running signed branch correctness test...
 "%ZERO_CLI%" signed-branch-test
 if errorlevel 1 goto fail
 
 echo.
-echo [32/51] Running vector/binary differential test...
+echo [32/52] Running vector/binary differential test...
 "%ZERO_CLI%" differential-test
 if errorlevel 1 goto fail
 
 echo.
-echo [33/51] Running error and invariant test...
+echo [33/52] Running error and invariant test...
 "%ZERO_CLI%" error-invariant-test
 if errorlevel 1 goto fail
 
 echo.
-echo [34/51] Running ISA conformance test...
+echo [34/52] Running ISA conformance test...
 "%ZERO_ISA_CONFORMANCE%"
 if errorlevel 1 goto fail
 
 echo.
-echo [35/51] Running privilege state test...
+echo [35/52] Running privilege state test...
 "%ZERO_PRIVILEGE_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [36/51] Running privileged instruction test...
+echo [36/52] Running privileged instruction test...
 "%ZERO_PRIVILEGED_INSTRUCTION_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [37/51] Running interrupt privilege test...
+echo [37/52] Running interrupt privilege test...
 "%ZERO_INTERRUPT_PRIVILEGE_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [38/51] Running memory protection test...
+echo [38/52] Running memory protection test...
 "%ZERO_MEMORY_PROTECTION_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [39/51] Running execution protection test...
+echo [39/52] Running execution protection test...
 "%ZERO_EXECUTION_PROTECTION_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [40/51] Running Kernel stack separation test...
+echo [40/52] Running Kernel stack separation test...
 "%ZERO_KERNEL_STACK_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [41/51] Running process context test...
+echo [41/52] Running process context test...
 "%ZERO_PROCESS_CONTEXT_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [42/51] Running process table test...
+echo [42/52] Running process table test...
 "%ZERO_PROCESS_TABLE_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [43/51] Running round-robin scheduler test...
+echo [43/52] Running round-robin scheduler test...
 "%ZERO_ROUND_ROBIN_SCHEDULER_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [44/51] Running process dispatcher test...
+echo [44/52] Running process dispatcher test...
 "%ZERO_PROCESS_DISPATCHER_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [45/51] Running timer preemptive scheduler test...
+echo [45/52] Running timer preemptive scheduler test...
 "%ZERO_TIMER_PREEMPTIVE_SCHEDULER_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [46/51] Running process lifecycle test...
+echo [46/52] Running process lifecycle test...
 "%ZERO_PROCESS_LIFECYCLE_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [47/51] Running process image loader test...
+echo [47/52] Running process image loader test...
 "%ZERO_PROCESS_IMAGE_LOADER_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [48/51] Running process address space test...
+echo [48/52] Running process address space test...
 "%ZERO_PROCESS_ADDRESS_SPACE_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [49/51] Running binary data section test...
+echo [49/52] Running binary data section test...
 "%ZERO_BINARY_DATA_SECTION_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [50/51] Running assembler data directives test...
+echo [50/52] Running assembler data directives test...
 "%ZERO_ASSEMBLER_DATA_DIRECTIVES_TEST%"
 if errorlevel 1 goto fail
 
 echo.
-echo [51/51] Running executable entry and CLI assembly test...
+echo [51/52] Running executable entry and CLI assembly test...
 "%ZERO_EXECUTABLE_ENTRY_TEST%"
 if errorlevel 1 goto fail
 
@@ -569,6 +584,23 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 del "build\executable_entry_test.zbin" 2>nul
+
+echo.
+echo [52/52] Running multi-process runner test...
+"%ZERO_MULTI_PROCESS_RUNNER_TEST%"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" assemble "tests\fixtures\process_runner_a.zasm" "build\process_runner_a.zbin"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" assemble "tests\fixtures\process_runner_b.zasm" "build\process_runner_b.zbin"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" run-processes --quantum 1 --max-steps 100 "build\process_runner_a.zbin" "build\process_runner_b.zbin"
+if errorlevel 1 goto fail
+
+del "build\process_runner_a.zbin" 2>nul
+del "build\process_runner_b.zbin" 2>nul
 
 echo.
 echo ========================================

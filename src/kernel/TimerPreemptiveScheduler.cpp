@@ -181,6 +181,15 @@ servicePendingPreemption(
         return false;
     }
 
+    if (
+        cpu.state().isUserMode()
+        && cpu.hasUserCodeRange()
+        && cpu.state().pc()
+            == cpu.userCodeEndExclusive()
+    ) {
+        return false;
+    }
+
     const ProcessId previousPid =
         table.runningProcessId();
 

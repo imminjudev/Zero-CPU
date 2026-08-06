@@ -160,6 +160,7 @@ add_library(zero_cpu_core
     src/kernel/ProcessImage.cpp
     src/kernel/ProcessImageLoader.cpp
     src/kernel/ProcessAddressSpace.cpp
+    src/system/MultiProcessRunner.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -501,7 +502,39 @@ zero_cpu_enable_coverage(
     zero_executable_entry_test
 )
 
+
+add_executable(zero_multi_process_runner_test
+    tests/multi_process_runner.cpp
+)
+
+target_link_libraries(
+    zero_multi_process_runner_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_multi_process_runner_test
+)
+
+zero_cpu_enable_coverage(
+    zero_multi_process_runner_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.multi_process_runner
+        COMMAND $<TARGET_FILE:zero_multi_process_runner_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.multi_process_runner
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;system;process;runner;multitasking"
+    )
+
     add_test(
         NAME zero_cpu.executable_entry
         COMMAND $<TARGET_FILE:zero_executable_entry_test>

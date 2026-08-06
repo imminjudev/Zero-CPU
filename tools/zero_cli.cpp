@@ -24,6 +24,7 @@
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
+#include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
 #include "zero_cpu/trace/TraceJsonDiff.hpp"
 
@@ -2412,6 +2413,289 @@ int runBinaryFile(
 
     return 0;
 }
+
+std::uint64_t parseRunProcessesPositiveU64(
+    const std::string& text,
+    const std::string& optionName
+) {
+    std::size_t parsed = 0;
+
+    const unsigned long long value =
+        std::stoull(
+            text,
+            &parsed,
+            0
+        );
+
+    if (
+        parsed != text.size()
+        || value == 0
+    ) {
+        throw std::invalid_argument(
+            optionName
+            + " requires a positive integer"
+        );
+    }
+
+    return static_cast<std::uint64_t>(
+        value
+    );
+}
+
+std::size_t parseRunProcessesPositiveSize(
+    const std::string& text,
+    const std::string& optionName
+) {
+    const std::uint64_t value =
+        parseRunProcessesPositiveU64(
+            text,
+            optionName
+        );
+
+    if (
+        value
+        > static_cast<std::uint64_t>(
+            std::numeric_limits<
+                std::size_t
+            >::max()
+        )
+    ) {
+        throw std::out_of_range(
+            optionName
+            + " exceeds size_t"
+        );
+    }
+
+    return static_cast<std::size_t>(
+        value
+    );
+}
+
+int runProcessesCommand(
+    int argc,
+    char* argv[],
+    int startIndex
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::kernel;
+    using namespace zero_cpu::system;
+
+    MultiProcessRunOptions options;
+    std::vector<std::string> paths;
+
+    int index = startIndex;
+
+    while (index < argc) {
+        const std::string argument =
+            argv[index];
+
+        if (argument == "--quantum") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--quantum requires a value"
+                );
+            }
+
+            options.quantum =
+                parseRunProcessesPositiveU64(
+                    argv[index + 1],
+                    "--quantum"
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--max-steps") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--max-steps requires a value"
+                );
+            }
+
+            options.max_lifecycle_steps =
+                parseRunProcessesPositiveSize(
+                    argv[index + 1],
+                    "--max-steps"
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument.rfind("--", 0) == 0) {
+            throw std::invalid_argument(
+                "Unknown run-processes option: "
+                + argument
+            );
+        }
+
+        paths.push_back(argument);
+        ++index;
+    }
+
+    if (paths.empty()) {
+        throw std::invalid_argument(
+            "run-processes requires at least "
+            "one .zbin file"
+        );
+    }
+
+    MultiProcessRunner runner;
+
+    const MultiProcessRunResult result =
+        runner.runFiles(paths, options);
+
+    std::cout
+        << "=== Zero-CPU Multi-Process Run ==="
+        << std::endl;
+
+    std::cout
+        << "Runtime state: "
+        << processRuntimeStateToString(
+            result.runtime_state
+        )
+        << std::endl;
+
+    std::cout
+        << "Processes: "
+        << result.process_count
+        << std::endl;
+
+    std::cout
+        << "Lifecycle steps: "
+        << result.lifecycle_steps
+        << std::endl;
+
+    std::cout
+        << "Terminations: "
+        << result.termination_count
+        << std::endl;
+
+    std::cout
+        << "Faults: "
+        << result.fault_count
+        << std::endl;
+
+    std::cout
+        << "Preemptions: "
+        << result.preemption_count
+        << std::endl;
+
+    std::cout
+        << "Context switches: "
+        << result.context_switch_count
+        << std::endl;
+
+    std::cout
+        << "Step limit reached: "
+        << (
+            result.step_limit_reached
+                ? "true"
+                : "false"
+        )
+        << std::endl;
+
+    for (
+        const ProcessRunSummary& process :
+        result.processes
+    ) {
+        std::cout << std::endl;
+
+        std::cout
+            << "PID "
+            << process.pid
+            << " | "
+            << process.source_name
+            << std::endl;
+
+        std::cout
+            << "  State: "
+            << processStateToString(
+                process.state
+            )
+            << std::endl;
+
+        if (process.has_exit_code) {
+            std::cout
+                << "  Termination: "
+                << processTerminationKindToString(
+                    process.termination_kind
+                )
+                << std::endl;
+
+            std::cout
+                << "  Exit code: "
+                << process.exit_code
+                << std::endl;
+        }
+
+        if (!process.termination_message.empty()) {
+            std::cout
+                << "  Message: "
+                << process.termination_message
+                << std::endl;
+        }
+
+        std::cout
+            << "  PC: "
+            << process.final_context.pc
+            << std::endl;
+
+        std::cout
+            << "  SP: "
+            << process.final_context.sp
+            << std::endl;
+
+        std::cout
+            << "  Registers:";
+
+        for (
+            std::size_t registerIndex = 0;
+            registerIndex
+                < RegisterFile::kRegisterCount;
+            ++registerIndex
+        ) {
+            std::cout
+                << " R"
+                << registerIndex
+                << "="
+                << process.final_context
+                    .registers[registerIndex];
+        }
+
+        std::cout << std::endl;
+
+        if (process.data_size >= 8) {
+            std::cout
+                << "  Data["
+                << process.data_base
+                << "] qword: "
+                << process.final_memory.readI64(
+                    process.data_base
+                )
+                << std::endl;
+        }
+    }
+
+    if (result.step_limit_reached) {
+        return 3;
+    }
+
+    if (
+        result.runtime_state
+        == ProcessRuntimeState::Deadlocked
+    ) {
+        return 4;
+    }
+
+    if (result.fault_count != 0) {
+        return 2;
+    }
+
+    return result.success() ? 0 : 1;
+}
+
 
 int assembleToBinary(
     const std::string& inputPath,
@@ -6634,6 +6918,7 @@ void printUsage() {
     std::cout << "  zero_cli bio-os-runner-test <bio_os_directory>\n";
     std::cout << "  zero_cli syscall-table\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
+    std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] <app1.zbin> [app2.zbin ...]\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
@@ -7045,6 +7330,22 @@ int main(int argc, char* argv[]) {
                 }
 
                 return assembleToBinary(argv[2], argv[3]);
+            }
+
+            if (command == "run-processes") {
+                if (argc < 3) {
+                    std::cerr
+                        << "Invalid run-processes command.\n\n";
+
+                    printUsage();
+                    return 1;
+                }
+
+                return runProcessesCommand(
+                    argc,
+                    argv,
+                    2
+                );
             }
 
             if (command == "dump-binary") {

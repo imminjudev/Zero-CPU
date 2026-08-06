@@ -1,0 +1,12 @@
+; Multi-process CLI fixture A
+
+.entry start
+
+.data
+value: .qword 1
+
+.text
+start:
+    LOAD R0, [value]
+    ADD R0, 1
+    STORE [value], R0
