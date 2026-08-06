@@ -30,8 +30,16 @@ struct AssembledProgram {
     std::size_t data_base = 0;
     std::vector<std::uint8_t> data;
 
+    bool has_explicit_entry = false;
+    std::string entry_label;
+    std::size_t entry_instruction = 0;
+
+    std::size_t resolvedEntryInstruction() const;
+
+    binary::BinaryProgram toBinaryProgram() const;
+
     binary::BinaryProgram toBinaryProgram(
-        std::size_t entryInstruction = 0
+        std::size_t entryInstruction
     ) const;
 };
 

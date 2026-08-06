@@ -2420,53 +2420,116 @@ int assembleToBinary(
     using namespace zero_cpu;
 
     Assembler assembler;
-    AssembledProgram assembled = assembler.assembleFile(inputPath);
 
-    InstructionEncoder encoder;
-    std::vector<std::uint8_t> code = encoder.encodeProgram(
-        assembled.instructions,
-        assembled.labels
-    );
+    const AssembledProgram assembled =
+        assembler.assembleFile(inputPath);
 
-    binary::BinaryProgram program;
-
-    program.header.major_version = binary::kMajorVersion;
-    program.header.minor_version = binary::kMinorVersion;
-    program.header.endianness = binary::BinaryEndianness::Little;
-    program.header.entry_point = 0;
-    program.header.code_size = static_cast<std::uint32_t>(code.size());
-    program.code = std::move(code);
-    program.header.data_base =
-        static_cast<std::uint32_t>(
-            assembled.data_base
-        );
-    program.header.data_size =
-        static_cast<std::uint32_t>(
-            assembled.data.size()
-        );
-    program.data = assembled.data;
+    const binary::BinaryProgram program =
+        assembled.toBinaryProgram();
 
     binary::BinaryWriter writer;
     writer.writeFile(outputPath, program);
 
     binary::BinaryReader reader;
-    const binary::BinaryProgram verified = reader.readFile(outputPath);
 
-    std::cout << "Assemble completed successfully.\n";
-    std::cout << "Input: " << inputPath << "\n";
-    std::cout << "Output: " << outputPath << "\n";
-    std::cout << "Instruction count: "
-              << assembled.instructions.size()
-              << "\n";
-    std::cout << "Code size: "
-              << verified.header.code_size
-              << " bytes\n";
-    std::cout << "Entry point: "
-              << verified.header.entry_point
-              << "\n";
+    const binary::BinaryProgram verified =
+        reader.readFile(outputPath);
+
+    if (
+        verified.header.major_version
+            != program.header.major_version
+        || verified.header.minor_version
+            != program.header.minor_version
+        || verified.header.endianness
+            != program.header.endianness
+        || verified.header.entry_point
+            != program.header.entry_point
+        || verified.header.code_size
+            != program.header.code_size
+        || verified.header.data_base
+            != program.header.data_base
+        || verified.header.data_size
+            != program.header.data_size
+        || verified.code != program.code
+        || verified.data != program.data
+    ) {
+        throw std::runtime_error(
+            "Written executable failed "
+            "read-back verification"
+        );
+    }
+
+    std::cout
+        << "Assemble completed successfully."
+        << std::endl;
+
+    std::cout
+        << "Input: "
+        << inputPath
+        << std::endl;
+
+    std::cout
+        << "Output: "
+        << outputPath
+        << std::endl;
+
+    std::cout
+        << "Format: "
+        << static_cast<int>(
+            verified.header.major_version
+        )
+        << "."
+        << static_cast<int>(
+            verified.header.minor_version
+        )
+        << std::endl;
+
+    std::cout
+        << "Instruction count: "
+        << assembled.instructions.size()
+        << std::endl;
+
+    std::cout
+        << "Entry label: "
+        << (
+            assembled.has_explicit_entry
+                ? assembled.entry_label
+                : std::string(
+                    "<default:first-instruction>"
+                )
+        )
+        << std::endl;
+
+    std::cout
+        << "Entry instruction: "
+        << assembled.resolvedEntryInstruction()
+        << std::endl;
+
+    std::cout
+        << "Entry point: "
+        << verified.header.entry_point
+        << std::endl;
+
+    std::cout
+        << "Code size: "
+        << verified.header.code_size
+        << " bytes"
+        << std::endl;
+
+    std::cout
+        << "Data base: "
+        << verified.header.data_base
+        << std::endl;
+
+    std::cout
+        << "Data size: "
+        << verified.header.data_size
+        << " bytes"
+        << std::endl;
 
     return 0;
 }
+
 
 int runAssemblyProgram(const std::string& inputPath) {
     using namespace zero_cpu;
@@ -2476,6 +2539,10 @@ int runAssemblyProgram(const std::string& inputPath) {
 
     CPU cpu;
     cpu.loadProgram(assembled.instructions, assembled.labels);
+
+    cpu.state().setPc(
+        assembled.resolvedEntryInstruction()
+    );
 
     std::cout << "Input file: " << inputPath << "\n\n";
 

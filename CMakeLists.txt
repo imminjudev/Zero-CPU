@@ -482,7 +482,39 @@ zero_cpu_enable_coverage(
     zero_assembler_data_directives_test
 )
 
+
+add_executable(zero_executable_entry_test
+    tests/executable_entry.cpp
+)
+
+target_link_libraries(
+    zero_executable_entry_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_executable_entry_test
+)
+
+zero_cpu_enable_coverage(
+    zero_executable_entry_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.executable_entry
+        COMMAND $<TARGET_FILE:zero_executable_entry_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.executable_entry
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;assembler;binary;entry;cli"
+    )
+
     add_test(
         NAME zero_cpu.assembler_data_directives
         COMMAND $<TARGET_FILE:zero_assembler_data_directives_test>

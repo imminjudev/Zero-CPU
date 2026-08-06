@@ -38,6 +38,11 @@ struct SymbolPassResult {
     > data_labels;
 
     std::size_t data_size = 0;
+
+    bool has_entry = false;
+    std::string entry_label;
+    std::size_t entry_line = 0;
+    std::size_t entry_instruction = 0;
 };
 
 std::string trim(
@@ -232,7 +237,8 @@ bool isReservedDirectiveName(
         || lowered == "byte"
         || lowered == "word"
         || lowered == "qword"
-        || lowered == "string";
+        || lowered == "string"
+        || lowered == "entry";
 }
 
 void requireValidLabelName(
@@ -710,6 +716,51 @@ AssemblySection sectionFromDirective(
         : AssemblySection::Text;
 }
 
+bool isEntryDirective(
+    const std::string& line
+) {
+    std::istringstream input(trim(line));
+
+    std::string directive;
+    input >> directive;
+
+    return lowerCopy(directive) == ".entry";
+}
+
+std::string parseEntryDirective(
+    const std::string& line,
+    std::size_t lineNumber
+) {
+    std::istringstream input(trim(line));
+
+    std::string directive;
+    std::string label;
+    std::string extra;
+
+    input >> directive;
+    input >> label;
+    input >> extra;
+
+    if (
+        lowerCopy(directive) != ".entry"
+        || label.empty()
+        || !extra.empty()
+    ) {
+        throw std::runtime_error(
+            ".entry requires exactly one code label "
+            "at line "
+            + std::to_string(lineNumber)
+        );
+    }
+
+    requireValidLabelName(
+        label,
+        lineNumber
+    );
+
+    return label;
+}
+
 void requireUniqueSymbol(
     const std::string& label,
     std::size_t lineNumber,
@@ -804,6 +855,37 @@ SymbolPassResult collectSymbols(
             continue;
         }
 
+        if (isEntryDirective(line)) {
+            if (hadLabel) {
+                throw std::runtime_error(
+                    ".entry cannot share a line "
+                    "with a label at line "
+                    + std::to_string(lineNumber)
+                );
+            }
+
+            if (symbols.has_entry) {
+                throw std::runtime_error(
+                    "Duplicate .entry directive at line "
+                    + std::to_string(lineNumber)
+                    + "; first declared at line "
+                    + std::to_string(
+                        symbols.entry_line
+                    )
+                );
+            }
+
+            symbols.has_entry = true;
+            symbols.entry_label =
+                parseEntryDirective(
+                    line,
+                    lineNumber
+                );
+            symbols.entry_line = lineNumber;
+
+            continue;
+        }
+
         if (
             section
             == AssemblySection::Data
@@ -850,6 +932,43 @@ SymbolPassResult collectSymbols(
     }
 
     symbols.data_size = dataOffset;
+
+    if (symbols.has_entry) {
+        const auto dataEntry =
+            symbols.data_labels.find(
+                symbols.entry_label
+            );
+
+        if (
+            dataEntry
+            != symbols.data_labels.end()
+        ) {
+            throw std::runtime_error(
+                "Executable entry label '"
+                + symbols.entry_label
+                + "' refers to initialized data"
+            );
+        }
+
+        const auto codeEntry =
+            symbols.code_labels.find(
+                symbols.entry_label
+            );
+
+        if (
+            codeEntry
+            == symbols.code_labels.end()
+        ) {
+            throw std::runtime_error(
+                "Undefined executable entry label: "
+                + symbols.entry_label
+            );
+        }
+
+        symbols.entry_instruction =
+            codeEntry->second;
+    }
+
     return symbols;
 }
 
@@ -1073,6 +1192,15 @@ AssembledProgram emitProgram(
     result.data_labels =
         std::move(symbols.data_labels);
 
+    result.has_explicit_entry =
+        symbols.has_entry;
+
+    result.entry_label =
+        std::move(symbols.entry_label);
+
+    result.entry_instruction =
+        symbols.entry_instruction;
+
     result.data_base =
         memory_map::kUserDataBase;
 
@@ -1112,6 +1240,10 @@ AssembledProgram emitProgram(
             continue;
         }
 
+        if (isEntryDirective(line)) {
+            continue;
+        }
+
         if (
             section
             == AssemblySection::Data
@@ -1144,6 +1276,18 @@ AssembledProgram emitProgram(
 }
 
 } // namespace
+
+std::size_t
+AssembledProgram::resolvedEntryInstruction() const {
+    return entry_instruction;
+}
+
+binary::BinaryProgram
+AssembledProgram::toBinaryProgram() const {
+    return toBinaryProgram(
+        resolvedEntryInstruction()
+    );
+}
 
 binary::BinaryProgram
 AssembledProgram::toBinaryProgram(

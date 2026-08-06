@@ -1,0 +1,15 @@
+; Zero-CPU executable entry CLI fixture
+
+.entry start
+
+.data
+result: .qword 0
+
+.text
+prefix:
+    HALT
+
+start:
+    MOV R0, 222
+    STORE [result], R0
+    HALT
