@@ -159,6 +159,7 @@ add_library(zero_cpu_core
     src/kernel/ExecutableMetadata.cpp
     src/kernel/ProcessImage.cpp
     src/kernel/ProcessImageLoader.cpp
+    src/kernel/ProcessAddressSpace.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -424,7 +425,39 @@ zero_cpu_enable_coverage(
     zero_process_image_loader_test
 )
 
+
+add_executable(zero_process_address_space_test
+    tests/process_address_space.cpp
+)
+
+target_link_libraries(
+    zero_process_address_space_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_process_address_space_test
+)
+
+zero_cpu_enable_coverage(
+    zero_process_address_space_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.process_address_space
+        COMMAND $<TARGET_FILE:zero_process_address_space_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.process_address_space
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;process;memory;executable"
+    )
+
     add_test(
         NAME zero_cpu.process_image_loader
         COMMAND $<TARGET_FILE:zero_process_image_loader_test>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "zero_cpu/kernel/ProcessControlBlock.hpp"
+#include "zero_cpu/kernel/ProcessImage.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,10 @@ public:
         const CPU& cpu
     );
 
+    ProcessId createProcess(
+        const ProcessImage& image
+    );
+
     bool empty() const;
     std::size_t size() const;
     bool contains(ProcessId pid) const;
@@ -45,6 +50,12 @@ public:
         const ProcessContext& context
     );
 
+    void updateRuntimeState(
+        ProcessId pid,
+        const ProcessContext& context,
+        const Memory& memory
+    );
+
     void transition(
         ProcessId pid,
         ProcessState state
@@ -61,9 +72,24 @@ public:
         std::int64_t exitCode
     );
 
+    void terminate(
+        ProcessId pid,
+        const ProcessContext& finalContext,
+        const Memory& finalMemory,
+        std::int64_t exitCode
+    );
+
     void fault(
         ProcessId pid,
         const ProcessContext& finalContext,
+        std::int64_t exitCode,
+        const std::string& message
+    );
+
+    void fault(
+        ProcessId pid,
+        const ProcessContext& finalContext,
+        const Memory& finalMemory,
         std::int64_t exitCode,
         const std::string& message
     );

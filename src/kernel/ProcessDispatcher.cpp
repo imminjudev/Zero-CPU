@@ -1,6 +1,7 @@
 #include "zero_cpu/kernel/ProcessDispatcher.hpp"
 
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/kernel/ProcessAddressSpace.hpp"
 #include "zero_cpu/kernel/ProcessContext.hpp"
 
 #include <stdexcept>
@@ -26,6 +27,7 @@ ProcessId ProcessDispatcher::dispatchNext(
         );
     }
 
+    CPU stagedCpu = cpu;
     ProcessTable stagedTable = table;
     RoundRobinScheduler stagedScheduler =
         scheduler;
@@ -40,9 +42,10 @@ ProcessId ProcessDispatcher::dispatchNext(
                 cpu
             );
 
-        stagedTable.updateContext(
+        stagedTable.updateRuntimeState(
             currentPid,
-            currentContext
+            currentContext,
+            cpu.state().memory()
         );
     }
 
@@ -51,21 +54,24 @@ ProcessId ProcessDispatcher::dispatchNext(
             stagedTable
         );
 
-    const ProcessContext selectedContext =
-        stagedTable.process(
-            selectedPid
-        ).context();
+    const ProcessControlBlock& selected =
+        stagedTable.process(selectedPid);
+
+    selected.addressSpace().activate(
+        stagedCpu
+    );
 
     validateProcessContextForCPU(
-        selectedContext,
-        cpu
+        selected.context(),
+        stagedCpu
     );
 
     restoreProcessContext(
-        selectedContext,
-        cpu
+        selected.context(),
+        stagedCpu
     );
 
+    cpu = std::move(stagedCpu);
     table = std::move(stagedTable);
     scheduler = std::move(stagedScheduler);
 

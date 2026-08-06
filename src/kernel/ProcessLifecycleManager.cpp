@@ -156,6 +156,7 @@ ProcessLifecycleManager::step(
         stagedTable.fault(
             terminatedPid,
             finalContext,
+            cpu.state().memory(),
             fault_exit_code_,
             faultMessage
         );
@@ -163,6 +164,7 @@ ProcessLifecycleManager::step(
         stagedTable.terminate(
             terminatedPid,
             finalContext,
+            cpu.state().memory(),
             normal_exit_code_
         );
     }

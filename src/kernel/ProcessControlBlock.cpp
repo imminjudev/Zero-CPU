@@ -10,7 +10,20 @@ ProcessControlBlock::ProcessControlBlock(
     ProcessContext context,
     ProcessState state
 )
+    : ProcessControlBlock(
+          std::move(context),
+          ProcessAddressSpace(),
+          state
+      ) {
+}
+
+ProcessControlBlock::ProcessControlBlock(
+    ProcessContext context,
+    ProcessAddressSpace addressSpace,
+    ProcessState state
+)
     : context_(std::move(context)),
+      address_space_(std::move(addressSpace)),
       state_(state) {
     validateProcessContext(context_);
 
@@ -28,6 +41,11 @@ ProcessId ProcessControlBlock::pid() const {
 const ProcessContext&
 ProcessControlBlock::context() const {
     return context_;
+}
+
+const ProcessAddressSpace&
+ProcessControlBlock::addressSpace() const {
+    return address_space_;
 }
 
 ProcessState ProcessControlBlock::state() const {
@@ -90,6 +108,34 @@ void ProcessControlBlock::replaceContext(
     context_ = context;
 }
 
+void ProcessControlBlock::replaceRuntimeState(
+    const ProcessContext& context,
+    const Memory& memory
+) {
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Cannot update a terminated process state"
+        );
+    }
+
+    validateProcessContext(context);
+
+    if (context.pid != context_.pid) {
+        throw std::runtime_error(
+            "Process runtime state PID mismatch"
+        );
+    }
+
+    ProcessAddressSpace stagedAddressSpace =
+        address_space_;
+
+    stagedAddressSpace.replaceMemory(memory);
+
+    context_ = context;
+    address_space_ =
+        std::move(stagedAddressSpace);
+}
+
 void ProcessControlBlock::replaceFinalContext(
     const ProcessContext& context
 ) {
@@ -108,6 +154,34 @@ void ProcessControlBlock::replaceFinalContext(
     }
 
     context_ = context;
+}
+
+void ProcessControlBlock::replaceFinalState(
+    const ProcessContext& context,
+    const Memory& memory
+) {
+    if (state_ == ProcessState::Terminated) {
+        throw std::runtime_error(
+            "Cannot update a terminated process state"
+        );
+    }
+
+    validateProcessContextSnapshot(context);
+
+    if (context.pid != context_.pid) {
+        throw std::runtime_error(
+            "Process final state PID mismatch"
+        );
+    }
+
+    ProcessAddressSpace stagedAddressSpace =
+        address_space_;
+
+    stagedAddressSpace.replaceMemory(memory);
+
+    context_ = context;
+    address_space_ =
+        std::move(stagedAddressSpace);
 }
 
 void ProcessControlBlock::transitionTo(
