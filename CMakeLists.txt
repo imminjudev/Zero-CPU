@@ -156,6 +156,9 @@ add_library(zero_cpu_core
     src/kernel/TimerPreemptiveScheduler.cpp
     src/kernel/ProcessTermination.cpp
     src/kernel/ProcessLifecycleManager.cpp
+    src/kernel/ExecutableMetadata.cpp
+    src/kernel/ProcessImage.cpp
+    src/kernel/ProcessImageLoader.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -402,7 +405,39 @@ zero_cpu_enable_coverage(
     zero_process_lifecycle_test
 )
 
+
+add_executable(zero_process_image_loader_test
+    tests/process_image_loader.cpp
+)
+
+target_link_libraries(
+    zero_process_image_loader_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_process_image_loader_test
+)
+
+zero_cpu_enable_coverage(
+    zero_process_image_loader_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.process_image_loader
+        COMMAND $<TARGET_FILE:zero_process_image_loader_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.process_image_loader
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;process;image;executable"
+    )
+
     add_test(
         NAME zero_cpu.process_lifecycle
         COMMAND $<TARGET_FILE:zero_process_lifecycle_test>
