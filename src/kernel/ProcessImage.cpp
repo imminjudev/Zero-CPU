@@ -12,7 +12,7 @@ void validateProcessImage(
 
     if (
         image.executable.header.major_version
-        != image.metadata.format_major_version
+            != image.metadata.format_major_version
         || image.executable.header.minor_version
             != image.metadata.format_minor_version
         || image.executable.header.endianness
@@ -28,7 +28,7 @@ void validateProcessImage(
         static_cast<std::size_t>(
             image.executable.header.code_size
         )
-        != image.metadata.code_size
+            != image.metadata.code_size
         || image.executable.code.size()
             != image.metadata.code_size
     ) {
@@ -46,6 +46,24 @@ void validateProcessImage(
     ) {
         throw std::runtime_error(
             "Process image executable entry point does "
+            "not match its metadata"
+        );
+    }
+
+    if (
+        static_cast<std::size_t>(
+            image.executable.header.data_base
+        )
+            != image.metadata.data_base
+        || static_cast<std::size_t>(
+            image.executable.header.data_size
+        )
+            != image.metadata.data_size
+        || image.executable.data.size()
+            != image.metadata.data_size
+    ) {
+        throw std::runtime_error(
+            "Process image executable data section does "
             "not match its metadata"
         );
     }
@@ -70,6 +88,19 @@ void validateProcessImage(
         throw std::runtime_error(
             "Process image memory does not contain "
             "the executable code section"
+        );
+    }
+
+    if (
+        image.memory.readBytes(
+            image.metadata.data_base,
+            image.metadata.data_size
+        )
+        != image.executable.data
+    ) {
+        throw std::runtime_error(
+            "Process image memory does not contain "
+            "the initialized data section"
         );
     }
 

@@ -29,6 +29,10 @@ struct ExecutableMetadata {
     std::size_t entry_offset = 0;
     std::size_t entry_point = 0;
 
+    std::size_t data_base = 0;
+    std::size_t data_size = 0;
+    std::size_t data_end_exclusive = 0;
+
     std::size_t user_data_begin = 0;
     std::size_t user_data_end_exclusive = 0;
 

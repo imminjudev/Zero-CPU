@@ -17,20 +17,13 @@ void validateExecutableMetadata(
     }
 
     if (
-        metadata.format_major_version
-        != binary::kMajorVersion
+        !binary::isSupportedVersion(
+            metadata.format_major_version,
+            metadata.format_minor_version
+        )
     ) {
         throw std::runtime_error(
-            "Unsupported executable major version"
-        );
-    }
-
-    if (
-        metadata.format_minor_version
-        != binary::kMinorVersion
-    ) {
-        throw std::runtime_error(
-            "Unsupported executable minor version"
+            "Unsupported executable version"
         );
     }
 
@@ -178,6 +171,71 @@ void validateExecutableMetadata(
     ) {
         throw std::runtime_error(
             "Executable User data range overlaps code"
+        );
+    }
+
+    if (
+        metadata.data_base
+        < metadata.user_data_begin
+        || metadata.data_base
+            > metadata.user_data_end_exclusive
+    ) {
+        throw std::runtime_error(
+            "Executable data base is outside "
+            "the User data range"
+        );
+    }
+
+    if (
+        metadata.data_size
+        > metadata.user_data_end_exclusive
+            - metadata.data_base
+    ) {
+        throw std::runtime_error(
+            "Executable data section is outside "
+            "the User data range"
+        );
+    }
+
+    if (
+        metadata.data_base
+        > std::numeric_limits<std::size_t>::max()
+            - metadata.data_size
+    ) {
+        throw std::runtime_error(
+            "Executable data end address overflow"
+        );
+    }
+
+    if (
+        metadata.data_end_exclusive
+        != metadata.data_base
+            + metadata.data_size
+    ) {
+        throw std::runtime_error(
+            "Executable data end does not match "
+            "data base and size"
+        );
+    }
+
+    if (
+        metadata.data_end_exclusive
+        > metadata.code_base
+    ) {
+        throw std::runtime_error(
+            "Executable data section overlaps code"
+        );
+    }
+
+    if (
+        binary::isLegacyVersion(
+            metadata.format_major_version,
+            metadata.format_minor_version
+        )
+        && metadata.data_size != 0
+    ) {
+        throw std::runtime_error(
+            "Legacy executable cannot contain data"
         );
     }
 

@@ -19,11 +19,15 @@ inline constexpr std::array<std::uint8_t, 4> kMagic = {
 };
 
 inline constexpr std::uint8_t kMajorVersion = 0;
-inline constexpr std::uint8_t kMinorVersion = 2;
+inline constexpr std::uint8_t kLegacyMinorVersion = 2;
+inline constexpr std::uint8_t kMinorVersion = 3;
 
-inline constexpr std::size_t kHeaderSize = 16;
+inline constexpr std::size_t kLegacyHeaderSize = 16;
+inline constexpr std::size_t kHeaderSize = 24;
+
 inline constexpr std::size_t kInstructionSize = 24;
-inline constexpr std::size_t kInstructionAlignment = kInstructionSize;
+inline constexpr std::size_t kInstructionAlignment =
+    kInstructionSize;
 
 inline constexpr std::size_t kMagicOffset = 0;
 inline constexpr std::size_t kMajorVersionOffset = 4;
@@ -32,16 +36,21 @@ inline constexpr std::size_t kEndiannessOffset = 6;
 inline constexpr std::size_t kReservedOffset = 7;
 inline constexpr std::size_t kEntryPointOffset = 8;
 inline constexpr std::size_t kCodeSizeOffset = 12;
+inline constexpr std::size_t kDataBaseOffset = 16;
+inline constexpr std::size_t kDataSizeOffset = 20;
 
 enum class BinaryEndianness : std::uint8_t {
     Little = 1,
     Big = 2
 };
 
-inline Endianness toMemoryEndianness(BinaryEndianness endian) {
+inline Endianness toMemoryEndianness(
+    BinaryEndianness endian
+) {
     switch (endian) {
     case BinaryEndianness::Little:
         return Endianness::Little;
+
     case BinaryEndianness::Big:
         return Endianness::Big;
     }
@@ -53,11 +62,54 @@ inline std::string magicString() {
     return "ZCPU";
 }
 
-inline bool isValidInstructionAddress(std::size_t address) {
+inline bool isLegacyVersion(
+    std::uint8_t major,
+    std::uint8_t minor
+) {
+    return major == kMajorVersion
+        && minor == kLegacyMinorVersion;
+}
+
+inline bool isCurrentVersion(
+    std::uint8_t major,
+    std::uint8_t minor
+) {
+    return major == kMajorVersion
+        && minor == kMinorVersion;
+}
+
+inline bool isSupportedVersion(
+    std::uint8_t major,
+    std::uint8_t minor
+) {
+    return isLegacyVersion(major, minor)
+        || isCurrentVersion(major, minor);
+}
+
+inline std::size_t headerSizeForVersion(
+    std::uint8_t major,
+    std::uint8_t minor
+) {
+    if (isLegacyVersion(major, minor)) {
+        return kLegacyHeaderSize;
+    }
+
+    if (isCurrentVersion(major, minor)) {
+        return kHeaderSize;
+    }
+
+    return 0;
+}
+
+inline bool isValidInstructionAddress(
+    std::size_t address
+) {
     return address % kInstructionAlignment == 0;
 }
 
-inline std::size_t instructionIndexToAddress(std::size_t index) {
+inline std::size_t instructionIndexToAddress(
+    std::size_t index
+) {
     return index * kInstructionSize;
 }
 

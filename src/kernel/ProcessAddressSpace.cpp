@@ -175,6 +175,24 @@ void ProcessAddressSpace::validate() const {
     }
 
     if (
+        static_cast<std::size_t>(
+            program.header.data_base
+        )
+            != metadata.data_base
+        || static_cast<std::size_t>(
+            program.header.data_size
+        )
+            != metadata.data_size
+        || program.data.size()
+            != metadata.data_size
+    ) {
+        throw std::runtime_error(
+            "Process address space executable data "
+            "section does not match metadata"
+        );
+    }
+
+    if (
         memory_.readBytes(
             metadata.code_base,
             metadata.code_size

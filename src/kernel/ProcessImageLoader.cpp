@@ -72,6 +72,30 @@ ExecutableMetadata makeMetadata(
         metadata.code_base
         + metadata.entry_offset;
 
+    metadata.data_base =
+        static_cast<std::size_t>(
+            program.header.data_base
+        );
+
+    metadata.data_size =
+        static_cast<std::size_t>(
+            program.header.data_size
+        );
+
+    if (
+        metadata.data_size
+        > std::numeric_limits<std::size_t>::max()
+            - metadata.data_base
+    ) {
+        throw std::runtime_error(
+            "Executable data end address overflow"
+        );
+    }
+
+    metadata.data_end_exclusive =
+        metadata.data_base
+        + metadata.data_size;
+
     metadata.user_data_begin =
         memory_map::kUserDataBase;
 
@@ -122,6 +146,10 @@ ProcessImage ProcessImageLoader::loadProgram(
             != image.metadata.code_size
         || loaded.entry_point
             != image.metadata.entry_point
+        || loaded.data_base
+            != image.metadata.data_base
+        || loaded.data_size
+            != image.metadata.data_size
     ) {
         throw std::runtime_error(
             "Binary loader result does not match "
