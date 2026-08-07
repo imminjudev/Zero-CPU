@@ -1,4 +1,5 @@
 #include "zero_cpu/debug/MultiProcessDebugConsole.hpp"
+#include "zero_cpu/debug/DebugSnapshotJson.hpp"
 
 #include "zero_cpu/core/PrivilegeLevel.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
@@ -957,6 +958,56 @@ bool MultiProcessDebugConsole::executeCommand(
     }
 
     if (
+        command == "snapshot-json"
+        || command == "snapshot"
+    ) {
+        const std::string path =
+            requireArgument(
+                parser,
+                command,
+                "an output path"
+            );
+
+        DebugSnapshotOptions options;
+
+        std::string addressText;
+
+        if (parser >> addressText) {
+            options.memory_address =
+                parseAddress(addressText);
+
+            options.memory_size =
+                parsePositiveCount(
+                    requireArgument(
+                        parser,
+                        command,
+                        "a memory byte count"
+                    ),
+                    command
+                );
+
+            requireNoExtra(
+                parser,
+                command
+            );
+        }
+
+        DebugSnapshotJsonWriter::writeFile(
+            path,
+            session_,
+            options
+        );
+
+        output_
+            << "Multi-process debug snapshot "
+            << "JSON written: "
+            << path
+            << "\n";
+
+        return false;
+    }
+
+    if (
         command == "step"
         || command == "s"
     ) {
@@ -1124,6 +1175,7 @@ void MultiProcessDebugConsole::printHelp() {
         << "  scheduler\n"
         << "  registers\n"
         << "  memory <address> <bytes>\n"
+        << "  snapshot-json <path> [memory-address bytes]\n"
         << "  trace\n"
         << "  quit\n";
 }

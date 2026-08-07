@@ -1,6 +1,7 @@
 #include "zero_cpu/debug/DebugConsole.hpp"
 
 #include "zero_cpu/debug/DebugInspector.hpp"
+#include "zero_cpu/debug/DebugSnapshotJson.hpp"
 
 #include <limits>
 #include <sstream>
@@ -741,6 +742,55 @@ bool DebugConsole::executeCommand(
     }
 
     if (
+        command == "snapshot-json"
+        || command == "snapshot"
+    ) {
+        const std::string path =
+            requireArgument(
+                parser,
+                command,
+                "an output path"
+            );
+
+        DebugSnapshotOptions options;
+
+        std::string addressText;
+
+        if (parser >> addressText) {
+            options.memory_address =
+                parseAddress(addressText);
+
+            options.memory_size =
+                parsePositiveCount(
+                    requireArgument(
+                        parser,
+                        command,
+                        "a memory byte count"
+                    ),
+                    command
+                );
+
+            requireNoExtra(
+                parser,
+                command
+            );
+        }
+
+        DebugSnapshotJsonWriter::writeFile(
+            path,
+            session_,
+            options
+        );
+
+        output_
+            << "Debug snapshot JSON written: "
+            << path
+            << "\n";
+
+        return false;
+    }
+
+    if (
         command == "registers"
         || command == "r"
     ) {
@@ -893,6 +943,7 @@ void DebugConsole::printHelp() {
         << "  registers\n"
         << "  memory <address> <bytes>\n"
         << "  disassemble <address> <instructions>\n"
+        << "  snapshot-json <path> [memory-address bytes]\n"
         << "  trace\n"
         << "  quit\n";
 }

@@ -1,0 +1,4 @@
+# Multi-process snapshot export
+step 2
+snapshot-json build\debug_snapshot_multi.json 0 16
+quit

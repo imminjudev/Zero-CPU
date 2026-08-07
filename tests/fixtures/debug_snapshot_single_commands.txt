@@ -1,0 +1,4 @@
+# Single-process snapshot export
+step 1
+snapshot-json build\debug_snapshot_single.json 0 16
+quit
