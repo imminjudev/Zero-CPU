@@ -143,6 +143,7 @@ add_library(zero_cpu_core
 
     src/debug/DebugSession.cpp
     src/debug/DebugInspector.cpp
+    src/debug/DebugConsole.cpp
 
     src/assembler/Assembler.cpp
 
@@ -562,7 +563,39 @@ zero_cpu_enable_coverage(
     zero_debug_inspector_test
 )
 
+
+add_executable(zero_debug_console_test
+    tests/debug_console.cpp
+)
+
+target_link_libraries(
+    zero_debug_console_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_console_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_console_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_console
+        COMMAND $<TARGET_FILE:zero_debug_console_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_console
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;console;repl;interactive"
+    )
+
     add_test(
         NAME zero_cpu.debug_inspector
         COMMAND $<TARGET_FILE:zero_debug_inspector_test>

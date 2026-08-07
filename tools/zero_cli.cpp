@@ -15,6 +15,7 @@
 #include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/debug/DebugSession.hpp"
 #include "zero_cpu/debug/DebugInspector.hpp"
+#include "zero_cpu/debug/DebugConsole.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -2733,6 +2734,105 @@ struct DebugDisassemblyRequest {
     std::size_t address = 0;
     std::size_t instruction_count = 0;
 };
+
+int debugShellCommand(
+    const std::string& inputPath,
+    int argc,
+    char* argv[],
+    int startIndex
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    std::size_t maxSteps = CPU::kDefaultMaxSteps;
+    bool hasCommandFile = false;
+    std::string commandFilePath;
+
+    int index = startIndex;
+
+    while (index < argc) {
+        const std::string argument = argv[index];
+
+        if (argument == "--commands") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--commands requires a file path"
+                );
+            }
+
+            if (hasCommandFile) {
+                throw std::invalid_argument(
+                    "--commands may be specified only once"
+                );
+            }
+
+            hasCommandFile = true;
+            commandFilePath = argv[index + 1];
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--max-steps") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--max-steps requires a value"
+                );
+            }
+
+            maxSteps = parseRunProcessesPositiveSize(
+                argv[index + 1],
+                "--max-steps"
+            );
+
+            index += 2;
+            continue;
+        }
+
+        throw std::invalid_argument(
+            "Unknown debug-shell option: "
+            + argument
+        );
+    }
+
+    DebugSession session(inputPath);
+
+    DebugConsoleOptions options;
+    options.default_continue_steps = maxSteps;
+
+    if (hasCommandFile) {
+        std::ifstream commandFile(commandFilePath);
+
+        if (!commandFile) {
+            throw std::runtime_error(
+                "Cannot open debugger command file: "
+                + commandFilePath
+            );
+        }
+
+        options.show_prompt = false;
+
+        DebugConsole console(
+            session,
+            commandFile,
+            std::cout,
+            std::cerr,
+            options
+        );
+
+        return console.run().success() ? 0 : 1;
+    }
+
+    DebugConsole console(
+        session,
+        std::cin,
+        std::cout,
+        std::cerr,
+        options
+    );
+
+    return console.run().success() ? 0 : 1;
+}
+
 
 int debugBinaryCommand(
     const std::string& inputPath,
@@ -7320,6 +7420,7 @@ void printUsage() {
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] <app1.zbin> [app2.zbin ...]\n";
     std::cout << "  zero_cli debug-binary <input.zbin> [--break <address>...] [--max-steps N] [--step N] [--registers] [--memory <address> <bytes>...] [--disassemble <address> <instructions>...]\n";
+    std::cout << "  zero_cli debug-shell <input.zbin> [--commands <file>] [--max-steps N]\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
@@ -7731,6 +7832,23 @@ int main(int argc, char* argv[]) {
                 }
 
                 return assembleToBinary(argv[2], argv[3]);
+            }
+
+            if (command == "debug-shell") {
+                if (argc < 3) {
+                    std::cerr
+                        << "Invalid debug-shell command.\n\n";
+
+                    printUsage();
+                    return 1;
+                }
+
+                return debugShellCommand(
+                    argv[2],
+                    argc,
+                    argv,
+                    3
+                );
             }
 
             if (command == "debug-binary") {
