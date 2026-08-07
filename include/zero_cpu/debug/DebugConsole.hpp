@@ -49,7 +49,12 @@ private:
     void printHelp();
     void printStatus(const DebugStop& stop);
     void printBreakpoints();
+    void printWatchpoints();
     void printLastTrace();
+
+    static MemoryWatchMode parseWatchMode(
+        const std::string& text
+    );
 
     static std::size_t parseAddress(
         const std::string& text

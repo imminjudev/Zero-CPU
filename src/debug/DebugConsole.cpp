@@ -344,6 +344,106 @@ bool DebugConsole::executeCommand(
     }
 
     if (
+        command == "watch"
+        || command == "w"
+    ) {
+        const MemoryWatchMode mode =
+            parseWatchMode(
+                requireArgument(
+                    parser,
+                    command,
+                    "read, write, or access"
+                )
+            );
+
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        const std::size_t size =
+            parseOptionalCount(
+                parser,
+                command,
+                sizeof(std::int64_t)
+            );
+
+        const std::size_t id =
+            session_.addWatchpoint(
+                address,
+                size,
+                mode
+            );
+
+        output_
+            << "Watchpoint "
+            << id
+            << " added: "
+            << memoryWatchModeToString(mode)
+            << " ["
+            << address
+            << ", "
+            << address + size
+            << ").\n";
+
+        return false;
+    }
+
+    if (
+        command == "unwatch"
+        || command == "uw"
+    ) {
+        const std::size_t id =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "a watchpoint ID"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        if (session_.removeWatchpoint(id)) {
+            output_
+                << "Watchpoint "
+                << id
+                << " deleted.\n";
+        } else {
+            output_
+                << "No watchpoint with ID "
+                << id
+                << ".\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "watchpoints"
+        || command == "wl"
+    ) {
+        requireNoExtra(parser, command);
+        printWatchpoints();
+        return false;
+    }
+
+    if (command == "clear-watchpoints") {
+        requireNoExtra(parser, command);
+        session_.clearWatchpoints();
+
+        output_
+            << "All watchpoints cleared.\n";
+
+        return false;
+    }
+
+    if (
         command == "registers"
         || command == "r"
     ) {
@@ -480,6 +580,10 @@ void DebugConsole::printHelp() {
         << "  delete <address>\n"
         << "  clear\n"
         << "  breakpoints\n"
+        << "  watch <read|write|access> <address> [bytes]\n"
+        << "  unwatch <ID>\n"
+        << "  watchpoints\n"
+        << "  clear-watchpoints\n"
         << "  registers\n"
         << "  memory <address> <bytes>\n"
         << "  disassemble <address> <instructions>\n"
@@ -503,6 +607,32 @@ void DebugConsole::printStatus(
         << "Total steps: "
         << stop.total_steps
         << "\n";
+
+    if (stop.has_watchpoint) {
+        output_
+            << "Watchpoint ID: "
+            << stop.watchpoint_id
+            << "\n"
+            << "Watch range: ["
+            << stop.watchpoint_address
+            << ", "
+            << (
+                stop.watchpoint_address
+                + stop.watchpoint_size
+            )
+            << ") "
+            << memoryWatchModeToString(
+                stop.watchpoint_mode
+            )
+            << "\n"
+            << "Memory access: "
+            << memoryWatchModeToString(
+                stop.access_mode
+            )
+            << " "
+            << stop.access_address
+            << "\n";
+    }
 
     if (!stop.message.empty()) {
         output_
@@ -532,6 +662,36 @@ void DebugConsole::printBreakpoints() {
     output_ << "\n";
 }
 
+void DebugConsole::printWatchpoints() {
+    const std::vector<MemoryWatchpoint> values =
+        session_.watchpoints();
+
+    if (values.empty()) {
+        output_ << "No watchpoints.\n";
+        return;
+    }
+
+    output_ << "Watchpoints:\n";
+
+    for (
+        const MemoryWatchpoint& watchpoint :
+        values
+    ) {
+        output_
+            << "  "
+            << watchpoint.id
+            << " "
+            << memoryWatchModeToString(
+                watchpoint.mode
+            )
+            << " ["
+            << watchpoint.address
+            << ", "
+            << watchpoint.endExclusive()
+            << ")\n";
+    }
+}
+
 void DebugConsole::printLastTrace() {
     if (
         session_.cpu()
@@ -548,6 +708,30 @@ void DebugConsole::printLastTrace() {
             .last()
             .toCompactString()
         << "\n";
+}
+
+MemoryWatchMode DebugConsole::parseWatchMode(
+    const std::string& text
+) {
+    if (text == "read" || text == "r") {
+        return MemoryWatchMode::Read;
+    }
+
+    if (text == "write" || text == "w") {
+        return MemoryWatchMode::Write;
+    }
+
+    if (
+        text == "access"
+        || text == "a"
+        || text == "rw"
+    ) {
+        return MemoryWatchMode::Access;
+    }
+
+    throw std::runtime_error(
+        "watch mode must be read, write, or access"
+    );
 }
 
 std::size_t DebugConsole::parseAddress(

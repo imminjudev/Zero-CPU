@@ -1,0 +1,9 @@
+# Scripted watchpoint session
+watch write 0 8
+watchpoints
+continue 20
+status
+memory 0 8
+unwatch 1
+watchpoints
+quit

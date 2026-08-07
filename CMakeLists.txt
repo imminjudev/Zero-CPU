@@ -582,7 +582,39 @@ zero_cpu_enable_coverage(
     zero_debug_console_test
 )
 
+
+add_executable(zero_debug_watchpoint_test
+    tests/debug_watchpoint.cpp
+)
+
+target_link_libraries(
+    zero_debug_watchpoint_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_watchpoint_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_watchpoint_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_watchpoint
+        COMMAND $<TARGET_FILE:zero_debug_watchpoint_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_watchpoint
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;watchpoint;memory;trace"
+    )
+
     add_test(
         NAME zero_cpu.debug_console
         COMMAND $<TARGET_FILE:zero_debug_console_test>

@@ -5,10 +5,34 @@
 #include "zero_cpu/kernel/ProcessContext.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace zero_cpu::debug {
+
+const char* memoryWatchModeToString(
+    MemoryWatchMode mode
+) {
+    switch (mode) {
+    case MemoryWatchMode::Read:
+        return "Read";
+
+    case MemoryWatchMode::Write:
+        return "Write";
+
+    case MemoryWatchMode::Access:
+        return "Access";
+    }
+
+    throw std::runtime_error(
+        "Invalid memory watch mode"
+    );
+}
+
+std::size_t MemoryWatchpoint::endExclusive() const {
+    return address + size;
+}
 
 const char* debugStopReasonToString(DebugStopReason reason) {
     switch (reason) {
@@ -18,6 +42,8 @@ const char* debugStopReasonToString(DebugStopReason reason) {
         return "StepComplete";
     case DebugStopReason::Breakpoint:
         return "Breakpoint";
+    case DebugStopReason::Watchpoint:
+        return "Watchpoint";
     case DebugStopReason::ProgramEnd:
         return "ProgramEnd";
     case DebugStopReason::Halted:
@@ -33,6 +59,10 @@ const char* debugStopReasonToString(DebugStopReason reason) {
 
 bool DebugStop::stoppedAtBreakpoint() const {
     return reason == DebugStopReason::Breakpoint;
+}
+
+bool DebugStop::stoppedAtWatchpoint() const {
+    return reason == DebugStopReason::Watchpoint;
 }
 
 bool DebugStop::faulted() const {
@@ -80,6 +110,8 @@ void DebugSession::loadImage(const kernel::ProcessImage& image) {
     source_name_ = image.metadata.source_name;
     metadata_ = image.metadata;
     breakpoints_.clear();
+    watchpoints_.clear();
+    next_watchpoint_id_ = 1;
     total_steps_ = 0;
 
     last_stop_ = DebugStop{};
@@ -150,23 +182,131 @@ std::vector<std::size_t> DebugSession::breakpoints() const {
     );
 }
 
+std::size_t DebugSession::addWatchpoint(
+    std::size_t address,
+    std::size_t size,
+    MemoryWatchMode mode
+) {
+    requireLoaded();
+
+    validateWatchpointRange(
+        address,
+        size
+    );
+
+    for (
+        const MemoryWatchpoint& existing :
+        watchpoints_
+    ) {
+        if (
+            existing.address == address
+            && existing.size == size
+            && existing.mode == mode
+        ) {
+            return existing.id;
+        }
+    }
+
+    if (
+        next_watchpoint_id_
+        == std::numeric_limits<
+            std::size_t
+        >::max()
+    ) {
+        throw std::runtime_error(
+            "Watchpoint ID space exhausted"
+        );
+    }
+
+    MemoryWatchpoint watchpoint;
+    watchpoint.id = next_watchpoint_id_;
+    watchpoint.address = address;
+    watchpoint.size = size;
+    watchpoint.mode = mode;
+
+    ++next_watchpoint_id_;
+
+    watchpoints_.push_back(watchpoint);
+
+    return watchpoint.id;
+}
+
+bool DebugSession::removeWatchpoint(
+    std::size_t id
+) {
+    requireLoaded();
+
+    for (
+        auto iterator = watchpoints_.begin();
+        iterator != watchpoints_.end();
+        ++iterator
+    ) {
+        if (iterator->id == id) {
+            watchpoints_.erase(iterator);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void DebugSession::clearWatchpoints() {
+    requireLoaded();
+    watchpoints_.clear();
+}
+
+std::vector<MemoryWatchpoint>
+DebugSession::watchpoints() const {
+    requireLoaded();
+    return watchpoints_;
+}
+
 DebugStop DebugSession::step() {
     requireLoaded();
 
-    const DebugStop stopped = classifyStoppedState(0);
-    if (stopped.reason != DebugStopReason::Ready) {
+    const DebugStop stopped =
+        classifyStoppedState(0);
+
+    if (
+        stopped.reason
+        != DebugStopReason::Ready
+    ) {
         return stopped;
     }
 
     cpu_.step();
     ++total_steps_;
 
-    const DebugStop after = classifyStoppedState(1);
-    if (after.reason != DebugStopReason::Ready) {
+    const DebugStop after =
+        classifyStoppedState(1);
+
+    if (
+        after.reason == DebugStopReason::Fault
+        || after.reason == DebugStopReason::Halted
+    ) {
         return after;
     }
 
-    return makeStop(DebugStopReason::StepComplete, 1);
+    WatchpointHit hit;
+
+    if (findWatchpointHit(hit)) {
+        return makeWatchpointStop(
+            hit,
+            1
+        );
+    }
+
+    if (
+        after.reason
+        != DebugStopReason::Ready
+    ) {
+        return after;
+    }
+
+    return makeStop(
+        DebugStopReason::StepComplete,
+        1
+    );
 }
 
 DebugStop DebugSession::continueExecution(std::size_t maxSteps) {
@@ -210,6 +350,36 @@ DebugStop DebugSession::continueExecution(std::size_t maxSteps) {
         ++executedSteps;
         ++total_steps_;
         skipInitialBreakpoint = false;
+
+        const DebugStop after =
+            classifyStoppedState(
+                executedSteps
+            );
+
+        if (
+            after.reason
+                == DebugStopReason::Fault
+            || after.reason
+                == DebugStopReason::Halted
+        ) {
+            return after;
+        }
+
+        WatchpointHit hit;
+
+        if (findWatchpointHit(hit)) {
+            return makeWatchpointStop(
+                hit,
+                executedSteps
+            );
+        }
+
+        if (
+            after.reason
+            != DebugStopReason::Ready
+        ) {
+            return after;
+        }
     }
 }
 
@@ -241,6 +411,145 @@ void DebugSession::validateBreakpointAddress(std::size_t address) const {
     }
 }
 
+void DebugSession::validateWatchpointRange(
+    std::size_t address,
+    std::size_t size
+) const {
+    if (size == 0) {
+        throw std::runtime_error(
+            "Watchpoint size must be "
+            "greater than zero"
+        );
+    }
+
+    const std::size_t memorySize =
+        cpu_.state().memory().size();
+
+    if (
+        address >= memorySize
+        || size > memorySize - address
+    ) {
+        throw std::runtime_error(
+            "Watchpoint range is outside "
+            "process memory"
+        );
+    }
+}
+
+bool DebugSession::findWatchpointHit(
+    WatchpointHit& hit
+) const {
+    if (
+        watchpoints_.empty()
+        || cpu_.traceLogger().empty()
+    ) {
+        return false;
+    }
+
+    const MemoryTraceDetail& detail =
+        cpu_.traceLogger()
+            .last()
+            .memoryDetail();
+
+    if (
+        !detail.active
+        || !detail.has_address
+        || (
+            !detail.is_read
+            && !detail.is_write
+        )
+    ) {
+        return false;
+    }
+
+    const MemoryWatchMode accessMode =
+        detail.is_write
+            ? MemoryWatchMode::Write
+            : MemoryWatchMode::Read;
+
+    constexpr std::size_t accessSize =
+        sizeof(std::int64_t);
+
+    const std::size_t accessBegin =
+        detail.address;
+
+    const std::size_t accessEnd =
+        accessBegin + accessSize;
+
+    for (
+        const MemoryWatchpoint& watchpoint :
+        watchpoints_
+    ) {
+        const bool modeMatches =
+            watchpoint.mode
+                == MemoryWatchMode::Access
+            || watchpoint.mode
+                == accessMode;
+
+        const bool rangeMatches =
+            watchpoint.address < accessEnd
+            && accessBegin
+                < watchpoint.endExclusive();
+
+        if (
+            modeMatches
+            && rangeMatches
+        ) {
+            hit.watchpoint = watchpoint;
+            hit.access_mode = accessMode;
+            hit.access_address = accessBegin;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+DebugStop DebugSession::makeWatchpointStop(
+    const WatchpointHit& hit,
+    std::size_t executedSteps
+) {
+    DebugStop stop = makeStop(
+        DebugStopReason::Watchpoint,
+        executedSteps,
+        "Watchpoint "
+            + std::to_string(
+                hit.watchpoint.id
+            )
+            + " matched "
+            + memoryWatchModeToString(
+                hit.access_mode
+            )
+            + " at address "
+            + std::to_string(
+                hit.access_address
+            )
+    );
+
+    stop.has_watchpoint = true;
+
+    stop.watchpoint_id =
+        hit.watchpoint.id;
+
+    stop.watchpoint_mode =
+        hit.watchpoint.mode;
+
+    stop.watchpoint_address =
+        hit.watchpoint.address;
+
+    stop.watchpoint_size =
+        hit.watchpoint.size;
+
+    stop.access_mode =
+        hit.access_mode;
+
+    stop.access_address =
+        hit.access_address;
+
+    last_stop_ = stop;
+    return last_stop_;
+}
+
 bool DebugSession::atProgramEnd() const {
     return cpu_.state().pc() == metadata_.code_end_exclusive;
 }
@@ -255,6 +564,21 @@ DebugStop DebugSession::makeStop(
     last_stop_.executed_steps = executedSteps;
     last_stop_.total_steps = total_steps_;
     last_stop_.message = std::move(message);
+
+    last_stop_.has_watchpoint = false;
+    last_stop_.watchpoint_id = 0;
+
+    last_stop_.watchpoint_mode =
+        MemoryWatchMode::Access;
+
+    last_stop_.watchpoint_address = 0;
+    last_stop_.watchpoint_size = 0;
+
+    last_stop_.access_mode =
+        MemoryWatchMode::Access;
+
+    last_stop_.access_address = 0;
+
     return last_stop_;
 }
 
