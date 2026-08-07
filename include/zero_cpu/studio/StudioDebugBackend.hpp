@@ -39,6 +39,31 @@ public:
 
     void clearBreakpoints();
 
+    std::size_t resolveCodeSymbol(
+        const std::string& name
+    ) const;
+
+    std::size_t resolveDataSymbol(
+        const std::string& name
+    ) const;
+
+    std::size_t addConditionalBreakpoint(
+        std::size_t address,
+        const std::string& source,
+        const std::string& operation,
+        const std::string& value
+    );
+
+    void clearConditionalBreakpoints();
+
+    std::size_t addWatchpoint(
+        std::size_t address,
+        std::size_t size,
+        debug::MemoryWatchMode mode
+    );
+
+    void clearWatchpoints();
+
     debug::DebugStop step();
 
     debug::DebugStop run(

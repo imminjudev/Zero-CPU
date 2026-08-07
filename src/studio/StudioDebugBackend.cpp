@@ -79,6 +79,60 @@ void StudioDebugBackend::clearBreakpoints() {
     session_.clearBreakpoints();
 }
 
+std::size_t StudioDebugBackend::resolveCodeSymbol(
+    const std::string& name
+) const {
+    requireLoaded();
+    return session_.resolveCodeSymbol(name);
+}
+
+std::size_t StudioDebugBackend::resolveDataSymbol(
+    const std::string& name
+) const {
+    requireLoaded();
+    return session_.resolveDataSymbol(name);
+}
+
+std::size_t StudioDebugBackend::addConditionalBreakpoint(
+    std::size_t address,
+    const std::string& source,
+    const std::string& operation,
+    const std::string& value
+) {
+    requireLoaded();
+
+    const debug::DebugCondition condition =
+        debug::parseDebugCondition(
+            source,
+            operation,
+            value
+        );
+
+    return session_.addConditionalBreakpoint(
+        address,
+        condition
+    );
+}
+
+void StudioDebugBackend::clearConditionalBreakpoints() {
+    requireLoaded();
+    session_.clearConditionalBreakpoints();
+}
+
+std::size_t StudioDebugBackend::addWatchpoint(
+    std::size_t address,
+    std::size_t size,
+    debug::MemoryWatchMode mode
+) {
+    requireLoaded();
+    return session_.addWatchpoint(address, size, mode);
+}
+
+void StudioDebugBackend::clearWatchpoints() {
+    requireLoaded();
+    session_.clearWatchpoints();
+}
+
 debug::DebugStop StudioDebugBackend::step() {
     requireLoaded();
     return session_.step();

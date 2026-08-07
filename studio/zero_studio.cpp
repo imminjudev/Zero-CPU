@@ -67,6 +67,11 @@ constexpr int kIdExportTraceButton = 1019;
 constexpr int kIdTraceFilterEdit = 1020;
 constexpr int kIdApplyTraceFilterButton = 1021;
 constexpr int kIdExportSnapshotButton = 1022;
+constexpr int kIdDebugSpecEdit = 1023;
+constexpr int kIdAddConditionalBreakpointButton = 1024;
+constexpr int kIdClearConditionalBreakpointsButton = 1025;
+constexpr int kIdAddWatchpointButton = 1026;
+constexpr int kIdClearWatchpointsButton = 1027;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -108,6 +113,11 @@ HWND g_exportTraceButton = nullptr;
 HWND g_traceFilterEdit = nullptr;
 HWND g_applyTraceFilterButton = nullptr;
 HWND g_exportSnapshotButton = nullptr;
+HWND g_debugSpecEdit = nullptr;
+HWND g_addConditionalBreakpointButton = nullptr;
+HWND g_clearConditionalBreakpointsButton = nullptr;
+HWND g_addWatchpointButton = nullptr;
+HWND g_clearWatchpointsButton = nullptr;
 
 zero_cpu::CPU g_cpu;
 
@@ -531,6 +541,87 @@ bool parseSizeT(
     }
 }
 
+std::string trimStudioText(const std::string& text) {
+    const auto first = std::find_if_not(
+        text.begin(), text.end(),
+        [](unsigned char ch) { return std::isspace(ch) != 0; }
+    );
+    const auto last = std::find_if_not(
+        text.rbegin(), text.rend(),
+        [](unsigned char ch) { return std::isspace(ch) != 0; }
+    ).base();
+    if (first >= last) {
+        return {};
+    }
+    return std::string(first, last);
+}
+
+std::size_t resolveStudioCodeAddress(const std::string& text) {
+    const std::string token = trimStudioText(text);
+    if (token.empty()) {
+        throw std::runtime_error("Code location is empty");
+    }
+
+    std::size_t address = 0;
+    if (parseSizeT(token, address)) {
+        return address;
+    }
+
+    if (!binaryDebugActive()) {
+        throw std::runtime_error(
+            "Code labels require an active binary DebugSession"
+        );
+    }
+
+    return g_binaryDebugger->resolveCodeSymbol(token);
+}
+
+std::size_t resolveStudioDataAddress(const std::string& text) {
+    const std::string token = trimStudioText(text);
+    if (token.empty()) {
+        throw std::runtime_error("Data location is empty");
+    }
+
+    std::size_t address = 0;
+    if (parseSizeT(token, address)) {
+        return address;
+    }
+
+    if (!binaryDebugActive()) {
+        throw std::runtime_error(
+            "Data labels require an active binary DebugSession"
+        );
+    }
+
+    return g_binaryDebugger->resolveDataSymbol(token);
+}
+
+zero_cpu::debug::MemoryWatchMode parseStudioWatchMode(
+    const std::string& text
+) {
+    std::string mode = trimStudioText(text);
+    std::transform(
+        mode.begin(), mode.end(), mode.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        }
+    );
+
+    if (mode == "read" || mode == "r") {
+        return zero_cpu::debug::MemoryWatchMode::Read;
+    }
+    if (mode == "write" || mode == "w") {
+        return zero_cpu::debug::MemoryWatchMode::Write;
+    }
+    if (mode == "access" || mode == "rw" || mode == "readwrite") {
+        return zero_cpu::debug::MemoryWatchMode::Access;
+    }
+
+    throw std::runtime_error(
+        "Watch mode must be read, write, or access"
+    );
+}
+
 bool hasBreakpoint(std::size_t pc) {
     if (binaryDebugActive()) {
         return g_binaryDebugger
@@ -567,45 +658,62 @@ bool addBreakpoint(std::size_t pc) {
 
 std::string makeBreakpointView() {
     std::ostringstream output;
-
     output << "Breakpoints\n";
 
     std::vector<std::size_t> values;
-
     if (binaryDebugActive()) {
-        values =
-            g_binaryDebugger
-                ->session()
-                .breakpoints();
+        values = g_binaryDebugger->session().breakpoints();
     } else {
         values = g_breakpoints;
     }
 
     if (values.empty()) {
         output << "(none)\n";
+    } else {
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            output << "[" << index << "] PC = " << values[index];
+            if (
+                g_programLoaded
+                && values[index] == studioCPU().state().pc()
+            ) {
+                output << "  <current>";
+            }
+            output << "\n";
+        }
+    }
+
+    if (!binaryDebugActive()) {
         return output.str();
     }
 
-    for (
-        std::size_t index = 0;
-        index < values.size();
-        ++index
-    ) {
-        output
-            << "["
-            << index
-            << "] PC = "
-            << values[index];
-
-        if (
-            g_programLoaded
-            && values[index]
-                == studioCPU().state().pc()
-        ) {
-            output << "  <current>";
+    const auto conditional =
+        g_binaryDebugger->session().conditionalBreakpoints();
+    output << "\nConditional Breakpoints\n";
+    if (conditional.empty()) {
+        output << "(none)\n";
+    } else {
+        for (const auto& breakpoint : conditional) {
+            output
+                << "[id=" << breakpoint.id << "] PC = "
+                << breakpoint.address << " if "
+                << breakpoint.condition.expression << "\n";
         }
+    }
 
-        output << "\n";
+    const auto watchpoints =
+        g_binaryDebugger->session().watchpoints();
+    output << "\nWatchpoints\n";
+    if (watchpoints.empty()) {
+        output << "(none)\n";
+    } else {
+        for (const auto& watchpoint : watchpoints) {
+            output
+                << "[id=" << watchpoint.id << "] "
+                << zero_cpu::debug::memoryWatchModeToString(watchpoint.mode)
+                << " [" << watchpoint.address << ", "
+                << watchpoint.endExclusive() << ") size="
+                << watchpoint.size << "\n";
+        }
     }
 
     return output.str();
@@ -2372,7 +2480,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.29\n";
+    oss << "Zero-CPU Studio v0.30\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -3279,53 +3387,194 @@ void onAddBreakpointClicked() {
 
     const std::string text = getWindowTextString(g_breakpointEdit);
     std::size_t pc = studioCPU().state().pc();
+    bool resolvedSymbol = false;
 
-    if (!text.empty()) {
-        if (!parseSizeT(text, pc)) {
-            appendTraceText("\nInvalid breakpoint PC. Use decimal or 0x-prefixed hex.\n");
-            refreshStateView();
-            return;
+    if (!trimStudioText(text).empty()) {
+        std::size_t numericAddress = 0;
+        if (parseSizeT(text, numericAddress)) {
+            pc = numericAddress;
+        } else {
+            try {
+                pc = resolveStudioCodeAddress(text);
+                resolvedSymbol = true;
+            } catch (const std::exception& ex) {
+                std::ostringstream output;
+                output
+                    << "\nInvalid breakpoint location.\n"
+                    << "Input = " << text << "\n"
+                    << "Error = " << ex.what() << "\n";
+                appendTraceText(output.str());
+                refreshStateView();
+                return;
+            }
         }
     }
 
     try {
-        const bool added =
-            addBreakpoint(pc);
-
+        const bool added = addBreakpoint(pc);
         std::ostringstream output;
 
-        if (added) {
+        if (resolvedSymbol) {
             output
-                << "\nAdded breakpoint at PC="
-                << pc
-                << "\n";
-        } else {
-            output
-                << "\nBreakpoint already exists at PC="
-                << pc
-                << "\n";
+                << "\nResolved code label '"
+                << trimStudioText(text)
+                << "' -> PC=" << pc << "\n";
         }
 
-        appendTraceText(
-            output.str()
-        );
+        if (added) {
+            output << "Added breakpoint at PC=" << pc << "\n";
+        } else {
+            output << "Breakpoint already exists at PC=" << pc << "\n";
+        }
+
+        appendTraceText(output.str());
     } catch (const std::exception& ex) {
         std::ostringstream output;
-
         output
             << "\nBreakpoint rejected.\n"
-            << "PC = "
-            << pc
-            << "\n"
-            << "Error = "
-            << ex.what()
-            << "\n";
-
-        appendTraceText(
-            output.str()
-        );
+            << "PC = " << pc << "\n"
+            << "Error = " << ex.what() << "\n";
+        appendTraceText(output.str());
     }
 
+    refreshStateView();
+}
+
+void onAddConditionalBreakpointClicked() {
+    if (!binaryDebugActive()) {
+        appendTraceText(
+            "\nConditional breakpoints require an active binary DebugSession.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    const std::string spec = getWindowTextString(g_debugSpecEdit);
+    std::istringstream input(spec);
+    std::string locationText, source, operation, value, extra;
+
+    if (
+        !(input >> locationText >> source >> operation >> value)
+        || (input >> extra)
+    ) {
+        appendTraceText(
+            "\nInvalid conditional breakpoint spec.\n"
+            "Format: <pc|code-label> <source> <op> <value>\n"
+            "Example: work R0 == 3\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    try {
+        const std::size_t address = resolveStudioCodeAddress(locationText);
+        const std::size_t id =
+            g_binaryDebugger->addConditionalBreakpoint(
+                address, source, operation, value
+            );
+
+        std::ostringstream output;
+        output
+            << "\nAdded conditional breakpoint.\n"
+            << "ID = " << id << "\n"
+            << "PC = " << address << "\n"
+            << "Condition = " << source << " "
+            << operation << " " << value << "\n";
+        appendTraceText(output.str());
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+        output
+            << "\nConditional breakpoint rejected.\n"
+            << "Spec = " << spec << "\n"
+            << "Error = " << ex.what() << "\n";
+        appendTraceText(output.str());
+    }
+
+    refreshStateView();
+}
+
+void onClearConditionalBreakpointsClicked() {
+    if (!binaryDebugActive()) {
+        appendTraceText("\nNo active binary DebugSession.\n");
+        refreshStateView();
+        return;
+    }
+
+    g_binaryDebugger->clearConditionalBreakpoints();
+    appendTraceText("\nCleared conditional breakpoints.\n");
+    refreshStateView();
+}
+
+void onAddWatchpointClicked() {
+    if (!binaryDebugActive()) {
+        appendTraceText(
+            "\nWatchpoints require an active binary DebugSession.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    const std::string spec = getWindowTextString(g_debugSpecEdit);
+    std::istringstream input(spec);
+    std::string locationText, sizeText, modeText, extra;
+
+    if (
+        !(input >> locationText >> sizeText >> modeText)
+        || (input >> extra)
+    ) {
+        appendTraceText(
+            "\nInvalid watchpoint spec.\n"
+            "Format: <addr|data-label> <size> <read|write|access>\n"
+            "Example: value 8 write\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    try {
+        const std::size_t address = resolveStudioDataAddress(locationText);
+        std::size_t size = 0;
+        if (!parseSizeT(sizeText, size) || size == 0) {
+            throw std::runtime_error(
+                "Watchpoint size must be a positive integer"
+            );
+        }
+
+        const auto mode = parseStudioWatchMode(modeText);
+        const std::size_t id =
+            g_binaryDebugger->addWatchpoint(address, size, mode);
+
+        std::ostringstream output;
+        output
+            << "\nAdded watchpoint.\n"
+            << "ID = " << id << "\n"
+            << "Range = [" << address << ", "
+            << (address + size) << ")\n"
+            << "Mode = "
+            << zero_cpu::debug::memoryWatchModeToString(mode)
+            << "\n";
+        appendTraceText(output.str());
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+        output
+            << "\nWatchpoint rejected.\n"
+            << "Spec = " << spec << "\n"
+            << "Error = " << ex.what() << "\n";
+        appendTraceText(output.str());
+    }
+
+    refreshStateView();
+}
+
+void onClearWatchpointsClicked() {
+    if (!binaryDebugActive()) {
+        appendTraceText("\nNo active binary DebugSession.\n");
+        refreshStateView();
+        return;
+    }
+
+    g_binaryDebugger->clearWatchpoints();
+    appendTraceText("\nCleared watchpoints.\n");
     refreshStateView();
 }
 
@@ -3384,6 +3633,10 @@ void onResetClicked() {
         SetWindowTextA(g_breakpointEdit, "");
     }
 
+    if (g_debugSpecEdit != nullptr) {
+        SetWindowTextA(g_debugSpecEdit, "");
+    }
+
     try {
         setEditText(g_sourceEdit, readTextFile(kDefaultSourcePath));
     } catch (...) {
@@ -3392,7 +3645,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.29\n"
+        "Zero-CPU Studio v0.30\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -3421,6 +3674,10 @@ void onResetClicked() {
         "Breakpoint input accepts decimal and 0x hex.\n"
         "Debugger snapshot export added.\n"
         "Symbol sidecar assembly added.\n"
+        "Advanced debugger controls added.\n"
+        "BP field accepts code labels.\n"
+        "Conditional breakpoint and watchpoint GUI added.\n"
+        "Patch: v1.2-studio-advanced-debug-controls-r1\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
@@ -3434,8 +3691,12 @@ void onResetClicked() {
         "  6. [Run BIO-OS] runs examples\\\\bio_os\n"
         "\n"
         "Breakpoints:\n"
-        "  - Type a PC and click [Add BP]\n"
+        "  - Type a PC or code label and click [Add BP]\n"
         "  - Empty BP field uses current PC\n"
+        "\n"
+        "Advanced Debug Controls:\n"
+        "  - Cond: work R0 == 3\n"
+        "  - Watch: value 8 write\n"
     );
 
     refreshStateView();
@@ -3815,10 +4076,76 @@ LRESULT CALLBACK windowProc(
         CreateWindowExA(
             0,
             "STATIC",
+            "Debug spec:",
+            WS_CHILD | WS_VISIBLE,
+            20, 124, 90, 24,
+            hwnd, nullptr, nullptr, nullptr
+        );
+
+        g_debugSpecEdit = CreateWindowExA(
+            WS_EX_CLIENTEDGE,
+            "EDIT",
+            "",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            110, 120, 520, 30,
+            hwnd,
+            controlId(kIdDebugSpecEdit),
+            nullptr,
+            nullptr
+        );
+
+        g_addConditionalBreakpointButton = CreateWindowExA(
+            0, "BUTTON", "Add Cond",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            640, 120, 100, 30,
+            hwnd,
+            controlId(kIdAddConditionalBreakpointButton),
+            nullptr, nullptr
+        );
+
+        g_clearConditionalBreakpointsButton = CreateWindowExA(
+            0, "BUTTON", "Clear Cond",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            750, 120, 105, 30,
+            hwnd,
+            controlId(kIdClearConditionalBreakpointsButton),
+            nullptr, nullptr
+        );
+
+        g_addWatchpointButton = CreateWindowExA(
+            0, "BUTTON", "Add Watch",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            865, 120, 105, 30,
+            hwnd,
+            controlId(kIdAddWatchpointButton),
+            nullptr, nullptr
+        );
+
+        g_clearWatchpointsButton = CreateWindowExA(
+            0, "BUTTON", "Clear Watch",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            980, 120, 115, 30,
+            hwnd,
+            controlId(kIdClearWatchpointsButton),
+            nullptr, nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
+            "Cond: work R0 == 3   Watch: value 8 write",
+            WS_CHILD | WS_VISIBLE,
+            1110, 124, 350, 24,
+            hwnd, nullptr, nullptr, nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
             "Source Editor (.zasm):",
             WS_CHILD | WS_VISIBLE,
             20,
-            120,
+            160,
             240,
             24,
             hwnd,
@@ -3840,9 +4167,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOVSCROLL |
                 ES_AUTOHSCROLL,
             20,
-            146,
+            186,
             450,
-            680,
+            640,
             hwnd,
             controlId(kIdSourceEdit),
             nullptr,
@@ -3855,7 +4182,7 @@ LRESULT CALLBACK windowProc(
             "CPU / Register / Memory View:",
             WS_CHILD | WS_VISIBLE,
             490,
-            120,
+            160,
             320,
             24,
             hwnd,
@@ -3878,9 +4205,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOHSCROLL |
                 ES_READONLY,
             490,
-            146,
+            186,
             460,
-            680,
+            640,
             hwnd,
             controlId(kIdStateEdit),
             nullptr,
@@ -3893,7 +4220,7 @@ LRESULT CALLBACK windowProc(
             "Trace / Execution Log:",
             WS_CHILD | WS_VISIBLE,
             970,
-            120,
+            160,
             320,
             24,
             hwnd,
@@ -3916,9 +4243,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOHSCROLL |
                 ES_READONLY,
             970,
-            146,
+            186,
             480,
-            680,
+            640,
             hwnd,
             controlId(kIdTraceEdit),
             nullptr,
@@ -3971,6 +4298,11 @@ LRESULT CALLBACK windowProc(
         applyFont(g_runBioOSButton, font);
         applyFont(g_exportTraceButton, font);
         applyFont(g_exportSnapshotButton, font);
+        applyFont(g_debugSpecEdit, font);
+        applyFont(g_addConditionalBreakpointButton, font);
+        applyFont(g_clearConditionalBreakpointsButton, font);
+        applyFont(g_addWatchpointButton, font);
+        applyFont(g_clearWatchpointsButton, font);
         applyFont(g_traceFilterEdit, font);
         applyFont(g_applyTraceFilterButton, font);
         applyFont(g_sourceEdit, font);
@@ -4125,6 +4457,26 @@ LRESULT CALLBACK windowProc(
             == kIdExportSnapshotButton
         ) {
             onExportSnapshotClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdAddConditionalBreakpointButton) {
+            onAddConditionalBreakpointClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdClearConditionalBreakpointsButton) {
+            onClearConditionalBreakpointsClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdAddWatchpointButton) {
+            onAddWatchpointClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdClearWatchpointsButton) {
+            onClearWatchpointsClicked();
             return 0;
         }
 

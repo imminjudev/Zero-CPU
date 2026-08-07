@@ -160,6 +160,96 @@ bool breakpointWorkflow(std::string& detail) {
     return true;
 }
 
+bool advancedDebugControls(std::string& detail) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    {
+        StudioDebugBackend backend;
+        backend.loadImage(makeImage());
+
+        const std::size_t workAddress =
+            memory_map::kBinaryCodeBase
+            + binary::kInstructionSize;
+
+        const std::size_t id =
+            backend.addConditionalBreakpoint(
+                workAddress,
+                "R0",
+                "==",
+                "1"
+            );
+
+        const DebugStop stopped = backend.run(20);
+        if (
+            id != 1
+            || stopped.reason != DebugStopReason::ConditionalBreakpoint
+            || stopped.pc != workAddress
+            || !stopped.has_conditional_breakpoint
+            || stopped.conditional_breakpoint_id != id
+            || stopped.conditional_actual_value != 1
+        ) {
+            detail = "studio conditional breakpoint mismatch";
+            return false;
+        }
+
+        backend.clearConditionalBreakpoints();
+        if (!backend.session().conditionalBreakpoints().empty()) {
+            detail = "studio conditional breakpoint clear mismatch";
+            return false;
+        }
+    }
+
+    {
+        StudioDebugBackend backend;
+        backend.loadImage(makeImage());
+
+        const std::size_t id = backend.addWatchpoint(
+            memory_map::kUserDataBase,
+            sizeof(std::int64_t),
+            MemoryWatchMode::Write
+        );
+
+        const DebugStop stopped = backend.run(20);
+        if (
+            id != 1
+            || stopped.reason != DebugStopReason::Watchpoint
+            || !stopped.has_watchpoint
+            || stopped.watchpoint_id != id
+            || stopped.access_address != memory_map::kUserDataBase
+            || stopped.access_mode != MemoryWatchMode::Write
+        ) {
+            detail = "studio watchpoint mismatch";
+            return false;
+        }
+
+        backend.clearWatchpoints();
+        if (!backend.session().watchpoints().empty()) {
+            detail = "studio watchpoint clear mismatch";
+            return false;
+        }
+    }
+
+    {
+        StudioDebugBackend backend;
+        backend.loadImage(makeImage());
+        if (!throwsRuntimeError([&] {
+            (void)backend.addConditionalBreakpoint(
+                memory_map::kBinaryCodeBase,
+                "R99",
+                "==",
+                "0"
+            );
+        })) {
+            detail = "invalid studio condition was accepted";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool snapshotAndStatus(std::string& detail) {
     using namespace zero_cpu::debug;
     using namespace zero_cpu::studio;
@@ -319,6 +409,15 @@ int main() {
         report(
             "Studio breakpoint workflow",
             breakpointWorkflow(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio advanced debug controls",
+            advancedDebugControls(detail),
             detail
         );
     }
