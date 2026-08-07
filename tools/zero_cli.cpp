@@ -13,6 +13,8 @@
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
+#include "zero_cpu/debug/DebugSession.hpp"
+#include "zero_cpu/debug/DebugInspector.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -2694,6 +2696,404 @@ int runProcessesCommand(
     }
 
     return result.success() ? 0 : 1;
+}
+
+
+std::size_t parseDebuggerAddress(
+    const std::string& text
+) {
+    std::size_t parsed = 0;
+    const unsigned long long value = std::stoull(text, &parsed, 0);
+
+    if (parsed != text.size()) {
+        throw std::invalid_argument(
+            "Breakpoint address must be an integer"
+        );
+    }
+
+    if (
+        value > static_cast<unsigned long long>(
+            std::numeric_limits<std::size_t>::max()
+        )
+    ) {
+        throw std::out_of_range(
+            "Breakpoint address exceeds size_t"
+        );
+    }
+
+    return static_cast<std::size_t>(value);
+}
+
+struct DebugMemoryRequest {
+    std::size_t address = 0;
+    std::size_t count = 0;
+};
+
+struct DebugDisassemblyRequest {
+    std::size_t address = 0;
+    std::size_t instruction_count = 0;
+};
+
+int debugBinaryCommand(
+    const std::string& inputPath,
+    int argc,
+    char* argv[],
+    int startIndex
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    std::size_t maxSteps =
+        CPU::kDefaultMaxSteps;
+
+    bool stepRequested = false;
+    std::size_t stepCount = 0;
+
+    bool showRegisters = false;
+
+    std::vector<std::size_t>
+        breakpointAddresses;
+
+    std::vector<DebugMemoryRequest>
+        memoryRequests;
+
+    std::vector<DebugDisassemblyRequest>
+        disassemblyRequests;
+
+    int index = startIndex;
+
+    while (index < argc) {
+        const std::string argument =
+            argv[index];
+
+        if (argument == "--break") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--break requires an address"
+                );
+            }
+
+            breakpointAddresses.push_back(
+                parseDebuggerAddress(
+                    argv[index + 1]
+                )
+            );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--max-steps") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--max-steps requires a value"
+                );
+            }
+
+            maxSteps =
+                parseRunProcessesPositiveSize(
+                    argv[index + 1],
+                    "--max-steps"
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--step") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--step requires a count"
+                );
+            }
+
+            stepRequested = true;
+
+            stepCount =
+                parseRunProcessesPositiveSize(
+                    argv[index + 1],
+                    "--step"
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--registers") {
+            showRegisters = true;
+            ++index;
+            continue;
+        }
+
+        if (argument == "--memory") {
+            if (index + 2 >= argc) {
+                throw std::invalid_argument(
+                    "--memory requires an address "
+                    "and byte count"
+                );
+            }
+
+            DebugMemoryRequest request;
+
+            request.address =
+                parseDebuggerAddress(
+                    argv[index + 1]
+                );
+
+            request.count =
+                parseRunProcessesPositiveSize(
+                    argv[index + 2],
+                    "--memory"
+                );
+
+            memoryRequests.push_back(
+                request
+            );
+
+            index += 3;
+            continue;
+        }
+
+        if (argument == "--disassemble") {
+            if (index + 2 >= argc) {
+                throw std::invalid_argument(
+                    "--disassemble requires an address "
+                    "and instruction count"
+                );
+            }
+
+            DebugDisassemblyRequest request;
+
+            request.address =
+                parseDebuggerAddress(
+                    argv[index + 1]
+                );
+
+            request.instruction_count =
+                parseRunProcessesPositiveSize(
+                    argv[index + 2],
+                    "--disassemble"
+                );
+
+            disassemblyRequests.push_back(
+                request
+            );
+
+            index += 3;
+            continue;
+        }
+
+        throw std::invalid_argument(
+            "Unknown debug-binary option: "
+            + argument
+        );
+    }
+
+    DebugSession session(inputPath);
+
+    for (
+        const std::size_t address :
+        breakpointAddresses
+    ) {
+        (void)session.addBreakpoint(
+            address
+        );
+    }
+
+    std::cout
+        << "=== Zero-CPU Debug Session ==="
+        << std::endl;
+
+    std::cout
+        << "Executable: "
+        << session.sourceName()
+        << std::endl;
+
+    std::cout
+        << "Code range: ["
+        << session.metadata().code_base
+        << ", "
+        << session.metadata()
+            .code_end_exclusive
+        << ")"
+        << std::endl;
+
+    std::cout
+        << "Entry point: "
+        << session.metadata().entry_point
+        << std::endl;
+
+    if (breakpointAddresses.empty()) {
+        std::cout
+            << "Breakpoints: <none>"
+            << std::endl;
+    } else {
+        std::cout << "Breakpoints:";
+
+        for (
+            const std::size_t address :
+            session.breakpoints()
+        ) {
+            std::cout
+                << " "
+                << address;
+        }
+
+        std::cout << std::endl;
+    }
+
+    DebugStop stop =
+        session.lastStop();
+
+    if (stepRequested) {
+        for (
+            std::size_t stepIndex = 0;
+            stepIndex < stepCount;
+            ++stepIndex
+        ) {
+            stop = session.step();
+
+            if (
+                stop.reason
+                != DebugStopReason::StepComplete
+            ) {
+                break;
+            }
+        }
+    } else {
+        stop = session.continueExecution(
+            maxSteps
+        );
+    }
+
+    std::cout
+        << "Stop reason: "
+        << debugStopReasonToString(
+            stop.reason
+        )
+        << std::endl;
+
+    std::cout
+        << "PC: "
+        << stop.pc
+        << std::endl;
+
+    std::cout
+        << "Executed steps: "
+        << stop.executed_steps
+        << std::endl;
+
+    std::cout
+        << "Total steps: "
+        << stop.total_steps
+        << std::endl;
+
+    if (!stop.message.empty()) {
+        std::cout
+            << "Message: "
+            << stop.message
+            << std::endl;
+    }
+
+    std::cout << std::endl;
+
+    std::cout
+        << session.cpu().state().summary();
+
+    if (showRegisters) {
+        std::cout << std::endl;
+
+        std::cout
+            << "=== Registers ==="
+            << std::endl;
+
+        std::cout
+            << DebugInspector::formatRegisters(
+                DebugInspector::inspectRegisters(
+                    session
+                )
+            )
+            << std::endl;
+    }
+
+    for (
+        const DebugMemoryRequest& request :
+        memoryRequests
+    ) {
+        std::cout << std::endl;
+
+        std::cout
+            << "=== Memory Inspection ==="
+            << std::endl;
+
+        std::cout
+            << DebugInspector::formatMemory(
+                DebugInspector::inspectMemory(
+                    session,
+                    request.address,
+                    request.count
+                )
+            )
+            << std::endl;
+    }
+
+    for (
+        const DebugDisassemblyRequest& request :
+        disassemblyRequests
+    ) {
+        std::cout << std::endl;
+
+        std::cout
+            << "=== Disassembly ==="
+            << std::endl;
+
+        std::cout
+            << DebugInspector::formatDisassembly(
+                DebugInspector::disassemble(
+                    session,
+                    request.address,
+                    request.instruction_count
+                )
+            )
+            << std::endl;
+    }
+
+    if (
+        !session.cpu()
+            .traceLogger().empty()
+    ) {
+        std::cout << std::endl;
+
+        std::cout
+            << "Last trace:"
+            << std::endl;
+
+        std::cout
+            << session.cpu()
+                .traceLogger()
+                .last()
+                .toCompactString()
+            << std::endl;
+    }
+
+    switch (stop.reason) {
+    case DebugStopReason::Breakpoint:
+    case DebugStopReason::ProgramEnd:
+    case DebugStopReason::Halted:
+    case DebugStopReason::StepComplete:
+        return 0;
+
+    case DebugStopReason::Fault:
+        return 2;
+
+    case DebugStopReason::StepLimit:
+        return 3;
+
+    case DebugStopReason::Ready:
+        return 1;
+    }
+
+    return 1;
 }
 
 
@@ -6919,6 +7319,7 @@ void printUsage() {
     std::cout << "  zero_cli syscall-table\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
     std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] <app1.zbin> [app2.zbin ...]\n";
+    std::cout << "  zero_cli debug-binary <input.zbin> [--break <address>...] [--max-steps N] [--step N] [--registers] [--memory <address> <bytes>...] [--disassemble <address> <instructions>...]\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
@@ -7330,6 +7731,23 @@ int main(int argc, char* argv[]) {
                 }
 
                 return assembleToBinary(argv[2], argv[3]);
+            }
+
+            if (command == "debug-binary") {
+                if (argc < 3) {
+                    std::cerr
+                        << "Invalid debug-binary command.\n\n";
+
+                    printUsage();
+                    return 1;
+                }
+
+                return debugBinaryCommand(
+                    argv[2],
+                    argc,
+                    argv,
+                    3
+                );
             }
 
             if (command == "run-processes") {

@@ -1,0 +1,12 @@
+; Zero-CPU debugger breakpoint fixture
+
+.entry start
+
+.data
+value: .qword 0
+
+.text
+start:
+    MOV R0, 1
+    ADD R0, 2
+    STORE [value], R0

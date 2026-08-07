@@ -141,6 +141,9 @@ add_library(zero_cpu_core
     src/trace/TraceJsonWriter.cpp
     src/trace/TraceJsonDiff.cpp
 
+    src/debug/DebugSession.cpp
+    src/debug/DebugInspector.cpp
+
     src/assembler/Assembler.cpp
 
     src/binary/BinaryWriter.cpp
@@ -521,7 +524,71 @@ zero_cpu_enable_coverage(
     zero_multi_process_runner_test
 )
 
+
+add_executable(zero_debug_session_test
+    tests/debug_session.cpp
+)
+
+target_link_libraries(
+    zero_debug_session_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_session_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_session_test
+)
+
+
+add_executable(zero_debug_inspector_test
+    tests/debug_inspector.cpp
+)
+
+target_link_libraries(
+    zero_debug_inspector_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_inspector_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_inspector_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_inspector
+        COMMAND $<TARGET_FILE:zero_debug_inspector_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_inspector
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;registers;memory;disassembly"
+    )
+
+    add_test(
+        NAME zero_cpu.debug_session
+        COMMAND $<TARGET_FILE:zero_debug_session_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_session
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;breakpoint;step;binary"
+    )
+
     add_test(
         NAME zero_cpu.multi_process_runner
         COMMAND $<TARGET_FILE:zero_multi_process_runner_test>
