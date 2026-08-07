@@ -113,6 +113,70 @@ std::size_t optionalPositiveCount(
     }
 }
 
+bool parseOptionalPid(
+    std::istringstream& parser,
+    const std::string& command,
+    kernel::ProcessId& pid
+) {
+    std::string text;
+
+    if (!(parser >> text)) {
+        return false;
+    }
+
+    requireNoExtra(parser, command);
+
+    if (
+        text.empty()
+        || text.front() == '-'
+    ) {
+        throw std::runtime_error(
+            command
+            + " PID must be a positive integer"
+        );
+    }
+
+    try {
+        std::size_t parsed = 0;
+
+        const unsigned long long value =
+            std::stoull(
+                text,
+                &parsed,
+                0
+            );
+
+        if (
+            parsed != text.size()
+            || value == 0
+            || value
+                > static_cast<unsigned long long>(
+                    std::numeric_limits<
+                        kernel::ProcessId
+                    >::max()
+                )
+        ) {
+            throw std::runtime_error(
+                command
+                + " PID must be a positive integer"
+            );
+        }
+
+        pid = static_cast<
+            kernel::ProcessId
+        >(value);
+
+        return true;
+    } catch (const std::runtime_error&) {
+        throw;
+    } catch (const std::exception&) {
+        throw std::runtime_error(
+            command
+            + " PID must be a positive integer"
+        );
+    }
+}
+
 bool isComment(
     const std::string& command
 ) {
@@ -282,6 +346,617 @@ bool MultiProcessDebugConsole::executeCommand(
     }
 
     if (
+        command == "symbols"
+        || command == "sym"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        requireNoExtra(parser, command);
+        printSymbols(pid);
+        return false;
+    }
+
+    if (
+        command == "break"
+        || command == "b"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        requireNoExtra(parser, command);
+
+        if (
+            session_.addBreakpoint(
+                pid,
+                address
+            )
+        ) {
+            output_
+                << "PID "
+                << pid
+                << " breakpoint "
+                << address
+                << " added.\n";
+        } else {
+            output_
+                << "PID "
+                << pid
+                << " breakpoint "
+                << address
+                << " already exists.\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "break-label"
+        || command == "bs"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const std::string label =
+            requireArgument(
+                parser,
+                command,
+                "a code label"
+            );
+
+        requireNoExtra(parser, command);
+
+        const std::size_t address =
+            session_.resolveCodeSymbol(
+                pid,
+                label
+            );
+
+        if (
+            session_.addBreakpoint(
+                pid,
+                address
+            )
+        ) {
+            output_
+                << "PID "
+                << pid
+                << " breakpoint at label "
+                << label
+                << " ("
+                << address
+                << ") added.\n";
+        } else {
+            output_
+                << "PID "
+                << pid
+                << " breakpoint at label "
+                << label
+                << " ("
+                << address
+                << ") already exists.\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "delete"
+        || command == "d"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        requireNoExtra(parser, command);
+
+        if (
+            session_.removeBreakpoint(
+                pid,
+                address
+            )
+        ) {
+            output_
+                << "PID "
+                << pid
+                << " breakpoint "
+                << address
+                << " deleted.\n";
+        } else {
+            output_
+                << "No PID "
+                << pid
+                << " breakpoint at "
+                << address
+                << ".\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "breakpoints"
+        || command == "bl"
+    ) {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            printBreakpoints(
+                session_.breakpoints(pid)
+            );
+        } else {
+            printBreakpoints(
+                session_.breakpoints()
+            );
+        }
+
+        return false;
+    }
+
+    if (command == "clear-breakpoints") {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            session_.clearBreakpoints(pid);
+
+            output_
+                << "PID "
+                << pid
+                << " breakpoints cleared.\n";
+        } else {
+            session_.clearBreakpoints();
+
+            output_
+                << "All process breakpoints "
+                << "cleared.\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "break-if"
+        || command == "bi"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        const std::string source =
+            requireArgument(
+                parser,
+                command,
+                "a condition source"
+            );
+
+        const std::string operation =
+            requireArgument(
+                parser,
+                command,
+                "a comparison operator"
+            );
+
+        const std::string value =
+            requireArgument(
+                parser,
+                command,
+                "a comparison value"
+            );
+
+        requireNoExtra(parser, command);
+
+        const DebugCondition condition =
+            parseDebugCondition(
+                source,
+                operation,
+                value
+            );
+
+        const std::size_t id =
+            session_.addConditionalBreakpoint(
+                pid,
+                address,
+                condition
+            );
+
+        output_
+            << "Conditional breakpoint "
+            << id
+            << " added for PID "
+            << pid
+            << " at "
+            << address
+            << ": "
+            << condition.expression
+            << ".\n";
+
+        return false;
+    }
+
+    if (command == "break-if-label") {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const std::string label =
+            requireArgument(
+                parser,
+                command,
+                "a code label"
+            );
+
+        const std::string source =
+            requireArgument(
+                parser,
+                command,
+                "a condition source"
+            );
+
+        const std::string operation =
+            requireArgument(
+                parser,
+                command,
+                "a comparison operator"
+            );
+
+        const std::string value =
+            requireArgument(
+                parser,
+                command,
+                "a comparison value"
+            );
+
+        requireNoExtra(parser, command);
+
+        const std::size_t address =
+            session_.resolveCodeSymbol(
+                pid,
+                label
+            );
+
+        const DebugCondition condition =
+            parseDebugCondition(
+                source,
+                operation,
+                value
+            );
+
+        const std::size_t id =
+            session_.addConditionalBreakpoint(
+                pid,
+                address,
+                condition
+            );
+
+        output_
+            << "Conditional breakpoint "
+            << id
+            << " added for PID "
+            << pid
+            << " at label "
+            << label
+            << " ("
+            << address
+            << "): "
+            << condition.expression
+            << ".\n";
+
+        return false;
+    }
+
+    if (
+        command == "delete-if"
+        || command == "di"
+    ) {
+        const std::size_t id =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "a conditional breakpoint ID"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        if (
+            session_.removeConditionalBreakpoint(
+                id
+            )
+        ) {
+            output_
+                << "Conditional breakpoint "
+                << id
+                << " deleted.\n";
+        } else {
+            output_
+                << "No conditional breakpoint "
+                << "with ID "
+                << id
+                << ".\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "conditions"
+        || command == "cl"
+    ) {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            printConditionalBreakpoints(
+                session_.conditionalBreakpoints(
+                    pid
+                )
+            );
+        } else {
+            printConditionalBreakpoints(
+                session_.conditionalBreakpoints()
+            );
+        }
+
+        return false;
+    }
+
+    if (command == "clear-conditions") {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            session_.clearConditionalBreakpoints(
+                pid
+            );
+
+            output_
+                << "PID "
+                << pid
+                << " conditional breakpoints "
+                << "cleared.\n";
+        } else {
+            session_.clearConditionalBreakpoints();
+
+            output_
+                << "All process conditional "
+                << "breakpoints cleared.\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "watch"
+        || command == "w"
+    ) {
+        const kernel::ProcessId pid =
+            parsePid(
+                requireArgument(
+                    parser,
+                    command,
+                    "a PID"
+                )
+            );
+
+        const ProcessMemoryWatchMode mode =
+            parseWatchMode(
+                requireArgument(
+                    parser,
+                    command,
+                    "read, write, or access"
+                )
+            );
+
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        const std::size_t size =
+            optionalPositiveCount(
+                parser,
+                command,
+                sizeof(std::int64_t)
+            );
+
+        const std::size_t id =
+            session_.addWatchpoint(
+                pid,
+                address,
+                size,
+                mode
+            );
+
+        output_
+            << "Watchpoint "
+            << id
+            << " added for PID "
+            << pid
+            << ": "
+            << processMemoryWatchModeToString(
+                mode
+            )
+            << " ["
+            << address
+            << ", "
+            << address + size
+            << ").\n";
+
+        return false;
+    }
+
+    if (
+        command == "unwatch"
+        || command == "uw"
+    ) {
+        const std::size_t id =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "a watchpoint ID"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        if (session_.removeWatchpoint(id)) {
+            output_
+                << "Watchpoint "
+                << id
+                << " deleted.\n";
+        } else {
+            output_
+                << "No watchpoint with ID "
+                << id
+                << ".\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "watchpoints"
+        || command == "wl"
+    ) {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            printWatchpoints(
+                session_.watchpoints(pid)
+            );
+        } else {
+            printWatchpoints(
+                session_.watchpoints()
+            );
+        }
+
+        return false;
+    }
+
+    if (command == "clear-watchpoints") {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            session_.clearWatchpoints(pid);
+
+            output_
+                << "PID "
+                << pid
+                << " watchpoints cleared.\n";
+        } else {
+            session_.clearWatchpoints();
+
+            output_
+                << "All process watchpoints "
+                << "cleared.\n";
+        }
+
+        return false;
+    }
+
+    if (
         command == "step"
         || command == "s"
     ) {
@@ -428,6 +1103,21 @@ void MultiProcessDebugConsole::printHelp() {
         << "  processes\n"
         << "  process <PID>\n"
         << "  selected\n"
+        << "  symbols <PID>\n"
+        << "  break <PID> <address>\n"
+        << "  break-label <PID> <label>\n"
+        << "  delete <PID> <address>\n"
+        << "  breakpoints [PID]\n"
+        << "  clear-breakpoints [PID]\n"
+        << "  break-if <PID> <address> <source> <op> <value>\n"
+        << "  break-if-label <PID> <label> <source> <op> <value>\n"
+        << "  delete-if <ID>\n"
+        << "  conditions [PID]\n"
+        << "  clear-conditions [PID]\n"
+        << "  watch <PID> <read|write|access> <address> [bytes]\n"
+        << "  unwatch <ID>\n"
+        << "  watchpoints [PID]\n"
+        << "  clear-watchpoints [PID]\n"
         << "  step [count]\n"
         << "  continue [max-steps]\n"
         << "  status\n"
@@ -464,6 +1154,55 @@ void MultiProcessDebugConsole::printStop(
         << "Total steps: "
         << stop.total_steps
         << "\n";
+
+    if (stop.has_debug_hit) {
+        output_
+            << "Hit PID: "
+            << stop.hit_pid
+            << "\n"
+            << "Hit address: "
+            << stop.hit_address
+            << "\n";
+    }
+
+    if (stop.has_conditional_breakpoint) {
+        output_
+            << "Conditional breakpoint ID: "
+            << stop.conditional_breakpoint_id
+            << "\n"
+            << "Condition: "
+            << stop.conditional_expression
+            << "\n"
+            << "Condition actual value: "
+            << stop.conditional_actual_value
+            << "\n";
+    }
+
+    if (stop.has_watchpoint) {
+        output_
+            << "Watchpoint ID: "
+            << stop.watchpoint_id
+            << "\n"
+            << "Watch range: ["
+            << stop.watchpoint_address
+            << ", "
+            << (
+                stop.watchpoint_address
+                + stop.watchpoint_size
+            )
+            << ") "
+            << processMemoryWatchModeToString(
+                stop.watchpoint_mode
+            )
+            << "\n"
+            << "Memory access: "
+            << processMemoryWatchModeToString(
+                stop.access_mode
+            )
+            << " "
+            << stop.access_address
+            << "\n";
+    }
 
     if (stop.process_terminated) {
         output_
@@ -578,6 +1317,18 @@ void MultiProcessDebugConsole::printSnapshot(
         << snapshot.context.sp
         << "\n";
 
+    if (snapshot.has_executable_image) {
+        output_
+            << "  Code range: ["
+            << snapshot.code_base
+            << ", "
+            << snapshot.code_end_exclusive
+            << ")\n"
+            << "  Entry point: "
+            << snapshot.entry_point
+            << "\n";
+    }
+
     if (snapshot.has_exit_code) {
         output_
             << "  Exit code: "
@@ -601,6 +1352,137 @@ void MultiProcessDebugConsole::printSnapshot(
                     .termination_message
                 << "\n";
         }
+    }
+}
+
+void MultiProcessDebugConsole::printSymbols(
+    kernel::ProcessId pid
+) {
+    if (!session_.hasSymbols(pid)) {
+        output_
+            << "No debug symbols loaded for PID "
+            << pid
+            << ".\n";
+
+        return;
+    }
+
+    output_
+        << "Debug symbols for PID "
+        << pid
+        << ":\n";
+
+    for (
+        const DebugSymbol& symbol :
+        session_.symbols(pid).entries()
+    ) {
+        output_
+            << "  "
+            << debugSymbolKindToString(
+                symbol.kind
+            )
+            << " "
+            << symbol.name
+            << " = "
+            << symbol.address
+            << "\n";
+    }
+}
+
+void MultiProcessDebugConsole::printBreakpoints(
+    const std::vector<ProcessBreakpoint>& values
+) {
+    if (values.empty()) {
+        output_
+            << "No process breakpoints.\n";
+
+        return;
+    }
+
+    output_
+        << "Process breakpoints:\n";
+
+    for (
+        const ProcessBreakpoint& breakpoint :
+        values
+    ) {
+        output_
+            << "  PID "
+            << breakpoint.pid
+            << " @"
+            << breakpoint.address
+            << "\n";
+    }
+}
+
+void MultiProcessDebugConsole::
+printConditionalBreakpoints(
+    const std::vector<
+        ProcessConditionalBreakpoint
+    >& values
+) {
+    if (values.empty()) {
+        output_
+            << "No process conditional "
+            << "breakpoints.\n";
+
+        return;
+    }
+
+    output_
+        << "Process conditional breakpoints:\n";
+
+    for (
+        const ProcessConditionalBreakpoint&
+            breakpoint :
+                values
+    ) {
+        output_
+            << "  "
+            << breakpoint.id
+            << " PID "
+            << breakpoint.pid
+            << " @"
+            << breakpoint.address
+            << " when "
+            << breakpoint.condition.expression
+            << "\n";
+    }
+}
+
+void MultiProcessDebugConsole::printWatchpoints(
+    const std::vector<
+        ProcessMemoryWatchpoint
+    >& values
+) {
+    if (values.empty()) {
+        output_
+            << "No process watchpoints.\n";
+
+        return;
+    }
+
+    output_
+        << "Process watchpoints:\n";
+
+    for (
+        const ProcessMemoryWatchpoint& watchpoint :
+        values
+    ) {
+        output_
+            << "  "
+            << watchpoint.id
+            << " PID "
+            << watchpoint.pid
+            << " "
+            << processMemoryWatchModeToString(
+                watchpoint.mode
+            )
+            << " ["
+            << watchpoint.address
+            << ", "
+            << watchpoint.endExclusive()
+            << ")\n";
     }
 }
 
@@ -775,6 +1657,31 @@ void MultiProcessDebugConsole::printTrace() {
             .last()
             .toCompactString()
         << "\n";
+}
+
+ProcessMemoryWatchMode
+MultiProcessDebugConsole::parseWatchMode(
+    const std::string& text
+) {
+    if (text == "read" || text == "r") {
+        return ProcessMemoryWatchMode::Read;
+    }
+
+    if (text == "write" || text == "w") {
+        return ProcessMemoryWatchMode::Write;
+    }
+
+    if (
+        text == "access"
+        || text == "a"
+        || text == "rw"
+    ) {
+        return ProcessMemoryWatchMode::Access;
+    }
+
+    throw std::runtime_error(
+        "watch mode must be read, write, or access"
+    );
 }
 
 kernel::ProcessId

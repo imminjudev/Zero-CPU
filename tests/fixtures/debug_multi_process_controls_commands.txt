@@ -1,0 +1,16 @@
+# Scripted PID-specific debugger controls
+symbols 1
+break-if-label 1 start PC == 512
+conditions 1
+continue 100
+delete-if 1
+break-label 2 start
+breakpoints 2
+continue 100
+delete 2 512
+watch 1 write 0 8
+watchpoints 1
+continue 100
+status
+unwatch 1
+quit

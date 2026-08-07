@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 namespace zero_cpu::debug {
 
@@ -53,23 +54,52 @@ private:
 
     void printBanner();
     void printHelp();
+
     void printStop(
         const MultiProcessDebugStop& stop
     );
 
     void printProcesses();
     void printSelectedProcess();
+
     void printSnapshot(
         const ProcessDebugSnapshot& snapshot
     );
 
+    void printSymbols(
+        kernel::ProcessId pid
+    );
+
+    void printBreakpoints(
+        const std::vector<ProcessBreakpoint>& values
+    );
+
+    void printConditionalBreakpoints(
+        const std::vector<
+            ProcessConditionalBreakpoint
+        >& values
+    );
+
+    void printWatchpoints(
+        const std::vector<
+            ProcessMemoryWatchpoint
+        >& values
+    );
+
     void printScheduler();
     void printRegisters();
+
     void printMemory(
         std::size_t address,
         std::size_t count
     );
+
     void printTrace();
+
+    static ProcessMemoryWatchMode
+    parseWatchMode(
+        const std::string& text
+    );
 
     static kernel::ProcessId parsePid(
         const std::string& text

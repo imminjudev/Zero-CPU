@@ -662,7 +662,39 @@ zero_cpu_enable_coverage(
     zero_debug_multi_process_test
 )
 
+
+add_executable(zero_debug_multi_process_controls_test
+    tests/debug_multi_process_controls.cpp
+)
+
+target_link_libraries(
+    zero_debug_multi_process_controls_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_multi_process_controls_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_multi_process_controls_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_multi_process_controls
+        COMMAND $<TARGET_FILE:zero_debug_multi_process_controls_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_multi_process_controls
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;process;breakpoint;watchpoint;condition"
+    )
+
     add_test(
         NAME zero_cpu.debug_multi_process
         COMMAND $<TARGET_FILE:zero_debug_multi_process_test>
