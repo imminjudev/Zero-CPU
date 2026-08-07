@@ -1,0 +1,11 @@
+# Scripted symbol debugger session
+symbols
+break-label loop
+continue 50
+delete 536
+break-if-label done R0 == 3
+continue 50
+status
+disassemble-label start 5
+memory-label value 8
+quit

@@ -2,6 +2,7 @@
 
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/debug/DebugCondition.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/kernel/ExecutableMetadata.hpp"
 #include "zero_cpu/kernel/ProcessImage.hpp"
 
@@ -104,6 +105,23 @@ public:
     std::size_t totalSteps() const;
     const DebugStop& lastStop() const;
 
+    bool hasSymbols() const;
+
+    const DebugSymbols&
+    symbols() const;
+
+    void loadSymbolsFile(
+        const std::string& path
+    );
+
+    std::size_t resolveCodeSymbol(
+        const std::string& name
+    ) const;
+
+    std::size_t resolveDataSymbol(
+        const std::string& name
+    ) const;
+
     bool addBreakpoint(std::size_t address);
     bool removeBreakpoint(std::size_t address);
     bool hasBreakpoint(std::size_t address) const;
@@ -149,6 +167,7 @@ private:
     bool loaded_ = false;
     std::string source_name_;
     kernel::ExecutableMetadata metadata_;
+    DebugSymbols symbols_;
     std::set<std::size_t> breakpoints_;
 
     std::vector<ConditionalBreakpoint>

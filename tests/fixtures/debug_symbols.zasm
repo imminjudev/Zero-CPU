@@ -1,0 +1,16 @@
+; Zero-CPU symbol debugger fixture
+
+.entry start
+
+.data
+value: .qword 0
+
+.text
+start:
+    MOV R0, 0
+loop:
+    ADD R0, 1
+    CMP R0, 3
+    JL loop
+done:
+    STORE [value], R0

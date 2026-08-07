@@ -5,6 +5,7 @@
 #include "zero_cpu/kernel/ProcessContext.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -116,6 +117,7 @@ void DebugSession::loadImage(const kernel::ProcessImage& image) {
     loaded_ = true;
     source_name_ = image.metadata.source_name;
     metadata_ = image.metadata;
+    symbols_ = DebugSymbols{};
     breakpoints_.clear();
     conditional_breakpoints_.clear();
     next_conditional_breakpoint_id_ = 1;
@@ -128,9 +130,30 @@ void DebugSession::loadImage(const kernel::ProcessImage& image) {
     last_stop_.pc = cpu_.state().pc();
 }
 
-void DebugSession::loadFile(const std::string& path) {
+void DebugSession::loadFile(
+    const std::string& path
+) {
     kernel::ProcessImageLoader loader;
-    loadImage(loader.loadFile(path));
+
+    loadImage(
+        loader.loadFile(path)
+    );
+
+    const std::string symbolsPath =
+        debugSymbolsPathForExecutable(path);
+
+    std::ifstream symbolsProbe(
+        symbolsPath
+    );
+
+    if (symbolsProbe.good()) {
+        symbolsProbe.close();
+
+        symbols_ =
+            DebugSymbols::readFile(
+                symbolsPath
+            );
+    }
 }
 
 bool DebugSession::loaded() const {
@@ -160,6 +183,42 @@ std::size_t DebugSession::totalSteps() const {
 const DebugStop& DebugSession::lastStop() const {
     requireLoaded();
     return last_stop_;
+}
+
+bool DebugSession::hasSymbols() const {
+    requireLoaded();
+    return !symbols_.empty();
+}
+
+const DebugSymbols&
+DebugSession::symbols() const {
+    requireLoaded();
+    return symbols_;
+}
+
+void DebugSession::loadSymbolsFile(
+    const std::string& path
+) {
+    requireLoaded();
+
+    symbols_ =
+        DebugSymbols::readFile(path);
+}
+
+std::size_t DebugSession::resolveCodeSymbol(
+    const std::string& name
+) const {
+    requireLoaded();
+
+    return symbols_.resolveCode(name);
+}
+
+std::size_t DebugSession::resolveDataSymbol(
+    const std::string& name
+) const {
+    requireLoaded();
+
+    return symbols_.resolveData(name);
 }
 
 bool DebugSession::addBreakpoint(std::size_t address) {

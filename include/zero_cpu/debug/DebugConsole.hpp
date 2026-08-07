@@ -50,6 +50,7 @@ private:
     void printStatus(const DebugStop& stop);
     void printBreakpoints();
     void printConditionalBreakpoints();
+    void printSymbols();
     void printWatchpoints();
     void printLastTrace();
 

@@ -16,6 +16,7 @@
 #include "zero_cpu/debug/DebugSession.hpp"
 #include "zero_cpu/debug/DebugInspector.hpp"
 #include "zero_cpu/debug/DebugConsole.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -3243,6 +3244,37 @@ int assembleToBinary(
         );
     }
 
+    const debug::DebugSymbols debugSymbols =
+        debug::DebugSymbols::fromAssembledProgram(
+            assembled,
+            memory_map::kBinaryCodeBase
+        );
+
+    const std::string debugSymbolsPath =
+        debug::debugSymbolsPathForExecutable(
+            outputPath
+        );
+
+    debugSymbols.writeFile(
+        debugSymbolsPath
+    );
+
+    const debug::DebugSymbols
+        verifiedDebugSymbols =
+            debug::DebugSymbols::readFile(
+                debugSymbolsPath
+            );
+
+    if (
+        !(verifiedDebugSymbols
+            == debugSymbols)
+    ) {
+        throw std::runtime_error(
+            "Written debug symbols failed "
+            "read-back verification"
+        );
+    }
+
     std::cout
         << "Assemble completed successfully."
         << std::endl;
@@ -3255,6 +3287,14 @@ int assembleToBinary(
     std::cout
         << "Output: "
         << outputPath
+        << std::endl;
+
+    std::cout
+        << "Debug symbols: "
+        << debugSymbolsPath
+        << " ("
+        << debugSymbols.size()
+        << ")"
         << std::endl;
 
     std::cout

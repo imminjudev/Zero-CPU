@@ -344,6 +344,185 @@ bool DebugConsole::executeCommand(
     }
 
     if (
+        command == "symbols"
+        || command == "sym"
+    ) {
+        requireNoExtra(parser, command);
+        printSymbols();
+        return false;
+    }
+
+    if (
+        command == "break-label"
+        || command == "bs"
+    ) {
+        const std::string name =
+            requireArgument(
+                parser,
+                command,
+                "a code label"
+            );
+
+        requireNoExtra(parser, command);
+
+        const std::size_t address =
+            session_.resolveCodeSymbol(
+                name
+            );
+
+        if (session_.addBreakpoint(address)) {
+            output_
+                << "Breakpoint at label "
+                << name
+                << " ("
+                << address
+                << ") added.\n";
+        } else {
+            output_
+                << "Breakpoint at label "
+                << name
+                << " ("
+                << address
+                << ") already exists.\n";
+        }
+
+        return false;
+    }
+
+    if (command == "break-if-label") {
+        const std::string name =
+            requireArgument(
+                parser,
+                command,
+                "a code label"
+            );
+
+        const std::string source =
+            requireArgument(
+                parser,
+                command,
+                "a condition source"
+            );
+
+        const std::string operation =
+            requireArgument(
+                parser,
+                command,
+                "a comparison operator"
+            );
+
+        const std::string value =
+            requireArgument(
+                parser,
+                command,
+                "a comparison value"
+            );
+
+        requireNoExtra(parser, command);
+
+        const std::size_t address =
+            session_.resolveCodeSymbol(
+                name
+            );
+
+        const DebugCondition condition =
+            parseDebugCondition(
+                source,
+                operation,
+                value
+            );
+
+        const std::size_t id =
+            session_.addConditionalBreakpoint(
+                address,
+                condition
+            );
+
+        output_
+            << "Conditional breakpoint "
+            << id
+            << " added at label "
+            << name
+            << " ("
+            << address
+            << "): "
+            << condition.expression
+            << ".\n";
+
+        return false;
+    }
+
+    if (command == "disassemble-label") {
+        const std::string name =
+            requireArgument(
+                parser,
+                command,
+                "a code label"
+            );
+
+        const std::size_t count =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "an instruction count"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        output_
+            << DebugInspector::formatDisassembly(
+                DebugInspector::disassemble(
+                    session_,
+                    session_.resolveCodeSymbol(
+                        name
+                    ),
+                    count
+                )
+            )
+            << "\n";
+
+        return false;
+    }
+
+    if (command == "memory-label") {
+        const std::string name =
+            requireArgument(
+                parser,
+                command,
+                "a data label"
+            );
+
+        const std::size_t count =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "a byte count"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        output_
+            << DebugInspector::formatMemory(
+                DebugInspector::inspectMemory(
+                    session_,
+                    session_.resolveDataSymbol(
+                        name
+                    ),
+                    count
+                )
+            )
+            << "\n";
+
+        return false;
+    }
+
+    if (
         command == "break-if"
         || command == "bi"
     ) {
@@ -698,6 +877,11 @@ void DebugConsole::printHelp() {
         << "  delete <address>\n"
         << "  clear\n"
         << "  breakpoints\n"
+        << "  symbols\n"
+        << "  break-label <code-label>\n"
+        << "  break-if-label <code-label> <source> <op> <value>\n"
+        << "  disassemble-label <code-label> <instructions>\n"
+        << "  memory-label <data-label> <bytes>\n"
         << "  break-if <address> <source> <op> <value>\n"
         << "  delete-if <ID>\n"
         << "  conditions\n"
@@ -823,6 +1007,33 @@ void DebugConsole::printConditionalBreakpoints() {
             << breakpoint.address
             << " when "
             << breakpoint.condition.expression
+            << "\n";
+    }
+}
+
+void DebugConsole::printSymbols() {
+    if (!session_.hasSymbols()) {
+        output_
+            << "No debug symbols loaded.\n";
+
+        return;
+    }
+
+    output_ << "Debug symbols:\n";
+
+    for (
+        const DebugSymbol& symbol :
+        session_.symbols().entries()
+    ) {
+        output_
+            << "  "
+            << debugSymbolKindToString(
+                symbol.kind
+            )
+            << " "
+            << symbol.name
+            << " = "
+            << symbol.address
             << "\n";
     }
 }

@@ -39,6 +39,7 @@ Thumbs.db
 
 # Zero-CPU generated binaries
 *.zbin
+*.zsym
 
 # Zero-CPU generated integration sources
 examples/bio_os/combined_boot.zasm
