@@ -141,6 +141,7 @@ add_library(zero_cpu_core
     src/trace/TraceJsonWriter.cpp
     src/trace/TraceJsonDiff.cpp
 
+    src/debug/DebugCondition.cpp
     src/debug/DebugSession.cpp
     src/debug/DebugInspector.cpp
     src/debug/DebugConsole.cpp
@@ -601,7 +602,39 @@ zero_cpu_enable_coverage(
     zero_debug_watchpoint_test
 )
 
+
+add_executable(zero_debug_conditional_breakpoint_test
+    tests/debug_conditional_breakpoint.cpp
+)
+
+target_link_libraries(
+    zero_debug_conditional_breakpoint_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_conditional_breakpoint_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_conditional_breakpoint_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_conditional_breakpoint
+        COMMAND $<TARGET_FILE:zero_debug_conditional_breakpoint_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_conditional_breakpoint
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;breakpoint;condition;expression"
+    )
+
     add_test(
         NAME zero_cpu.debug_watchpoint
         COMMAND $<TARGET_FILE:zero_debug_watchpoint_test>

@@ -1,0 +1,8 @@
+# Scripted conditional breakpoint session
+break-if 536 R0 == 1
+conditions
+continue 50
+status
+delete-if 1
+conditions
+quit

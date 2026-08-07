@@ -344,6 +344,124 @@ bool DebugConsole::executeCommand(
     }
 
     if (
+        command == "break-if"
+        || command == "bi"
+    ) {
+        const std::size_t address =
+            parseAddress(
+                requireArgument(
+                    parser,
+                    command,
+                    "an address"
+                )
+            );
+
+        const std::string source =
+            requireArgument(
+                parser,
+                command,
+                "a condition source"
+            );
+
+        const std::string operation =
+            requireArgument(
+                parser,
+                command,
+                "a comparison operator"
+            );
+
+        const std::string value =
+            requireArgument(
+                parser,
+                command,
+                "a comparison value"
+            );
+
+        requireNoExtra(parser, command);
+
+        const DebugCondition condition =
+            parseDebugCondition(
+                source,
+                operation,
+                value
+            );
+
+        const std::size_t id =
+            session_.addConditionalBreakpoint(
+                address,
+                condition
+            );
+
+        output_
+            << "Conditional breakpoint "
+            << id
+            << " added at "
+            << address
+            << ": "
+            << condition.expression
+            << ".\n";
+
+        return false;
+    }
+
+    if (
+        command == "delete-if"
+        || command == "di"
+    ) {
+        const std::size_t id =
+            parsePositiveCount(
+                requireArgument(
+                    parser,
+                    command,
+                    "a conditional breakpoint ID"
+                ),
+                command
+            );
+
+        requireNoExtra(parser, command);
+
+        if (
+            session_.removeConditionalBreakpoint(
+                id
+            )
+        ) {
+            output_
+                << "Conditional breakpoint "
+                << id
+                << " deleted.\n";
+        } else {
+            output_
+                << "No conditional breakpoint "
+                << "with ID "
+                << id
+                << ".\n";
+        }
+
+        return false;
+    }
+
+    if (
+        command == "conditions"
+        || command == "cl"
+    ) {
+        requireNoExtra(parser, command);
+        printConditionalBreakpoints();
+        return false;
+    }
+
+    if (command == "clear-conditions") {
+        requireNoExtra(parser, command);
+
+        session_.clearConditionalBreakpoints();
+
+        output_
+            << "All conditional breakpoints "
+            << "cleared.\n";
+
+        return false;
+    }
+
+    if (
         command == "watch"
         || command == "w"
     ) {
@@ -580,6 +698,10 @@ void DebugConsole::printHelp() {
         << "  delete <address>\n"
         << "  clear\n"
         << "  breakpoints\n"
+        << "  break-if <address> <source> <op> <value>\n"
+        << "  delete-if <ID>\n"
+        << "  conditions\n"
+        << "  clear-conditions\n"
         << "  watch <read|write|access> <address> [bytes]\n"
         << "  unwatch <ID>\n"
         << "  watchpoints\n"
@@ -607,6 +729,19 @@ void DebugConsole::printStatus(
         << "Total steps: "
         << stop.total_steps
         << "\n";
+
+    if (stop.has_conditional_breakpoint) {
+        output_
+            << "Conditional breakpoint ID: "
+            << stop.conditional_breakpoint_id
+            << "\n"
+            << "Condition: "
+            << stop.conditional_expression
+            << "\n"
+            << "Condition actual value: "
+            << stop.conditional_actual_value
+            << "\n";
+    }
 
     if (stop.has_watchpoint) {
         output_
@@ -660,6 +795,36 @@ void DebugConsole::printBreakpoints() {
     }
 
     output_ << "\n";
+}
+
+void DebugConsole::printConditionalBreakpoints() {
+    const std::vector<ConditionalBreakpoint>
+        values =
+            session_.conditionalBreakpoints();
+
+    if (values.empty()) {
+        output_
+            << "No conditional breakpoints.\n";
+
+        return;
+    }
+
+    output_
+        << "Conditional breakpoints:\n";
+
+    for (
+        const ConditionalBreakpoint& breakpoint :
+        values
+    ) {
+        output_
+            << "  "
+            << breakpoint.id
+            << " @"
+            << breakpoint.address
+            << " when "
+            << breakpoint.condition.expression
+            << "\n";
+    }
 }
 
 void DebugConsole::printWatchpoints() {

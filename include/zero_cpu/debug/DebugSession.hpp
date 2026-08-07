@@ -1,6 +1,7 @@
 #pragma once
 
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/debug/DebugCondition.hpp"
 #include "zero_cpu/kernel/ExecutableMetadata.hpp"
 #include "zero_cpu/kernel/ProcessImage.hpp"
 
@@ -32,10 +33,17 @@ struct MemoryWatchpoint {
     std::size_t endExclusive() const;
 };
 
+struct ConditionalBreakpoint {
+    std::size_t id = 0;
+    std::size_t address = 0;
+    DebugCondition condition;
+};
+
 enum class DebugStopReason {
     Ready,
     StepComplete,
     Breakpoint,
+    ConditionalBreakpoint,
     Watchpoint,
     ProgramEnd,
     Halted,
@@ -54,6 +62,11 @@ struct DebugStop {
     std::size_t total_steps = 0;
     std::string message;
 
+    bool has_conditional_breakpoint = false;
+    std::size_t conditional_breakpoint_id = 0;
+    std::string conditional_expression;
+    std::int64_t conditional_actual_value = 0;
+
     bool has_watchpoint = false;
     std::size_t watchpoint_id = 0;
 
@@ -69,6 +82,7 @@ struct DebugStop {
     std::size_t access_address = 0;
 
     bool stoppedAtBreakpoint() const;
+    bool stoppedAtConditionalBreakpoint() const;
     bool stoppedAtWatchpoint() const;
     bool faulted() const;
     bool reachedProgramEnd() const;
@@ -95,6 +109,20 @@ public:
     bool hasBreakpoint(std::size_t address) const;
     void clearBreakpoints();
     std::vector<std::size_t> breakpoints() const;
+
+    std::size_t addConditionalBreakpoint(
+        std::size_t address,
+        const DebugCondition& condition
+    );
+
+    bool removeConditionalBreakpoint(
+        std::size_t id
+    );
+
+    void clearConditionalBreakpoints();
+
+    std::vector<ConditionalBreakpoint>
+    conditionalBreakpoints() const;
 
     std::size_t addWatchpoint(
         std::size_t address,
@@ -123,6 +151,11 @@ private:
     kernel::ExecutableMetadata metadata_;
     std::set<std::size_t> breakpoints_;
 
+    std::vector<ConditionalBreakpoint>
+        conditional_breakpoints_;
+
+    std::size_t next_conditional_breakpoint_id_ = 1;
+
     std::vector<MemoryWatchpoint>
         watchpoints_;
 
@@ -130,6 +163,11 @@ private:
 
     std::size_t total_steps_ = 0;
     DebugStop last_stop_;
+
+    struct ConditionalBreakpointHit {
+        ConditionalBreakpoint breakpoint;
+        std::int64_t actual_value = 0;
+    };
 
     struct WatchpointHit {
         MemoryWatchpoint watchpoint;
@@ -142,6 +180,16 @@ private:
 
     void requireLoaded() const;
     void validateBreakpointAddress(std::size_t address) const;
+
+    bool findConditionalBreakpointHit(
+        std::size_t address,
+        ConditionalBreakpointHit& hit
+    ) const;
+
+    DebugStop makeConditionalBreakpointStop(
+        const ConditionalBreakpointHit& hit,
+        std::size_t executedSteps
+    );
 
     void validateWatchpointRange(
         std::size_t address,

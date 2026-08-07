@@ -42,6 +42,8 @@ const char* debugStopReasonToString(DebugStopReason reason) {
         return "StepComplete";
     case DebugStopReason::Breakpoint:
         return "Breakpoint";
+    case DebugStopReason::ConditionalBreakpoint:
+        return "ConditionalBreakpoint";
     case DebugStopReason::Watchpoint:
         return "Watchpoint";
     case DebugStopReason::ProgramEnd:
@@ -59,6 +61,11 @@ const char* debugStopReasonToString(DebugStopReason reason) {
 
 bool DebugStop::stoppedAtBreakpoint() const {
     return reason == DebugStopReason::Breakpoint;
+}
+
+bool DebugStop::stoppedAtConditionalBreakpoint() const {
+    return reason
+        == DebugStopReason::ConditionalBreakpoint;
 }
 
 bool DebugStop::stoppedAtWatchpoint() const {
@@ -110,6 +117,8 @@ void DebugSession::loadImage(const kernel::ProcessImage& image) {
     source_name_ = image.metadata.source_name;
     metadata_ = image.metadata;
     breakpoints_.clear();
+    conditional_breakpoints_.clear();
+    next_conditional_breakpoint_id_ = 1;
     watchpoints_.clear();
     next_watchpoint_id_ = 1;
     total_steps_ = 0;
@@ -180,6 +189,89 @@ std::vector<std::size_t> DebugSession::breakpoints() const {
         breakpoints_.begin(),
         breakpoints_.end()
     );
+}
+
+std::size_t DebugSession::addConditionalBreakpoint(
+    std::size_t address,
+    const DebugCondition& condition
+) {
+    requireLoaded();
+    validateBreakpointAddress(address);
+    condition.validateForCPU(cpu_);
+
+    for (
+        const ConditionalBreakpoint& existing :
+        conditional_breakpoints_
+    ) {
+        if (
+            existing.address == address
+            && existing.condition.expression
+                == condition.expression
+        ) {
+            return existing.id;
+        }
+    }
+
+    if (
+        next_conditional_breakpoint_id_
+        == std::numeric_limits<
+            std::size_t
+        >::max()
+    ) {
+        throw std::runtime_error(
+            "Conditional breakpoint ID space exhausted"
+        );
+    }
+
+    ConditionalBreakpoint breakpoint;
+    breakpoint.id =
+        next_conditional_breakpoint_id_;
+
+    breakpoint.address = address;
+    breakpoint.condition = condition;
+
+    ++next_conditional_breakpoint_id_;
+
+    conditional_breakpoints_.push_back(
+        breakpoint
+    );
+
+    return breakpoint.id;
+}
+
+bool DebugSession::removeConditionalBreakpoint(
+    std::size_t id
+) {
+    requireLoaded();
+
+    for (
+        auto iterator =
+            conditional_breakpoints_.begin();
+        iterator
+            != conditional_breakpoints_.end();
+        ++iterator
+    ) {
+        if (iterator->id == id) {
+            conditional_breakpoints_.erase(
+                iterator
+            );
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void DebugSession::clearConditionalBreakpoints() {
+    requireLoaded();
+    conditional_breakpoints_.clear();
+}
+
+std::vector<ConditionalBreakpoint>
+DebugSession::conditionalBreakpoints() const {
+    requireLoaded();
+    return conditional_breakpoints_;
 }
 
 std::size_t DebugSession::addWatchpoint(
@@ -320,7 +412,12 @@ DebugStop DebugSession::continueExecution(std::size_t maxSteps) {
 
     std::size_t executedSteps = 0;
     bool skipInitialBreakpoint =
-        last_stop_.reason == DebugStopReason::Breakpoint
+        (
+            last_stop_.reason
+                == DebugStopReason::Breakpoint
+            || last_stop_.reason
+                == DebugStopReason::ConditionalBreakpoint
+        )
         && last_stop_.pc == cpu_.state().pc();
 
     while (true) {
@@ -331,11 +428,28 @@ DebugStop DebugSession::continueExecution(std::size_t maxSteps) {
 
         const std::size_t pc = cpu_.state().pc();
 
-        if (hasBreakpoint(pc) && !skipInitialBreakpoint) {
-            return makeStop(
-                DebugStopReason::Breakpoint,
-                executedSteps
-            );
+        if (!skipInitialBreakpoint) {
+            if (hasBreakpoint(pc)) {
+                return makeStop(
+                    DebugStopReason::Breakpoint,
+                    executedSteps
+                );
+            }
+
+            ConditionalBreakpointHit
+                conditionalHit;
+
+            if (
+                findConditionalBreakpointHit(
+                    pc,
+                    conditionalHit
+                )
+            ) {
+                return makeConditionalBreakpointStop(
+                    conditionalHit,
+                    executedSteps
+                );
+            }
         }
 
         if (executedSteps >= maxSteps) {
@@ -409,6 +523,75 @@ void DebugSession::validateBreakpointAddress(std::size_t address) const {
             "Breakpoint address is not instruction-aligned"
         );
     }
+}
+
+bool DebugSession::findConditionalBreakpointHit(
+    std::size_t address,
+    ConditionalBreakpointHit& hit
+) const {
+    for (
+        const ConditionalBreakpoint& breakpoint :
+        conditional_breakpoints_
+    ) {
+        if (
+            breakpoint.address != address
+        ) {
+            continue;
+        }
+
+        breakpoint.condition.validateForCPU(
+            cpu_
+        );
+
+        const std::int64_t actual =
+            breakpoint.condition.actualValue(
+                cpu_
+            );
+
+        if (
+            breakpoint.condition.evaluate(
+                cpu_
+            )
+        ) {
+            hit.breakpoint = breakpoint;
+            hit.actual_value = actual;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+DebugStop DebugSession::makeConditionalBreakpointStop(
+    const ConditionalBreakpointHit& hit,
+    std::size_t executedSteps
+) {
+    DebugStop stop = makeStop(
+        DebugStopReason::ConditionalBreakpoint,
+        executedSteps,
+        "Conditional breakpoint "
+            + std::to_string(
+                hit.breakpoint.id
+            )
+            + " matched: "
+            + hit.breakpoint
+                .condition
+                .expression
+    );
+
+    stop.has_conditional_breakpoint = true;
+
+    stop.conditional_breakpoint_id =
+        hit.breakpoint.id;
+
+    stop.conditional_expression =
+        hit.breakpoint.condition.expression;
+
+    stop.conditional_actual_value =
+        hit.actual_value;
+
+    last_stop_ = stop;
+    return last_stop_;
 }
 
 void DebugSession::validateWatchpointRange(
@@ -564,6 +747,11 @@ DebugStop DebugSession::makeStop(
     last_stop_.executed_steps = executedSteps;
     last_stop_.total_steps = total_steps_;
     last_stop_.message = std::move(message);
+
+    last_stop_.has_conditional_breakpoint = false;
+    last_stop_.conditional_breakpoint_id = 0;
+    last_stop_.conditional_expression.clear();
+    last_stop_.conditional_actual_value = 0;
 
     last_stop_.has_watchpoint = false;
     last_stop_.watchpoint_id = 0;

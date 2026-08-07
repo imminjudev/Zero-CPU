@@ -49,6 +49,7 @@ private:
     void printHelp();
     void printStatus(const DebugStop& stop);
     void printBreakpoints();
+    void printConditionalBreakpoints();
     void printWatchpoints();
     void printLastTrace();
 
