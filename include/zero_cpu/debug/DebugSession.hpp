@@ -101,6 +101,7 @@ public:
     bool loaded() const;
     const std::string& sourceName() const;
     const kernel::ExecutableMetadata& metadata() const;
+    CPU& cpu();
     const CPU& cpu() const;
     std::size_t totalSteps() const;
     const DebugStop& lastStop() const;

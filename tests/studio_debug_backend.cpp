@@ -1,0 +1,361 @@
+#include "zero_cpu/assembler/Assembler.hpp"
+#include "zero_cpu/core/DebugOutputDevice.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/debug/DebugSnapshotJson.hpp"
+#include "zero_cpu/kernel/ProcessImageLoader.hpp"
+#include "zero_cpu/studio/StudioDebugBackend.hpp"
+
+#include <cstdio>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+namespace {
+
+template <typename Function>
+bool throwsRuntimeError(Function&& function) {
+    try {
+        function();
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+
+    return false;
+}
+
+zero_cpu::kernel::ProcessImage makeImage() {
+    const char* source = R"ASM(
+.entry start
+
+.data
+value: .qword 1
+
+.text
+start:
+    LOAD R0, [value]
+work:
+    ADD R0, 2
+done:
+    STORE [value], R0
+)ASM";
+
+    zero_cpu::Assembler assembler;
+
+    const auto assembled =
+        assembler.assembleString(source);
+
+    zero_cpu::kernel::ProcessImageLoader loader;
+
+    return loader.loadProgram(
+        assembled.toBinaryProgram(),
+        "studio-debug-backend.zbin"
+    );
+}
+
+bool mutableCpuAccess(std::string& detail) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::studio;
+
+    StudioDebugBackend backend;
+    backend.loadImage(makeImage());
+
+    auto bus =
+        std::make_shared<MMIOBus>();
+
+    auto output =
+        std::make_shared<DebugOutputDevice>();
+
+    bus->mapDevice(
+        memory_map::kDebugOutputBase,
+        memory_map::kDebugOutputSize,
+        output
+    );
+
+    backend.cpu().setMMIOBus(bus);
+
+    if (
+        !backend.loaded()
+        || !backend.cpu().hasMMIOBus()
+        || backend.session().sourceName()
+            != "studio-debug-backend.zbin"
+    ) {
+        detail =
+            "mutable debugger CPU access mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+bool breakpointWorkflow(std::string& detail) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    StudioDebugBackend backend;
+    backend.loadImage(makeImage());
+
+    const std::size_t breakpoint =
+        memory_map::kBinaryCodeBase + 24;
+
+    if (!backend.addBreakpoint(breakpoint)) {
+        detail =
+            "studio breakpoint was not added";
+        return false;
+    }
+
+    const DebugStop stopped =
+        backend.run(20);
+
+    if (
+        stopped.reason
+            != DebugStopReason::Breakpoint
+        || stopped.pc != breakpoint
+        || stopped.total_steps != 1
+        || backend.cpu().state()
+            .registers().get(
+                RegisterName::R0
+            ) != 1
+    ) {
+        detail =
+            "studio breakpoint stop mismatch";
+        return false;
+    }
+
+    const DebugStop stepped =
+        backend.step();
+
+    if (
+        stepped.reason
+            != DebugStopReason::StepComplete
+        || backend.cpu().state()
+            .registers().get(
+                RegisterName::R0
+            ) != 3
+    ) {
+        detail =
+            "studio step mismatch";
+        return false;
+    }
+
+    backend.clearBreakpoints();
+
+    const DebugStop completed =
+        backend.run(20);
+
+    if (
+        !completed.reachedProgramEnd()
+        || backend.cpu().state()
+            .memory().readI64(
+                memory_map::kUserDataBase
+            ) != 3
+    ) {
+        detail =
+            "studio run completion mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+bool snapshotAndStatus(std::string& detail) {
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    const std::string path =
+        "studio_debug_backend_snapshot.json";
+
+    struct Cleanup {
+        std::string path;
+
+        ~Cleanup() {
+            std::remove(path.c_str());
+        }
+    } cleanup{path};
+
+    StudioDebugBackend backend;
+    backend.loadImage(makeImage());
+
+    (void)backend.step();
+
+    DebugSnapshotOptions options;
+    options.memory_address = 0;
+    options.memory_size = 16;
+
+    backend.exportSnapshot(
+        path,
+        options
+    );
+
+    const std::string status =
+        backend.statusText();
+
+    if (
+        status.find(
+            "Binary Debug Session"
+        ) == std::string::npos
+        || status.find(
+            "Stop Reason = StepComplete"
+        ) == std::string::npos
+        || status.find(
+            "Total Steps = 1"
+        ) == std::string::npos
+    ) {
+        detail =
+            "studio debugger status mismatch";
+        return false;
+    }
+
+    std::FILE* file =
+        std::fopen(
+            path.c_str(),
+            "rb"
+        );
+
+    if (file == nullptr) {
+        detail =
+            "studio snapshot file was not created";
+        return false;
+    }
+
+    std::fclose(file);
+    return true;
+}
+
+bool resetAndValidation(std::string& detail) {
+    using namespace zero_cpu::studio;
+
+    StudioDebugBackend backend;
+
+    if (
+        !throwsRuntimeError(
+            [&] {
+                (void)backend.cpu();
+            }
+        )
+        || !throwsRuntimeError(
+            [&] {
+                (void)backend.run(1);
+            }
+        )
+    ) {
+        detail =
+            "unloaded studio debugger operation "
+            "was accepted";
+        return false;
+    }
+
+    backend.loadImage(makeImage());
+
+    if (
+        !throwsRuntimeError(
+            [&] {
+                (void)backend.run(0);
+            }
+        )
+    ) {
+        detail =
+            "zero studio run limit was accepted";
+        return false;
+    }
+
+    backend.reset();
+
+    if (backend.loaded()) {
+        detail =
+            "studio debugger reset mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
+int main() {
+    std::cout
+        << "=== Zero-CPU Studio Debug Backend "
+           "Test ===\n\n";
+
+    int failures = 0;
+
+    auto report = [&](
+        const std::string& name,
+        bool passed,
+        const std::string& detail
+    ) {
+        std::cout
+            << (
+                passed
+                    ? "[PASS] "
+                    : "[FAIL] "
+            )
+            << name
+            << "\n";
+
+        if (!passed) {
+            std::cout
+                << "       "
+                << detail
+                << "\n";
+
+            ++failures;
+        }
+    };
+
+    {
+        std::string detail;
+        report(
+            "Mutable debugger CPU access",
+            mutableCpuAccess(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio breakpoint workflow",
+            breakpointWorkflow(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio snapshot and status",
+            snapshotAndStatus(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio reset and validation",
+            resetAndValidation(detail),
+            detail
+        );
+    }
+
+    std::cout << "\n";
+
+    if (failures == 0) {
+        std::cout
+            << "Studio debug backend test "
+               "finished successfully.\n";
+
+        return 0;
+    }
+
+    std::cout
+        << "Studio debug backend test failed. "
+        << "Failure count: "
+        << failures
+        << "\n";
+
+    return 1;
+}

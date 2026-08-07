@@ -1,0 +1,48 @@
+; Zero-CPU Studio protected debugger showcase
+;
+; Default v1.2 Studio demo for DebugSession.
+; User mode stays inside user-accessible RAM/code/stack.
+; Privileged MMIO / HALT demonstrations belong in kernel/BIO-OS code.
+;
+; Suggested flow:
+;   1. Load Source
+;   2. Assemble
+;   3. Load BIN
+;   4. Add breakpoint 536
+;   5. Run
+;   6. Run again to ProgramEnd
+;   7. Snapshot
+;
+; Expected:
+;   R1 = 60
+;   R3 = 30
+;   value = 60
+;   result = 30
+;   final debugger stop = ProgramEnd
+
+.entry start
+
+.data
+value:  .qword 10
+result: .qword 0
+
+.text
+start:
+    LOAD R1, [value]
+    MOV R2, 20
+    ADD R1, R2
+    STORE [result], R1
+
+    PUSH R1
+    POP R3
+
+    CALL double_value
+    STORE [value], R1
+    JMP program_end
+
+double_value:
+    ADD R1, R1
+    RET
+
+program_end:
+    MOV R0, R0

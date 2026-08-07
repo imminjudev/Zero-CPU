@@ -170,6 +170,11 @@ const kernel::ExecutableMetadata& DebugSession::metadata() const {
     return metadata_;
 }
 
+CPU& DebugSession::cpu() {
+    requireLoaded();
+    return cpu_;
+}
+
 const CPU& DebugSession::cpu() const {
     requireLoaded();
     return cpu_;

@@ -150,6 +150,8 @@ add_library(zero_cpu_core
     src/debug/MultiProcessDebugSession.cpp
     src/debug/MultiProcessDebugConsole.cpp
 
+    src/studio/StudioDebugBackend.cpp
+
     src/assembler/Assembler.cpp
 
     src/binary/BinaryWriter.cpp
@@ -701,7 +703,39 @@ zero_cpu_enable_coverage(
     zero_debug_snapshot_json_test
 )
 
+
+add_executable(zero_studio_debug_backend_test
+    tests/studio_debug_backend.cpp
+)
+
+target_link_libraries(
+    zero_studio_debug_backend_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_studio_debug_backend_test
+)
+
+zero_cpu_enable_coverage(
+    zero_studio_debug_backend_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.studio_debug_backend
+        COMMAND $<TARGET_FILE:zero_studio_debug_backend_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.studio_debug_backend
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;studio;debugger;session;snapshot"
+    )
+
     add_test(
         NAME zero_cpu.debug_snapshot_json
         COMMAND $<TARGET_FILE:zero_debug_snapshot_json_test>

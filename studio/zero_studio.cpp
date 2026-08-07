@@ -4,6 +4,8 @@
 #include "zero_cpu/binary/BinaryReader.hpp"
 #include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/CPU.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
+#include "zero_cpu/studio/StudioDebugBackend.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/trace/TraceEvent.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
@@ -26,6 +28,7 @@
 #include <exception>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -63,6 +66,7 @@ constexpr int kIdDatapathCanvas = 1018;
 constexpr int kIdExportTraceButton = 1019;
 constexpr int kIdTraceFilterEdit = 1020;
 constexpr int kIdApplyTraceFilterButton = 1021;
+constexpr int kIdExportSnapshotButton = 1022;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -73,8 +77,8 @@ constexpr std::size_t kStackViewCount = 32;
 constexpr std::size_t kBinaryMemoryPreviewStart = 512;
 constexpr std::size_t kBinaryMemoryPreviewCount = 96;
 
-constexpr const char* kDefaultSourcePath = "examples\\debugger_showcase.zasm";
-constexpr const char* kDefaultBinaryPath = "examples\\debugger_showcase.zbin";
+constexpr const char* kDefaultSourcePath = "examples\\debugger_protected_showcase.zasm";
+constexpr const char* kDefaultBinaryPath = "examples\\debugger_protected_showcase.zbin";
 
 enum class StudioMode {
     None,
@@ -103,8 +107,13 @@ HWND g_datapathCanvas = nullptr;
 HWND g_exportTraceButton = nullptr;
 HWND g_traceFilterEdit = nullptr;
 HWND g_applyTraceFilterButton = nullptr;
+HWND g_exportSnapshotButton = nullptr;
 
 zero_cpu::CPU g_cpu;
+
+std::unique_ptr<
+    zero_cpu::studio::StudioDebugBackend
+> g_binaryDebugger;
 std::shared_ptr<zero_cpu::InterruptController> g_interruptController;
 std::shared_ptr<zero_cpu::MMIOBus> g_mmioBus;
 std::shared_ptr<zero_cpu::DebugOutputDevice> g_debugOutputDevice;
@@ -117,6 +126,20 @@ bool g_breakpointHit = false;
 std::size_t g_lastBreakpointPc = 0;
 std::string g_traceFilter;
 int g_scrollY = 0;
+
+bool binaryDebugActive() {
+    return g_mode == StudioMode::Binary
+        && g_binaryDebugger
+        && g_binaryDebugger->loaded();
+}
+
+const zero_cpu::CPU& studioCPU() {
+    if (binaryDebugActive()) {
+        return g_binaryDebugger->cpu();
+    }
+
+    return g_cpu;
+}
 
 int getMainScrollMax(HWND hwnd) {
     RECT clientRect;
@@ -312,25 +335,89 @@ std::string modeToString(StudioMode mode);
 void refreshStateView();
 
 constexpr const char* kDefaultTraceExportPath = "traces\\studio_trace_export.json";
+constexpr const char* kDefaultDebugSnapshotPath = "traces\\studio_debug_snapshot.json";
 
 void exportTraceToJsonFile(const std::string& path) {
     CreateDirectoryA("traces", nullptr);
 
     zero_cpu::TraceJsonMetadata metadata;
     metadata.producer = "zero_studio";
-    metadata.producer_version = "v0.5-dev";
+    metadata.producer_version = "v0.29";
     metadata.execution_mode = modeToString(g_mode);
     metadata.loaded_path = g_loadedPath;
 
     zero_cpu::TraceJsonWriter::writeFile(
         path,
-        g_cpu.traceLogger().events(),
+        studioCPU().traceLogger().events(),
         metadata
     );
 }
 
+
+void onExportSnapshotClicked() {
+    if (!binaryDebugActive()) {
+        appendTraceText(
+            "\nExport Snapshot failed: "
+            "load a .zbin with [Load BIN] first.\n"
+        );
+
+        refreshStateView();
+        return;
+    }
+
+    try {
+        CreateDirectoryA(
+            "traces",
+            nullptr
+        );
+
+        zero_cpu::debug::DebugSnapshotOptions
+            options;
+
+        options.memory_address = 0;
+        options.memory_size = 64;
+
+        g_binaryDebugger->exportSnapshot(
+            kDefaultDebugSnapshotPath,
+            options
+        );
+
+        std::ostringstream output;
+
+        output
+            << "\n[Export Debug Snapshot]\n"
+            << "Path = "
+            << kDefaultDebugSnapshotPath
+            << "\n"
+            << "Mode = Binary DebugSession\n"
+            << "Memory Preview = [0, 64)\n"
+            << "Format = JSON\n";
+
+        appendTraceText(
+            output.str()
+        );
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+
+        output
+            << "\n[Export Debug Snapshot Failed]\n"
+            << "Path = "
+            << kDefaultDebugSnapshotPath
+            << "\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        appendTraceText(
+            output.str()
+        );
+    }
+
+    refreshStateView();
+}
+
 void onExportTraceClicked() {
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (events.empty()) {
         appendTraceText(
@@ -375,21 +462,82 @@ std::string modeToString(StudioMode mode) {
     }
 }
 
-bool parseSizeT(const std::string& text, std::size_t& value) {
-    std::istringstream iss(text);
-    std::size_t parsed = 0;
-    iss >> parsed;
-    iss >> std::ws;
+bool parseSizeT(
+    const std::string& text,
+    std::size_t& value
+) {
+    const auto first =
+        std::find_if_not(
+            text.begin(),
+            text.end(),
+            [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+            }
+        );
 
-    if (!iss || !iss.eof()) {
+    const auto last =
+        std::find_if_not(
+            text.rbegin(),
+            text.rend(),
+            [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+            }
+        ).base();
+
+    if (first >= last) {
         return false;
     }
 
-    value = parsed;
-    return true;
+    const std::string trimmed(
+        first,
+        last
+    );
+
+    if (
+        trimmed.empty()
+        || trimmed.front() == '-'
+    ) {
+        return false;
+    }
+
+    try {
+        std::size_t consumed = 0;
+
+        const unsigned long long parsed =
+            std::stoull(
+                trimmed,
+                &consumed,
+                0
+            );
+
+        if (
+            consumed != trimmed.size()
+            || parsed
+                > static_cast<unsigned long long>(
+                    (std::numeric_limits<std::size_t>::max)()
+                )
+        ) {
+            return false;
+        }
+
+        value =
+            static_cast<std::size_t>(
+                parsed
+            );
+
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 bool hasBreakpoint(std::size_t pc) {
+    if (binaryDebugActive()) {
+        return g_binaryDebugger
+            ->session()
+            .hasBreakpoint(pc);
+    }
+
     return std::find(
         g_breakpoints.begin(),
         g_breakpoints.end(),
@@ -398,36 +546,69 @@ bool hasBreakpoint(std::size_t pc) {
 }
 
 bool addBreakpoint(std::size_t pc) {
+    if (binaryDebugActive()) {
+        return g_binaryDebugger
+            ->addBreakpoint(pc);
+    }
+
     if (hasBreakpoint(pc)) {
         return false;
     }
 
     g_breakpoints.push_back(pc);
-    std::sort(g_breakpoints.begin(), g_breakpoints.end());
+
+    std::sort(
+        g_breakpoints.begin(),
+        g_breakpoints.end()
+    );
+
     return true;
 }
 
 std::string makeBreakpointView() {
-    std::ostringstream oss;
+    std::ostringstream output;
 
-    oss << "Breakpoints\n";
+    output << "Breakpoints\n";
 
-    if (g_breakpoints.empty()) {
-        oss << "(none)\n";
-        return oss.str();
+    std::vector<std::size_t> values;
+
+    if (binaryDebugActive()) {
+        values =
+            g_binaryDebugger
+                ->session()
+                .breakpoints();
+    } else {
+        values = g_breakpoints;
     }
 
-    for (std::size_t i = 0; i < g_breakpoints.size(); ++i) {
-        oss << "[" << i << "] PC = " << g_breakpoints[i];
+    if (values.empty()) {
+        output << "(none)\n";
+        return output.str();
+    }
 
-        if (g_programLoaded && g_breakpoints[i] == g_cpu.state().pc()) {
-            oss << "  <current>";
+    for (
+        std::size_t index = 0;
+        index < values.size();
+        ++index
+    ) {
+        output
+            << "["
+            << index
+            << "] PC = "
+            << values[index];
+
+        if (
+            g_programLoaded
+            && values[index]
+                == studioCPU().state().pc()
+        ) {
+            output << "  <current>";
         }
 
-        oss << "\n";
+        output << "\n";
     }
 
-    return oss.str();
+    return output.str();
 }
 bool endsWithZbin(const std::string& path) {
     if (path.size() < 5) {
@@ -443,19 +624,19 @@ std::string makeFinalCheckView() {
 
     oss << "Final Check\n";
     oss << "R1 = "
-        << g_cpu.state().registers().get(zero_cpu::RegisterName::R1)
+        << studioCPU().state().registers().get(zero_cpu::RegisterName::R1)
         << "\n";
     oss << "R2 = "
-        << g_cpu.state().registers().get(zero_cpu::RegisterName::R2)
+        << studioCPU().state().registers().get(zero_cpu::RegisterName::R2)
         << "\n";
     oss << "SP = "
-        << g_cpu.state().sp()
+        << studioCPU().state().sp()
         << "\n";
     oss << "Memory[100] = "
-        << g_cpu.state().memory().read(100)
+        << studioCPU().state().memory().read(100)
         << "\n";
     oss << "Memory[2048] = "
-        << g_cpu.state().memory().read(2048)
+        << studioCPU().state().memory().read(2048)
         << "\n";
 
     return oss.str();
@@ -492,10 +673,10 @@ std::string currentBinaryInstructionText() {
     using namespace zero_cpu::binary;
 
     try {
-        const std::size_t pc = g_cpu.state().pc();
+        const std::size_t pc = studioCPU().state().pc();
 
         const std::vector<std::uint8_t> instructionBytes =
-            g_cpu.state().memory().readBytes(pc, kInstructionSize);
+            studioCPU().state().memory().readBytes(pc, kInstructionSize);
 
         InstructionDecoder decoder;
         const DecodedInstruction decoded =
@@ -511,7 +692,7 @@ std::string studioDebugOutputAsAscii();
 
 std::string readWatchMemoryValue(std::size_t address) {
     try {
-        return std::to_string(g_cpu.state().memory().read(address));
+        return std::to_string(studioCPU().state().memory().read(address));
     } catch (const std::exception& ex) {
         return std::string("<error: ") + ex.what() + ">";
     }
@@ -522,7 +703,7 @@ std::string makeWatchExpressionsView() {
 
     std::ostringstream oss;
 
-    const auto& state = g_cpu.state();
+    const auto& state = studioCPU().state();
     const auto& registers = state.registers();
 
     oss << "Watch Expressions\n";
@@ -597,7 +778,7 @@ std::string makeRegisterView() {
 
     std::ostringstream oss;
 
-    const auto& registers = g_cpu.state().registers();
+    const auto& registers = studioCPU().state().registers();
 
     oss << "Registers\n";
     oss << "R0 = " << registers.get(RegisterName::R0) << "\n";
@@ -618,32 +799,32 @@ std::string makeMemoryView() {
     oss << "Memory View\n";
 
     oss << "Memory[96..111] = "
-        << g_cpu.state().memory().dumpRange(
+        << studioCPU().state().memory().dumpRange(
                kDataViewStart,
                kDataViewCount
            )
         << "\n";
 
     oss << "Stack[2048..2079] = "
-        << g_cpu.state().memory().dumpRange(
+        << studioCPU().state().memory().dumpRange(
                kStackViewStart,
                kStackViewCount
            )
         << "\n";
 
     oss << "Memory[100] = "
-        << g_cpu.state().memory().read(100)
+        << studioCPU().state().memory().read(100)
         << "\n";
 
     oss << "Memory[2048] = "
-        << g_cpu.state().memory().read(2048)
+        << studioCPU().state().memory().read(2048)
         << "\n";
 
     if (g_mode == StudioMode::Binary) {
         oss << "\n";
         oss << "Binary Code Memory Preview\n";
         oss << "Memory[512..607] = "
-            << g_cpu.state().memory().dumpRange(
+            << studioCPU().state().memory().dumpRange(
                    kBinaryMemoryPreviewStart,
                    kBinaryMemoryPreviewCount
                )
@@ -662,16 +843,16 @@ std::string makeBinaryInfoView() {
 
     oss << "Binary Program Info\n";
     oss << "Has Binary Program = "
-        << (g_cpu.hasBinaryProgram() ? "true" : "false")
+        << (studioCPU().hasBinaryProgram() ? "true" : "false")
         << "\n";
     oss << "Code Base = "
-        << g_cpu.binaryCodeBase()
+        << studioCPU().binaryCodeBase()
         << "\n";
     oss << "Entry Point = "
-        << g_cpu.binaryEntryPoint()
+        << studioCPU().binaryEntryPoint()
         << "\n";
     oss << "Code Size = "
-        << g_cpu.binaryCodeSize()
+        << studioCPU().binaryCodeSize()
         << " bytes\n";
 
     oss << "Current Decoded Instruction = "
@@ -705,18 +886,27 @@ std::string studioDebugOutputAsAscii() {
     return text;
 }
 
-void configureSystemDevices() {
+void configureSystemDevices(
+    zero_cpu::CPU& cpu
+) {
     using namespace zero_cpu;
 
-    g_interruptController = std::make_shared<InterruptController>();
-    g_mmioBus = std::make_shared<MMIOBus>();
-    g_debugOutputDevice = std::make_shared<DebugOutputDevice>();
-    g_timerDevice = std::make_shared<TimerDevice>(
-        g_interruptController,
-        44,
-        1000,
-        0
-    );
+    g_interruptController =
+        std::make_shared<InterruptController>();
+
+    g_mmioBus =
+        std::make_shared<MMIOBus>();
+
+    g_debugOutputDevice =
+        std::make_shared<DebugOutputDevice>();
+
+    g_timerDevice =
+        std::make_shared<TimerDevice>(
+            g_interruptController,
+            44,
+            1000,
+            0
+        );
 
     g_timerDevice->setEnabled(false);
 
@@ -732,10 +922,19 @@ void configureSystemDevices() {
         g_timerDevice
     );
 
-    g_cpu.setInterruptController(g_interruptController);
-    g_cpu.setMMIOBus(g_mmioBus);
-    g_cpu.clearClockedDevices();
-    g_cpu.addClockedDevice(g_timerDevice);
+    cpu.setInterruptController(
+        g_interruptController
+    );
+
+    cpu.setMMIOBus(
+        g_mmioBus
+    );
+
+    cpu.clearClockedDevices();
+
+    cpu.addClockedDevice(
+        g_timerDevice
+    );
 }
 
 std::string makeSystemPanelView() {
@@ -964,8 +1163,8 @@ std::string makeMemoryMapViewer() {
 
     std::ostringstream oss;
 
-    const std::size_t pc = g_cpu.state().pc();
-    const std::size_t sp = g_cpu.state().sp();
+    const std::size_t pc = studioCPU().state().pc();
+    const std::size_t sp = studioCPU().state().sp();
 
     oss << "Memory Map Viewer\n";
 
@@ -1059,7 +1258,7 @@ std::string makeRecentInstructionTraceView() {
 
     oss << "Recent Instruction Trace\n";
 
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (events.empty()) {
         oss << "No TraceEvent recorded yet.\n";
@@ -1193,7 +1392,7 @@ std::string makeExecutionDetailProbeView() {
 
     oss << "Execution Detail Probe\n";
 
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (events.empty()) {
         oss << "No TraceEvent recorded yet.\n";
@@ -1615,7 +1814,7 @@ std::string makePipelineTimelineView() {
 
     oss << "Pipeline Timeline\n";
 
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (events.empty()) {
         oss << "No TraceEvent recorded yet.\n";
@@ -1761,7 +1960,7 @@ std::string makeVisualDatapathView() {
 
     oss << "Visual Datapath Panel\n";
 
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     oss << "Trace Events = "
         << events.size()
@@ -1892,7 +2091,7 @@ std::string makeVisualDatapathView() {
 
 
 bool latestTraceHasNode(const std::string& nodeName) {
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (events.empty()) {
         return false;
@@ -2035,7 +2234,7 @@ void drawDatapathCanvas(HDC hdc, const RECT& clientRect) {
 
     std::string title = "Zero-CPU Visual Datapath";
 
-    const auto& events = g_cpu.traceLogger().events();
+    const auto& events = studioCPU().traceLogger().events();
 
     if (!events.empty()) {
         const auto& event = events.back();
@@ -2173,7 +2372,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.28\n";
+    oss << "Zero-CPU Studio v0.29\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2194,21 +2393,26 @@ std::string makeStateView() {
 
     oss << "\n";
 
+    if (binaryDebugActive()) {
+        oss << g_binaryDebugger->statusText();
+        oss << "\n";
+    }
+
     oss << "CPU Core State\n";
-    oss << "PC = " << g_cpu.state().pc() << "\n";
-    oss << "SP = " << g_cpu.state().sp() << "\n";
+    oss << "PC = " << studioCPU().state().pc() << "\n";
+    oss << "SP = " << studioCPU().state().sp() << "\n";
     oss << "Halted = "
-        << (g_cpu.state().halted() ? "true" : "false")
+        << (studioCPU().state().halted() ? "true" : "false")
         << "\n";
 
-    if (g_cpu.state().hasError()) {
+    if (studioCPU().state().hasError()) {
         oss << "Error = "
-            << g_cpu.state().errorMessage()
+            << studioCPU().state().errorMessage()
             << "\n";
     }
 
     oss << "Flags = "
-        << g_cpu.state().flags().toString()
+        << studioCPU().state().flags().toString()
         << "\n";
 
     if (g_mode == StudioMode::Binary) {
@@ -2311,39 +2515,47 @@ bool assembleSourceToBinary(
         Assembler assembler;
         AssembledProgram assembled = assembler.assembleFile(inputPath);
 
-        InstructionEncoder encoder;
-        std::vector<std::uint8_t> code = encoder.encodeProgram(
-            assembled.instructions,
-            assembled.labels
-        );
-
-        binary::BinaryProgram program;
-        program.header.major_version = binary::kMajorVersion;
-        program.header.minor_version = binary::kMinorVersion;
-        program.header.endianness = binary::BinaryEndianness::Little;
-        program.header.entry_point = 0;
-        program.header.code_size = static_cast<std::uint32_t>(code.size());
-        program.code = std::move(code);
-        program.header.data_base =
-            static_cast<std::uint32_t>(
-                assembled.data_base
-            );
-        program.header.data_size =
-            static_cast<std::uint32_t>(
-                assembled.data.size()
-            );
-        program.data = assembled.data;
+        const binary::BinaryProgram program =
+            assembled.toBinaryProgram();
 
         binary::BinaryWriter writer;
-        writer.writeFile(outputPath, program);
+
+        writer.writeFile(
+            outputPath,
+            program
+        );
+
+        const debug::DebugSymbols symbols =
+            debug::DebugSymbols::
+                fromAssembledProgram(
+                    assembled,
+                    memory_map::kBinaryCodeBase
+                );
+
+        const std::string symbolsPath =
+            debug::
+                debugSymbolsPathForExecutable(
+                    outputPath
+                );
+
+        symbols.writeFile(
+            symbolsPath
+        );
 
         binary::BinaryReader reader;
-        const binary::BinaryProgram verified = reader.readFile(outputPath);
+
+        const binary::BinaryProgram verified =
+            reader.readFile(outputPath);
 
         std::ostringstream oss;
         oss << "Assemble completed successfully.\n";
         oss << "Input: " << inputPath << "\n";
         oss << "Output: " << outputPath << "\n";
+        oss << "Debug Symbols: "
+            << symbolsPath
+            << " ("
+            << symbols.size()
+            << ")\n";
         oss << "Instruction count: "
             << assembled.instructions.size()
             << "\n";
@@ -2380,8 +2592,14 @@ bool loadAssemblyProgram(const std::string& inputPath) {
         Assembler assembler;
         AssembledProgram assembled = assembler.assembleFile(inputPath);
 
-        g_cpu.loadProgram(assembled.instructions, assembled.labels);
-        configureSystemDevices();
+        g_binaryDebugger.reset();
+
+        g_cpu.loadProgram(
+            assembled.instructions,
+            assembled.labels
+        );
+
+        configureSystemDevices(g_cpu);
         g_mode = StudioMode::Assembly;
         g_programLoaded = true;
         g_loadedPath = inputPath;
@@ -2417,55 +2635,101 @@ bool loadAssemblyProgram(const std::string& inputPath) {
     }
 }
 
-bool loadBinaryProgram(const std::string& inputPath) {
+bool loadBinaryProgram(
+    const std::string& inputPath
+) {
     using namespace zero_cpu;
-    using namespace zero_cpu::binary;
+    using namespace zero_cpu::studio;
 
     try {
-        BinaryReader reader;
-        BinaryProgram program = reader.readFile(inputPath);
+        auto debugger =
+            std::make_unique<
+                StudioDebugBackend
+            >();
 
-        g_cpu.loadBinaryProgram(program);
-        configureSystemDevices();
+        debugger->loadBinary(
+            inputPath
+        );
+
+        configureSystemDevices(
+            debugger->cpu()
+        );
+
+        const kernel::ExecutableMetadata&
+            metadata =
+                debugger
+                    ->session()
+                    .metadata();
+
+        g_binaryDebugger =
+            std::move(debugger);
+
         g_mode = StudioMode::Binary;
         g_programLoaded = true;
         g_loadedPath = inputPath;
 
-        std::ostringstream oss;
-        oss << "Loaded binary program.\n";
-        oss << "Path: " << inputPath << "\n";
-        oss << "Version: "
-            << static_cast<int>(program.header.major_version)
-            << "."
-            << static_cast<int>(program.header.minor_version)
-            << "\n";
-        oss << "Entry Point: "
-            << program.header.entry_point
-            << "\n";
-        oss << "Code Size: "
-            << program.header.code_size
-            << " bytes\n";
-        oss << "Instruction Count: "
-            << program.code.size() / kInstructionSize
-            << "\n";
+        std::ostringstream output;
 
-        setEditText(g_traceEdit, oss.str());
+        output
+            << "Loaded binary debug session.\n"
+            << "Path: "
+            << inputPath
+            << "\n"
+            << "Entry Point: "
+            << metadata.entry_point
+            << "\n"
+            << "Code Base: "
+            << metadata.code_base
+            << "\n"
+            << "Code Size: "
+            << metadata.code_size
+            << " bytes\n"
+            << "Instruction Count: "
+            << (
+                metadata.code_size
+                / binary::kInstructionSize
+            )
+            << "\n"
+            << "Debug Symbols: "
+            << (
+                g_binaryDebugger
+                    ->session()
+                    .hasSymbols()
+                    ? "loaded"
+                    : "not found"
+            )
+            << "\n"
+            << "Execution Backend: DebugSession\n";
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
         refreshStateView();
-
         return true;
     } catch (const std::exception& ex) {
+        g_binaryDebugger.reset();
         g_cpu.reset();
+
         g_mode = StudioMode::None;
         g_programLoaded = false;
         g_loadedPath.clear();
 
-        std::ostringstream oss;
-        oss << "Binary load failed.\n";
-        oss << "Error: " << ex.what() << "\n";
+        std::ostringstream output;
 
-        setEditText(g_traceEdit, oss.str());
+        output
+            << "Binary debug session load failed.\n"
+            << "Error: "
+            << ex.what()
+            << "\n";
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
         refreshStateView();
-
         return false;
     }
 }
@@ -2541,12 +2805,12 @@ void runLoadedBioOSProgram(std::ostringstream& log) {
 
     std::size_t stepCount = 0;
 
-    while (!g_cpu.state().halted() && stepCount < kMaxBioOSSteps) {
+    while (!studioCPU().state().halted() && stepCount < kMaxBioOSSteps) {
         g_cpu.step();
 
-        if (g_cpu.state().hasError()) {
+        if (studioCPU().state().hasError()) {
             log << "BIO-OS execution failed: "
-                << g_cpu.state().errorMessage()
+                << studioCPU().state().errorMessage()
                 << "\n";
             return;
         }
@@ -2554,7 +2818,7 @@ void runLoadedBioOSProgram(std::ostringstream& log) {
         ++stepCount;
     }
 
-    if (!g_cpu.state().halted()) {
+    if (!studioCPU().state().halted()) {
         log << "BIO-OS execution stopped: step limit reached.\n";
         return;
     }
@@ -2569,7 +2833,8 @@ void onRunBioOSClicked() {
     const std::string bioOSDirectory = "examples\\bio_os";
 
     try {
-        configureSystemDevices();
+        g_binaryDebugger.reset();
+        configureSystemDevices(g_cpu);
 
         BioOSRunOptions options;
         options.directory = bioOSDirectory;
@@ -2753,13 +3018,81 @@ void onStepClicked() {
         }
     }
 
-    if (g_cpu.state().halted()) {
+    if (binaryDebugActive()) {
+        const std::size_t pcBefore =
+            g_binaryDebugger
+                ->cpu()
+                .state()
+                .pc();
+
+        const zero_cpu::debug::DebugStop stop =
+            g_binaryDebugger->step();
+
+        g_breakpointHit =
+            stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::Breakpoint
+            || stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::
+                        ConditionalBreakpoint
+            || stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::Watchpoint;
+
+        if (g_breakpointHit) {
+            g_lastBreakpointPc = stop.pc;
+        }
+
+        std::ostringstream output;
+
+        output
+            << "\n[Studio Debug Step]\n"
+            << "Backend = DebugSession\n"
+            << "PC before = "
+            << pcBefore
+            << "\n"
+            << "PC after = "
+            << g_binaryDebugger
+                ->cpu()
+                .state()
+                .pc()
+            << "\n"
+            << "Stop Reason = "
+            << zero_cpu::debug::
+                debugStopReasonToString(
+                    stop.reason
+                )
+            << "\n"
+            << "Executed Steps = "
+            << stop.executed_steps
+            << "\n"
+            << "Total Steps = "
+            << stop.total_steps
+            << "\n";
+
+        if (!stop.message.empty()) {
+            output
+                << "Message = "
+                << stop.message
+                << "\n";
+        }
+
+        appendTraceText(
+            output.str()
+        );
+
+        refreshStateView();
+        return;
+    }
+
+    if (studioCPU().state().halted()) {
         appendTraceText("\nProgram is already halted.\n");
         refreshStateView();
         return;
     }
 
-    const std::size_t pcBefore = g_cpu.state().pc();
+    const std::size_t pcBefore = studioCPU().state().pc();
 
     std::ostringstream stepLog;
     stepLog << "\n[Studio Step]\n";
@@ -2767,9 +3100,9 @@ void onStepClicked() {
     stepLog << "PC before = " << pcBefore << "\n";
 
     if (g_mode == StudioMode::Assembly) {
-        if (pcBefore < g_cpu.program().size()) {
+        if (pcBefore < studioCPU().program().size()) {
             stepLog << "Instruction = "
-                    << g_cpu.program()[pcBefore].toString()
+                    << studioCPU().program()[pcBefore].toString()
                     << "\n";
         } else {
             stepLog << "Instruction = <PC out of range>\n";
@@ -2785,16 +3118,16 @@ void onStepClicked() {
     g_cpu.step();
 
     stepLog << "PC after = "
-            << g_cpu.state().pc()
+            << studioCPU().state().pc()
             << "\n";
 
-    if (g_cpu.state().hasError()) {
+    if (studioCPU().state().hasError()) {
         stepLog << "Error = "
-                << g_cpu.state().errorMessage()
+                << studioCPU().state().errorMessage()
                 << "\n";
     }
 
-    if (g_cpu.state().halted()) {
+    if (studioCPU().state().halted()) {
         stepLog << "\n";
         stepLog << makeFinalCheckView();
     }
@@ -2810,14 +3143,75 @@ void onRunClicked() {
         }
     }
 
+    if (binaryDebugActive()) {
+        constexpr std::size_t
+            kStudioDebugRunLimit = 1000;
+
+        const zero_cpu::debug::DebugStop stop =
+            g_binaryDebugger->run(
+                kStudioDebugRunLimit
+            );
+
+        g_breakpointHit =
+            stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::Breakpoint
+            || stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::
+                        ConditionalBreakpoint
+            || stop.reason
+                == zero_cpu::debug::
+                    DebugStopReason::Watchpoint;
+
+        if (g_breakpointHit) {
+            g_lastBreakpointPc = stop.pc;
+        }
+
+        std::ostringstream output;
+
+        output
+            << "\n[Studio Debug Run]\n"
+            << "Backend = DebugSession\n"
+            << "Stop Reason = "
+            << zero_cpu::debug::
+                debugStopReasonToString(
+                    stop.reason
+                )
+            << "\n"
+            << "Stop PC = "
+            << stop.pc
+            << "\n"
+            << "Executed Steps = "
+            << stop.executed_steps
+            << "\n"
+            << "Total Steps = "
+            << stop.total_steps
+            << "\n";
+
+        if (!stop.message.empty()) {
+            output
+                << "Message = "
+                << stop.message
+                << "\n";
+        }
+
+        appendTraceText(
+            output.str()
+        );
+
+        refreshStateView();
+        return;
+    }
+
     std::ostringstream runLog;
     runLog << "\n[Studio Run]\n";
     runLog << "Mode = " << modeToString(g_mode) << "\n";
 
     std::size_t stepCount = 0;
 
-    while (!g_cpu.state().halted()) {
-        const std::size_t pcBefore = g_cpu.state().pc();
+    while (!studioCPU().state().halted()) {
+        const std::size_t pcBefore = studioCPU().state().pc();
 
         if (hasBreakpoint(pcBefore)) {
             g_breakpointHit = true;
@@ -2833,9 +3227,9 @@ void onRunClicked() {
                << " | PC=" << pcBefore;
 
         if (g_mode == StudioMode::Assembly) {
-            if (pcBefore < g_cpu.program().size()) {
+            if (pcBefore < studioCPU().program().size()) {
                 runLog << " | "
-                       << g_cpu.program()[pcBefore].toString();
+                       << studioCPU().program()[pcBefore].toString();
             } else {
                 runLog << " | <PC out of range>";
             }
@@ -2850,9 +3244,9 @@ void onRunClicked() {
 
         g_cpu.step();
 
-        if (g_cpu.state().hasError()) {
+        if (studioCPU().state().hasError()) {
             runLog << "Execution failed: "
-                   << g_cpu.state().errorMessage()
+                   << studioCPU().state().errorMessage()
                    << "\n";
             break;
         }
@@ -2865,7 +3259,7 @@ void onRunClicked() {
         }
     }
 
-    if (!g_cpu.state().hasError() && g_cpu.state().halted()) {
+    if (!studioCPU().state().hasError() && studioCPU().state().halted()) {
         runLog << "Execution finished successfully.\n";
     }
 
@@ -2884,27 +3278,53 @@ void onAddBreakpointClicked() {
     }
 
     const std::string text = getWindowTextString(g_breakpointEdit);
-    std::size_t pc = g_cpu.state().pc();
+    std::size_t pc = studioCPU().state().pc();
 
     if (!text.empty()) {
         if (!parseSizeT(text, pc)) {
-            appendTraceText("\nInvalid breakpoint PC. Use a decimal address.\n");
+            appendTraceText("\nInvalid breakpoint PC. Use decimal or 0x-prefixed hex.\n");
             refreshStateView();
             return;
         }
     }
 
-    const bool added = addBreakpoint(pc);
+    try {
+        const bool added =
+            addBreakpoint(pc);
 
-    std::ostringstream oss;
+        std::ostringstream output;
 
-    if (added) {
-        oss << "\nAdded breakpoint at PC=" << pc << "\n";
-    } else {
-        oss << "\nBreakpoint already exists at PC=" << pc << "\n";
+        if (added) {
+            output
+                << "\nAdded breakpoint at PC="
+                << pc
+                << "\n";
+        } else {
+            output
+                << "\nBreakpoint already exists at PC="
+                << pc
+                << "\n";
+        }
+
+        appendTraceText(
+            output.str()
+        );
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+
+        output
+            << "\nBreakpoint rejected.\n"
+            << "PC = "
+            << pc
+            << "\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        appendTraceText(
+            output.str()
+        );
     }
-
-    appendTraceText(oss.str());
 
     refreshStateView();
 }
@@ -2928,6 +3348,10 @@ void onApplyTraceFilterClicked() {
 
 void onClearBreakpointsClicked() {
     g_breakpoints.clear();
+
+    if (binaryDebugActive()) {
+        g_binaryDebugger->clearBreakpoints();
+    }
     g_breakpointHit = false;
     g_lastBreakpointPc = 0;
     g_traceFilter.clear();
@@ -2945,8 +3369,9 @@ void onClearBreakpointsClicked() {
 }
 
 void onResetClicked() {
+    g_binaryDebugger.reset();
     g_cpu.reset();
-    configureSystemDevices();
+    configureSystemDevices(g_cpu);
     g_mode = StudioMode::None;
     g_programLoaded = false;
     g_loadedPath.clear();
@@ -2967,7 +3392,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.28\n"
+        "Zero-CPU Studio v0.29\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -2991,6 +3416,11 @@ void onResetClicked() {
         "Breakpoint polish added.\n"
         "Trace filter added.\n"
         "Watch expressions panel added.\n"
+        "DebugSession binary backend added.\n"
+        "Protected DebugSession showcase set as default.\n"
+        "Breakpoint input accepts decimal and 0x hex.\n"
+        "Debugger snapshot export added.\n"
+        "Symbol sidecar assembly added.\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
@@ -3167,6 +3597,21 @@ LRESULT CALLBACK windowProc(
             30,
             hwnd,
             controlId(kIdLoadAssemblyButton),
+            nullptr,
+            nullptr
+        );
+
+        g_exportSnapshotButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Snapshot",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            1380,
+            40,
+            80,
+            30,
+            hwnd,
+            controlId(kIdExportSnapshotButton),
             nullptr,
             nullptr
         );
@@ -3525,6 +3970,7 @@ LRESULT CALLBACK windowProc(
         applyFont(g_clearBreakpointsButton, font);
         applyFont(g_runBioOSButton, font);
         applyFont(g_exportTraceButton, font);
+        applyFont(g_exportSnapshotButton, font);
         applyFont(g_traceFilterEdit, font);
         applyFont(g_applyTraceFilterButton, font);
         applyFont(g_sourceEdit, font);
@@ -3671,6 +4117,14 @@ LRESULT CALLBACK windowProc(
 
         if (controlIdValue == kIdExportTraceButton) {
             onExportTraceClicked();
+            return 0;
+        }
+
+        if (
+            controlIdValue
+            == kIdExportSnapshotButton
+        ) {
+            onExportSnapshotClicked();
             return 0;
         }
 
