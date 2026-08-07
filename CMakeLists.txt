@@ -146,6 +146,8 @@ add_library(zero_cpu_core
     src/debug/DebugSession.cpp
     src/debug/DebugInspector.cpp
     src/debug/DebugConsole.cpp
+    src/debug/MultiProcessDebugSession.cpp
+    src/debug/MultiProcessDebugConsole.cpp
 
     src/assembler/Assembler.cpp
 
@@ -641,7 +643,39 @@ zero_cpu_enable_coverage(
     zero_debug_symbols_test
 )
 
+
+add_executable(zero_debug_multi_process_test
+    tests/debug_multi_process.cpp
+)
+
+target_link_libraries(
+    zero_debug_multi_process_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_debug_multi_process_test
+)
+
+zero_cpu_enable_coverage(
+    zero_debug_multi_process_test
+)
+
 if (BUILD_TESTING)
+    add_test(
+        NAME zero_cpu.debug_multi_process
+        COMMAND $<TARGET_FILE:zero_debug_multi_process_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.debug_multi_process
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;process;scheduler;multitasking"
+    )
+
     add_test(
         NAME zero_cpu.debug_symbols
         COMMAND $<TARGET_FILE:zero_debug_symbols_test>

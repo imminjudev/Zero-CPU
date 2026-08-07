@@ -17,6 +17,8 @@
 #include "zero_cpu/debug/DebugInspector.hpp"
 #include "zero_cpu/debug/DebugConsole.hpp"
 #include "zero_cpu/debug/DebugSymbols.hpp"
+#include "zero_cpu/debug/MultiProcessDebugSession.hpp"
+#include "zero_cpu/debug/MultiProcessDebugConsole.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -2735,6 +2737,158 @@ struct DebugDisassemblyRequest {
     std::size_t address = 0;
     std::size_t instruction_count = 0;
 };
+
+int debugProcessesCommand(
+    int argc,
+    char* argv[],
+    int startIndex
+) {
+    using namespace zero_cpu::debug;
+
+    MultiProcessDebugOptions sessionOptions;
+
+    bool hasCommandFile = false;
+    std::string commandFilePath;
+
+    std::vector<std::string> paths;
+
+    int index = startIndex;
+
+    while (index < argc) {
+        const std::string argument =
+            argv[index];
+
+        if (argument == "--quantum") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--quantum requires a value"
+                );
+            }
+
+            sessionOptions.quantum =
+                static_cast<std::uint64_t>(
+                    parseRunProcessesPositiveSize(
+                        argv[index + 1],
+                        "--quantum"
+                    )
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--max-steps") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--max-steps requires a value"
+                );
+            }
+
+            sessionOptions.default_continue_steps =
+                parseRunProcessesPositiveSize(
+                    argv[index + 1],
+                    "--max-steps"
+                );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--commands") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--commands requires a file path"
+                );
+            }
+
+            if (hasCommandFile) {
+                throw std::invalid_argument(
+                    "--commands may be specified "
+                    "only once"
+                );
+            }
+
+            hasCommandFile = true;
+            commandFilePath =
+                argv[index + 1];
+
+            index += 2;
+            continue;
+        }
+
+        if (
+            argument.rfind("--", 0)
+            == 0
+        ) {
+            throw std::invalid_argument(
+                "Unknown debug-processes option: "
+                + argument
+            );
+        }
+
+        paths.push_back(argument);
+        ++index;
+    }
+
+    if (paths.size() < 2) {
+        throw std::invalid_argument(
+            "debug-processes requires at least "
+            "two executable paths"
+        );
+    }
+
+    MultiProcessDebugSession session(
+        paths,
+        sessionOptions
+    );
+
+    MultiProcessDebugConsoleOptions
+        consoleOptions;
+
+    consoleOptions.default_continue_steps =
+        sessionOptions.default_continue_steps;
+
+    if (hasCommandFile) {
+        std::ifstream commandFile(
+            commandFilePath
+        );
+
+        if (!commandFile) {
+            throw std::runtime_error(
+                "Cannot open multi-process debugger "
+                "command file: "
+                + commandFilePath
+            );
+        }
+
+        consoleOptions.show_prompt = false;
+
+        MultiProcessDebugConsole console(
+            session,
+            commandFile,
+            std::cout,
+            std::cerr,
+            consoleOptions
+        );
+
+        return console.run().success()
+            ? 0
+            : 1;
+    }
+
+    MultiProcessDebugConsole console(
+        session,
+        std::cin,
+        std::cout,
+        std::cerr,
+        consoleOptions
+    );
+
+    return console.run().success()
+        ? 0
+        : 1;
+}
+
 
 int debugShellCommand(
     const std::string& inputPath,
@@ -7461,6 +7615,7 @@ void printUsage() {
     std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] <app1.zbin> [app2.zbin ...]\n";
     std::cout << "  zero_cli debug-binary <input.zbin> [--break <address>...] [--max-steps N] [--step N] [--registers] [--memory <address> <bytes>...] [--disassemble <address> <instructions>...]\n";
     std::cout << "  zero_cli debug-shell <input.zbin> [--commands <file>] [--max-steps N]\n";
+    std::cout << "  zero_cli debug-processes [--quantum N] [--max-steps N] [--commands <file>] <app1.zbin> <app2.zbin> [more.zbin ...]\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
@@ -7872,6 +8027,22 @@ int main(int argc, char* argv[]) {
                 }
 
                 return assembleToBinary(argv[2], argv[3]);
+            }
+
+            if (command == "debug-processes") {
+                if (argc < 4) {
+                    std::cerr
+                        << "Invalid debug-processes command.\n\n";
+
+                    printUsage();
+                    return 1;
+                }
+
+                return debugProcessesCommand(
+                    argc,
+                    argv,
+                    2
+                );
             }
 
             if (command == "debug-shell") {
