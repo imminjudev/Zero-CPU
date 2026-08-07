@@ -5,6 +5,7 @@
 #include "zero_cpu/debug/DebugSnapshotJson.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 #include "zero_cpu/studio/StudioDebugBackend.hpp"
+#include "zero_cpu/studio/StudioMultiProcessDebugBackend.hpp"
 
 #include <cstdio>
 #include <iostream>
@@ -250,6 +251,139 @@ bool advancedDebugControls(std::string& detail) {
     return true;
 }
 
+bool multiProcessStudioBackend(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    MultiProcessDebugOptions options;
+    options.quantum = 1;
+    options.default_continue_steps = 100;
+
+    StudioMultiProcessDebugBackend backend;
+
+    backend.loadImages(
+        {makeImage(), makeImage()},
+        options
+    );
+
+    if (
+        !backend.loaded()
+        || backend.selectedPid() != 1
+        || backend.runningPid() != 1
+    ) {
+        detail =
+            "studio multi-process initial state mismatch";
+        return false;
+    }
+
+    backend.selectProcess(2);
+
+    if (backend.selectedPid() != 2) {
+        detail =
+            "studio multi-process PID selection mismatch";
+        return false;
+    }
+
+    const std::size_t address =
+        memory_map::kBinaryCodeBase;
+
+    if (!backend.addBreakpoint(address)) {
+        detail =
+            "studio multi-process breakpoint add mismatch";
+        return false;
+    }
+
+    const MultiProcessDebugStop stop =
+        backend.run(100);
+
+    if (
+        stop.reason
+            != MultiProcessDebugStopReason::Breakpoint
+        || !stop.has_debug_hit
+        || stop.hit_pid != 2
+        || stop.hit_address != address
+        || backend.session().breakpoints(1).size() != 0
+        || backend.session().breakpoints(2).size() != 1
+    ) {
+        detail =
+            "studio multi-process breakpoint stop mismatch";
+        return false;
+    }
+
+    const std::string status =
+        backend.statusText();
+
+    if (
+        status.find(
+            "Multi-Process Debug Session"
+        ) == std::string::npos
+        || status.find(
+            "Selected PID = 2"
+        ) == std::string::npos
+        || status.find(
+            "Last Stop = Breakpoint"
+        ) == std::string::npos
+    ) {
+        detail =
+            "studio multi-process status mismatch";
+        return false;
+    }
+
+    const std::string path =
+        "studio_multi_process_snapshot.json";
+
+    struct Cleanup {
+        std::string path;
+        ~Cleanup() {
+            std::remove(path.c_str());
+        }
+    } cleanup{path};
+
+    DebugSnapshotOptions snapshotOptions;
+    snapshotOptions.memory_address = 0;
+    snapshotOptions.memory_size = 16;
+
+    backend.exportSnapshot(
+        path,
+        snapshotOptions
+    );
+
+    std::FILE* file =
+        std::fopen(
+            path.c_str(),
+            "rb"
+        );
+
+    if (file == nullptr) {
+        detail =
+            "studio multi-process snapshot was not created";
+        return false;
+    }
+
+    std::fclose(file);
+
+    backend.clearBreakpoints();
+
+    if (!backend.session().breakpoints(2).empty()) {
+        detail =
+            "studio multi-process breakpoint clear mismatch";
+        return false;
+    }
+
+    backend.reset();
+
+    if (backend.loaded()) {
+        detail =
+            "studio multi-process reset mismatch";
+        return false;
+    }
+
+    return true;
+}
+
 bool snapshotAndStatus(std::string& detail) {
     using namespace zero_cpu::debug;
     using namespace zero_cpu::studio;
@@ -418,6 +552,15 @@ int main() {
         report(
             "Studio advanced debug controls",
             advancedDebugControls(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio multi-process debugger",
+            multiProcessStudioBackend(detail),
             detail
         );
     }

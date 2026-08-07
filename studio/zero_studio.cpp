@@ -6,6 +6,7 @@
 #include "zero_cpu/core/CPU.hpp"
 #include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/studio/StudioDebugBackend.hpp"
+#include "zero_cpu/studio/StudioMultiProcessDebugBackend.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/trace/TraceEvent.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
@@ -72,6 +73,10 @@ constexpr int kIdAddConditionalBreakpointButton = 1024;
 constexpr int kIdClearConditionalBreakpointsButton = 1025;
 constexpr int kIdAddWatchpointButton = 1026;
 constexpr int kIdClearWatchpointsButton = 1027;
+constexpr int kIdMultiProcessPathsEdit = 1028;
+constexpr int kIdLoadMultiProcessButton = 1029;
+constexpr int kIdPidEdit = 1030;
+constexpr int kIdSelectPidButton = 1031;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -84,11 +89,15 @@ constexpr std::size_t kBinaryMemoryPreviewCount = 96;
 
 constexpr const char* kDefaultSourcePath = "examples\\debugger_protected_showcase.zasm";
 constexpr const char* kDefaultBinaryPath = "examples\\debugger_protected_showcase.zbin";
+constexpr const char* kDefaultMultiProcessPaths =
+    "examples\\debugger_protected_showcase.zbin;"
+    "examples\\debugger_protected_showcase.zbin";
 
 enum class StudioMode {
     None,
     Assembly,
-    Binary
+    Binary,
+    MultiProcess
 };
 
 HWND g_inputEdit = nullptr;
@@ -118,12 +127,20 @@ HWND g_addConditionalBreakpointButton = nullptr;
 HWND g_clearConditionalBreakpointsButton = nullptr;
 HWND g_addWatchpointButton = nullptr;
 HWND g_clearWatchpointsButton = nullptr;
+HWND g_multiProcessPathsEdit = nullptr;
+HWND g_loadMultiProcessButton = nullptr;
+HWND g_pidEdit = nullptr;
+HWND g_selectPidButton = nullptr;
 
 zero_cpu::CPU g_cpu;
 
 std::unique_ptr<
     zero_cpu::studio::StudioDebugBackend
 > g_binaryDebugger;
+
+std::unique_ptr<
+    zero_cpu::studio::StudioMultiProcessDebugBackend
+> g_multiProcessDebugger;
 std::shared_ptr<zero_cpu::InterruptController> g_interruptController;
 std::shared_ptr<zero_cpu::MMIOBus> g_mmioBus;
 std::shared_ptr<zero_cpu::DebugOutputDevice> g_debugOutputDevice;
@@ -143,7 +160,17 @@ bool binaryDebugActive() {
         && g_binaryDebugger->loaded();
 }
 
+bool multiProcessDebugActive() {
+    return g_mode == StudioMode::MultiProcess
+        && g_multiProcessDebugger
+        && g_multiProcessDebugger->loaded();
+}
+
 const zero_cpu::CPU& studioCPU() {
+    if (multiProcessDebugActive()) {
+        return g_multiProcessDebugger->cpu();
+    }
+
     if (binaryDebugActive()) {
         return g_binaryDebugger->cpu();
     }
@@ -365,50 +392,57 @@ void exportTraceToJsonFile(const std::string& path) {
 
 
 void onExportSnapshotClicked() {
-    if (!binaryDebugActive()) {
+    if (
+        !binaryDebugActive()
+        && !multiProcessDebugActive()
+    ) {
         appendTraceText(
             "\nExport Snapshot failed: "
-            "load a .zbin with [Load BIN] first.\n"
+            "load a debugger session first.\n"
         );
-
         refreshStateView();
         return;
     }
 
     try {
-        CreateDirectoryA(
-            "traces",
-            nullptr
-        );
+        CreateDirectoryA("traces", nullptr);
 
-        zero_cpu::debug::DebugSnapshotOptions
-            options;
-
+        zero_cpu::debug::DebugSnapshotOptions options;
         options.memory_address = 0;
         options.memory_size = 64;
 
-        g_binaryDebugger->exportSnapshot(
-            kDefaultDebugSnapshotPath,
-            options
-        );
+        std::string modeText;
+
+        if (multiProcessDebugActive()) {
+            g_multiProcessDebugger->exportSnapshot(
+                kDefaultDebugSnapshotPath,
+                options
+            );
+            modeText =
+                "MultiProcessDebugSession";
+        } else {
+            g_binaryDebugger->exportSnapshot(
+                kDefaultDebugSnapshotPath,
+                options
+            );
+            modeText = "Binary DebugSession";
+        }
 
         std::ostringstream output;
-
         output
             << "\n[Export Debug Snapshot]\n"
             << "Path = "
             << kDefaultDebugSnapshotPath
             << "\n"
-            << "Mode = Binary DebugSession\n"
+            << "Mode = "
+            << modeText
+            << "\n"
             << "Memory Preview = [0, 64)\n"
             << "Format = JSON\n";
 
-        appendTraceText(
-            output.str()
-        );
+        appendTraceText(output.str());
     } catch (const std::exception& ex) {
         std::ostringstream output;
-
         output
             << "\n[Export Debug Snapshot Failed]\n"
             << "Path = "
@@ -418,9 +452,7 @@ void onExportSnapshotClicked() {
             << ex.what()
             << "\n";
 
-        appendTraceText(
-            output.str()
-        );
+        appendTraceText(output.str());
     }
 
     refreshStateView();
@@ -466,6 +498,8 @@ std::string modeToString(StudioMode mode) {
         return "Assembly";
     case StudioMode::Binary:
         return "Binary";
+    case StudioMode::MultiProcess:
+        return "MultiProcess";
     case StudioMode::None:
     default:
         return "None";
@@ -567,9 +601,14 @@ std::size_t resolveStudioCodeAddress(const std::string& text) {
         return address;
     }
 
+    if (multiProcessDebugActive()) {
+        return g_multiProcessDebugger
+            ->resolveCodeSymbol(token);
+    }
+
     if (!binaryDebugActive()) {
         throw std::runtime_error(
-            "Code labels require an active binary DebugSession"
+            "Code labels require an active debugger session"
         );
     }
 
@@ -587,9 +626,14 @@ std::size_t resolveStudioDataAddress(const std::string& text) {
         return address;
     }
 
+    if (multiProcessDebugActive()) {
+        return g_multiProcessDebugger
+            ->resolveDataSymbol(token);
+    }
+
     if (!binaryDebugActive()) {
         throw std::runtime_error(
-            "Data labels require an active binary DebugSession"
+            "Data labels require an active debugger session"
         );
     }
 
@@ -622,7 +666,69 @@ zero_cpu::debug::MemoryWatchMode parseStudioWatchMode(
     );
 }
 
+zero_cpu::debug::ProcessMemoryWatchMode
+parseStudioProcessWatchMode(
+    const std::string& text
+) {
+    std::string mode = trimStudioText(text);
+
+    std::transform(
+        mode.begin(),
+        mode.end(),
+        mode.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(
+                std::tolower(ch)
+            );
+        }
+    );
+
+    if (mode == "read" || mode == "r") {
+        return zero_cpu::debug::
+            ProcessMemoryWatchMode::Read;
+    }
+
+    if (mode == "write" || mode == "w") {
+        return zero_cpu::debug::
+            ProcessMemoryWatchMode::Write;
+    }
+
+    if (
+        mode == "access"
+        || mode == "rw"
+        || mode == "readwrite"
+    ) {
+        return zero_cpu::debug::
+            ProcessMemoryWatchMode::Access;
+    }
+
+    throw std::runtime_error(
+        "Watch mode must be read, write, or access"
+    );
+}
+
 bool hasBreakpoint(std::size_t pc) {
+    if (multiProcessDebugActive()) {
+        const auto pid =
+            g_multiProcessDebugger->selectedPid();
+
+        const auto values =
+            g_multiProcessDebugger
+                ->session()
+                .breakpoints(pid);
+
+        return std::find_if(
+            values.begin(),
+            values.end(),
+            [pc](
+                const zero_cpu::debug::
+                    ProcessBreakpoint& value
+            ) {
+                return value.address == pc;
+            }
+        ) != values.end();
+    }
+
     if (binaryDebugActive()) {
         return g_binaryDebugger
             ->session()
@@ -637,6 +743,11 @@ bool hasBreakpoint(std::size_t pc) {
 }
 
 bool addBreakpoint(std::size_t pc) {
+    if (multiProcessDebugActive()) {
+        return g_multiProcessDebugger
+            ->addBreakpoint(pc);
+    }
+
     if (binaryDebugActive()) {
         return g_binaryDebugger
             ->addBreakpoint(pc);
@@ -658,11 +769,98 @@ bool addBreakpoint(std::size_t pc) {
 
 std::string makeBreakpointView() {
     std::ostringstream output;
+
+    if (multiProcessDebugActive()) {
+        const auto pid =
+            g_multiProcessDebugger
+                ->selectedPid();
+
+        output
+            << "PID "
+            << pid
+            << " Debug Controls\n"
+            << "Breakpoints\n";
+
+        const auto bps =
+            g_multiProcessDebugger
+                ->session()
+                .breakpoints(pid);
+
+        if (bps.empty()) {
+            output << "(none)\n";
+        } else {
+            for (const auto& bp : bps) {
+                output
+                    << "PC = "
+                    << bp.address
+                    << "\n";
+            }
+        }
+
+        output
+            << "\nConditional Breakpoints\n";
+
+        const auto conditions =
+            g_multiProcessDebugger
+                ->session()
+                .conditionalBreakpoints(pid);
+
+        if (conditions.empty()) {
+            output << "(none)\n";
+        } else {
+            for (const auto& bp : conditions) {
+                output
+                    << "[id="
+                    << bp.id
+                    << "] PC = "
+                    << bp.address
+                    << " if "
+                    << bp.condition.expression
+                    << "\n";
+            }
+        }
+
+        output << "\nWatchpoints\n";
+
+        const auto watchpoints =
+            g_multiProcessDebugger
+                ->session()
+                .watchpoints(pid);
+
+        if (watchpoints.empty()) {
+            output << "(none)\n";
+        } else {
+            for (const auto& watch : watchpoints) {
+                output
+                    << "[id="
+                    << watch.id
+                    << "] "
+                    << zero_cpu::debug::
+                        processMemoryWatchModeToString(
+                            watch.mode
+                        )
+                    << " ["
+                    << watch.address
+                    << ", "
+                    << watch.endExclusive()
+                    << ") size="
+                    << watch.size
+                    << "\n";
+            }
+        }
+
+        return output.str();
+    }
+
     output << "Breakpoints\n";
 
     std::vector<std::size_t> values;
+
     if (binaryDebugActive()) {
-        values = g_binaryDebugger->session().breakpoints();
+        values =
+            g_binaryDebugger
+                ->session()
+                .breakpoints();
     } else {
         values = g_breakpoints;
     }
@@ -670,14 +868,25 @@ std::string makeBreakpointView() {
     if (values.empty()) {
         output << "(none)\n";
     } else {
-        for (std::size_t index = 0; index < values.size(); ++index) {
-            output << "[" << index << "] PC = " << values[index];
+        for (
+            std::size_t index = 0;
+            index < values.size();
+            ++index
+        ) {
+            output
+                << "["
+                << index
+                << "] PC = "
+                << values[index];
+
             if (
                 g_programLoaded
-                && values[index] == studioCPU().state().pc()
+                && values[index]
+                    == studioCPU().state().pc()
             ) {
                 output << "  <current>";
             }
+
             output << "\n";
         }
     }
@@ -686,33 +895,54 @@ std::string makeBreakpointView() {
         return output.str();
     }
 
-    const auto conditional =
-        g_binaryDebugger->session().conditionalBreakpoints();
     output << "\nConditional Breakpoints\n";
-    if (conditional.empty()) {
+
+    const auto conditions =
+        g_binaryDebugger
+            ->session()
+            .conditionalBreakpoints();
+
+    if (conditions.empty()) {
         output << "(none)\n";
     } else {
-        for (const auto& breakpoint : conditional) {
+        for (const auto& bp : conditions) {
             output
-                << "[id=" << breakpoint.id << "] PC = "
-                << breakpoint.address << " if "
-                << breakpoint.condition.expression << "\n";
+                << "[id="
+                << bp.id
+                << "] PC = "
+                << bp.address
+                << " if "
+                << bp.condition.expression
+                << "\n";
         }
     }
 
-    const auto watchpoints =
-        g_binaryDebugger->session().watchpoints();
     output << "\nWatchpoints\n";
+
+    const auto watchpoints =
+        g_binaryDebugger
+            ->session()
+            .watchpoints();
+
     if (watchpoints.empty()) {
         output << "(none)\n";
     } else {
-        for (const auto& watchpoint : watchpoints) {
+        for (const auto& watch : watchpoints) {
             output
-                << "[id=" << watchpoint.id << "] "
-                << zero_cpu::debug::memoryWatchModeToString(watchpoint.mode)
-                << " [" << watchpoint.address << ", "
-                << watchpoint.endExclusive() << ") size="
-                << watchpoint.size << "\n";
+                << "[id="
+                << watch.id
+                << "] "
+                << zero_cpu::debug::
+                    memoryWatchModeToString(
+                        watch.mode
+                    )
+                << " ["
+                << watch.address
+                << ", "
+                << watch.endExclusive()
+                << ") size="
+                << watch.size
+                << "\n";
         }
     }
 
@@ -2480,7 +2710,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.30\n";
+    oss << "Zero-CPU Studio v0.31\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2501,7 +2731,10 @@ std::string makeStateView() {
 
     oss << "\n";
 
-    if (binaryDebugActive()) {
+    if (multiProcessDebugActive()) {
+        oss << g_multiProcessDebugger->statusText();
+        oss << "\n";
+    } else if (binaryDebugActive()) {
         oss << g_binaryDebugger->statusText();
         oss << "\n";
     }
@@ -2701,6 +2934,7 @@ bool loadAssemblyProgram(const std::string& inputPath) {
         AssembledProgram assembled = assembler.assembleFile(inputPath);
 
         g_binaryDebugger.reset();
+        g_multiProcessDebugger.reset();
 
         g_cpu.loadProgram(
             assembled.instructions,
@@ -2750,6 +2984,8 @@ bool loadBinaryProgram(
     using namespace zero_cpu::studio;
 
     try {
+        g_multiProcessDebugger.reset();
+
         auto debugger =
             std::make_unique<
                 StudioDebugBackend
@@ -2840,6 +3076,228 @@ bool loadBinaryProgram(
         refreshStateView();
         return false;
     }
+}
+
+std::vector<std::string>
+parseMultiProcessBinaryPaths(
+    const std::string& text
+) {
+    std::vector<std::string> paths;
+
+    std::size_t begin = 0;
+
+    while (begin <= text.size()) {
+        const std::size_t separator =
+            text.find(';', begin);
+
+        const std::size_t end =
+            separator == std::string::npos
+                ? text.size()
+                : separator;
+
+        const std::string value =
+            trimStudioText(
+                text.substr(
+                    begin,
+                    end - begin
+                )
+            );
+
+        if (!value.empty()) {
+            paths.push_back(value);
+        }
+
+        if (separator == std::string::npos) {
+            break;
+        }
+
+        begin = separator + 1;
+    }
+
+    if (paths.size() < 2) {
+        throw std::runtime_error(
+            "Multi-process mode requires at least "
+            "two semicolon-separated .zbin paths"
+        );
+    }
+
+    return paths;
+}
+
+void onLoadMultiProcessClicked() {
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    try {
+        const auto paths =
+            parseMultiProcessBinaryPaths(
+                getWindowTextString(
+                    g_multiProcessPathsEdit
+                )
+            );
+
+        MultiProcessDebugOptions options;
+        options.quantum = 1;
+        options.default_continue_steps = 1000;
+
+        auto debugger =
+            std::make_unique<
+                StudioMultiProcessDebugBackend
+            >();
+
+        debugger->loadBinaries(
+            paths,
+            options
+        );
+
+        g_binaryDebugger.reset();
+
+        g_interruptController.reset();
+        g_mmioBus.reset();
+        g_debugOutputDevice.reset();
+        g_timerDevice.reset();
+
+        g_multiProcessDebugger =
+            std::move(debugger);
+
+        g_mode = StudioMode::MultiProcess;
+        g_programLoaded = true;
+        g_loadedPath =
+            std::to_string(paths.size())
+            + " process binaries";
+
+        SetWindowTextA(g_pidEdit, "1");
+
+        std::ostringstream output;
+
+        output
+            << "Loaded multi-process debug session.\n"
+            << "Process Count = "
+            << paths.size()
+            << "\n"
+            << "Quantum = 1\n"
+            << "Selected PID = "
+            << g_multiProcessDebugger
+                ->selectedPid()
+            << "\n"
+            << "Running PID = "
+            << g_multiProcessDebugger
+                ->runningPid()
+            << "\n"
+            << "Execution Backend = "
+            << "MultiProcessDebugSession\n"
+            << "\nBinaries\n";
+
+        for (
+            std::size_t index = 0;
+            index < paths.size();
+            ++index
+        ) {
+            output
+                << "PID "
+                << (index + 1)
+                << " = "
+                << paths[index]
+                << "\n";
+        }
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
+        refreshStateView();
+    } catch (const std::exception& ex) {
+        g_multiProcessDebugger.reset();
+
+        g_mode = StudioMode::None;
+        g_programLoaded = false;
+        g_loadedPath.clear();
+
+        std::ostringstream output;
+
+        output
+            << "Multi-process debug load failed.\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
+        refreshStateView();
+    }
+}
+
+void onSelectPidClicked() {
+    if (!multiProcessDebugActive()) {
+        appendTraceText(
+            "\nSelect PID failed: load MP first.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    std::size_t raw = 0;
+
+    if (
+        !parseSizeT(
+            getWindowTextString(g_pidEdit),
+            raw
+        )
+        || raw == 0
+    ) {
+        appendTraceText(
+            "\nInvalid PID. Use a positive integer.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    const auto pid =
+        static_cast<
+            zero_cpu::kernel::ProcessId
+        >(raw);
+
+    if (
+        static_cast<std::size_t>(pid)
+        != raw
+    ) {
+        appendTraceText(
+            "\nPID is outside the supported range.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    try {
+        g_multiProcessDebugger
+            ->selectProcess(pid);
+
+        std::ostringstream output;
+        output
+            << "\nSelected PID "
+            << pid
+            << ".\n";
+
+        appendTraceText(output.str());
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+        output
+            << "\nSelect PID failed.\n"
+            << "PID = "
+            << raw
+            << "\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        appendTraceText(output.str());
+    }
+
+    refreshStateView();
 }
 
 bool autoLoadFromInputPath() {
@@ -2942,6 +3400,7 @@ void onRunBioOSClicked() {
 
     try {
         g_binaryDebugger.reset();
+        g_multiProcessDebugger.reset();
         configureSystemDevices(g_cpu);
 
         BioOSRunOptions options;
@@ -3126,6 +3585,69 @@ void onStepClicked() {
         }
     }
 
+    if (multiProcessDebugActive()) {
+        const auto stop =
+            g_multiProcessDebugger->step();
+
+        g_breakpointHit =
+            stop.has_debug_hit;
+
+        if (stop.has_debug_hit) {
+            g_lastBreakpointPc =
+                stop.hit_address;
+        }
+
+        std::ostringstream output;
+        output
+            << "\n[Studio Multi-Process Step]\n"
+            << "Backend = MultiProcessDebugSession\n"
+            << "Stop Reason = "
+            << zero_cpu::debug::
+                multiProcessDebugStopReasonToString(
+                    stop.reason
+                )
+            << "\n"
+            << "Runtime State = "
+            << zero_cpu::kernel::
+                processRuntimeStateToString(
+                    stop.runtime_state
+                )
+            << "\n"
+            << "Running PID = "
+            << stop.running_pid
+            << "\n"
+            << "Selected PID = "
+            << stop.selected_pid
+            << "\n"
+            << "Executed Steps = "
+            << stop.executed_steps
+            << "\n"
+            << "Total Steps = "
+            << stop.total_steps
+            << "\n";
+
+        if (stop.has_debug_hit) {
+            output
+                << "Hit PID = "
+                << stop.hit_pid
+                << "\n"
+                << "Hit Address = "
+                << stop.hit_address
+                << "\n";
+        }
+
+        if (!stop.message.empty()) {
+            output
+                << "Message = "
+                << stop.message
+                << "\n";
+        }
+
+        appendTraceText(output.str());
+        refreshStateView();
+        return;
+    }
+
     if (binaryDebugActive()) {
         const std::size_t pcBefore =
             g_binaryDebugger
@@ -3249,6 +3771,80 @@ void onRunClicked() {
         if (!autoLoadFromInputPath()) {
             return;
         }
+    }
+
+    if (multiProcessDebugActive()) {
+        constexpr std::size_t
+            kStudioMultiRunLimit = 5000;
+
+        const auto stop =
+            g_multiProcessDebugger
+                ->run(kStudioMultiRunLimit);
+
+        g_breakpointHit =
+            stop.has_debug_hit;
+
+        if (stop.has_debug_hit) {
+            g_lastBreakpointPc =
+                stop.hit_address;
+        }
+
+        std::ostringstream output;
+        output
+            << "\n[Studio Multi-Process Run]\n"
+            << "Backend = MultiProcessDebugSession\n"
+            << "Stop Reason = "
+            << zero_cpu::debug::
+                multiProcessDebugStopReasonToString(
+                    stop.reason
+                )
+            << "\n"
+            << "Runtime State = "
+            << zero_cpu::kernel::
+                processRuntimeStateToString(
+                    stop.runtime_state
+                )
+            << "\n"
+            << "Running PID = "
+            << stop.running_pid
+            << "\n"
+            << "Selected PID = "
+            << stop.selected_pid
+            << "\n"
+            << "Executed Steps = "
+            << stop.executed_steps
+            << "\n"
+            << "Total Steps = "
+            << stop.total_steps
+            << "\n";
+
+        if (stop.has_debug_hit) {
+            output
+                << "Hit PID = "
+                << stop.hit_pid
+                << "\n"
+                << "Hit Address = "
+                << stop.hit_address
+                << "\n";
+        }
+
+        if (stop.process_terminated) {
+            output
+                << "Terminated PID = "
+                << stop.terminated_pid
+                << "\n";
+        }
+
+        if (!stop.message.empty()) {
+            output
+                << "Message = "
+                << stop.message
+                << "\n";
+        }
+
+        appendTraceText(output.str());
+        refreshStateView();
+        return;
     }
 
     if (binaryDebugActive()) {
@@ -3441,9 +4037,12 @@ void onAddBreakpointClicked() {
 }
 
 void onAddConditionalBreakpointClicked() {
-    if (!binaryDebugActive()) {
+    if (
+        !binaryDebugActive()
+        && !multiProcessDebugActive()
+    ) {
         appendTraceText(
-            "\nConditional breakpoints require an active binary DebugSession.\n"
+            "\nConditional breakpoints require an active debugger session.\n"
         );
         refreshStateView();
         return;
@@ -3469,9 +4068,21 @@ void onAddConditionalBreakpointClicked() {
     try {
         const std::size_t address = resolveStudioCodeAddress(locationText);
         const std::size_t id =
-            g_binaryDebugger->addConditionalBreakpoint(
-                address, source, operation, value
-            );
+            multiProcessDebugActive()
+                ? g_multiProcessDebugger
+                    ->addConditionalBreakpoint(
+                        address,
+                        source,
+                        operation,
+                        value
+                    )
+                : g_binaryDebugger
+                    ->addConditionalBreakpoint(
+                        address,
+                        source,
+                        operation,
+                        value
+                    );
 
         std::ostringstream output;
         output
@@ -3494,21 +4105,49 @@ void onAddConditionalBreakpointClicked() {
 }
 
 void onClearConditionalBreakpointsClicked() {
-    if (!binaryDebugActive()) {
-        appendTraceText("\nNo active binary DebugSession.\n");
+    if (multiProcessDebugActive()) {
+        const auto pid =
+            g_multiProcessDebugger->selectedPid();
+
+        g_multiProcessDebugger
+            ->clearConditionalBreakpoints();
+
+        std::ostringstream output;
+        output
+            << "\nCleared conditional breakpoints for PID "
+            << pid
+            << ".\n";
+
+        appendTraceText(output.str());
         refreshStateView();
         return;
     }
 
-    g_binaryDebugger->clearConditionalBreakpoints();
-    appendTraceText("\nCleared conditional breakpoints.\n");
+    if (!binaryDebugActive()) {
+        appendTraceText(
+            "\nNo active debugger session.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    g_binaryDebugger
+        ->clearConditionalBreakpoints();
+
+    appendTraceText(
+        "\nCleared conditional breakpoints.\n"
+    );
+
     refreshStateView();
 }
 
 void onAddWatchpointClicked() {
-    if (!binaryDebugActive()) {
+    if (
+        !binaryDebugActive()
+        && !multiProcessDebugActive()
+    ) {
         appendTraceText(
-            "\nWatchpoints require an active binary DebugSession.\n"
+            "\nWatchpoints require an active debugger session.\n"
         );
         refreshStateView();
         return;
@@ -3540,9 +4179,46 @@ void onAddWatchpointClicked() {
             );
         }
 
-        const auto mode = parseStudioWatchMode(modeText);
-        const std::size_t id =
-            g_binaryDebugger->addWatchpoint(address, size, mode);
+        std::size_t id = 0;
+        std::string modeName;
+
+        if (multiProcessDebugActive()) {
+            const auto mode =
+                parseStudioProcessWatchMode(
+                    modeText
+                );
+
+            id =
+                g_multiProcessDebugger
+                    ->addWatchpoint(
+                        address,
+                        size,
+                        mode
+                    );
+
+            modeName =
+                zero_cpu::debug::
+                    processMemoryWatchModeToString(
+                        mode
+                    );
+        } else {
+            const auto mode =
+                parseStudioWatchMode(modeText);
+
+            id =
+                g_binaryDebugger
+                    ->addWatchpoint(
+                        address,
+                        size,
+                        mode
+                    );
+
+            modeName =
+                zero_cpu::debug::
+                    memoryWatchModeToString(
+                        mode
+                    );
+        }
 
         std::ostringstream output;
         output
@@ -3551,7 +4227,7 @@ void onAddWatchpointClicked() {
             << "Range = [" << address << ", "
             << (address + size) << ")\n"
             << "Mode = "
-            << zero_cpu::debug::memoryWatchModeToString(mode)
+            << modeName
             << "\n";
         appendTraceText(output.str());
     } catch (const std::exception& ex) {
@@ -3567,8 +4243,28 @@ void onAddWatchpointClicked() {
 }
 
 void onClearWatchpointsClicked() {
+    if (multiProcessDebugActive()) {
+        const auto pid =
+            g_multiProcessDebugger->selectedPid();
+
+        g_multiProcessDebugger
+            ->clearWatchpoints();
+
+        std::ostringstream output;
+        output
+            << "\nCleared watchpoints for PID "
+            << pid
+            << ".\n";
+
+        appendTraceText(output.str());
+        refreshStateView();
+        return;
+    }
+
     if (!binaryDebugActive()) {
-        appendTraceText("\nNo active binary DebugSession.\n");
+        appendTraceText(
+            "\nNo active debugger session.\n"
+        );
         refreshStateView();
         return;
     }
@@ -3598,9 +4294,13 @@ void onApplyTraceFilterClicked() {
 void onClearBreakpointsClicked() {
     g_breakpoints.clear();
 
-    if (binaryDebugActive()) {
+    if (multiProcessDebugActive()) {
+        g_multiProcessDebugger
+            ->clearBreakpoints();
+    } else if (binaryDebugActive()) {
         g_binaryDebugger->clearBreakpoints();
     }
+
     g_breakpointHit = false;
     g_lastBreakpointPc = 0;
     g_traceFilter.clear();
@@ -3619,6 +4319,7 @@ void onClearBreakpointsClicked() {
 
 void onResetClicked() {
     g_binaryDebugger.reset();
+    g_multiProcessDebugger.reset();
     g_cpu.reset();
     configureSystemDevices(g_cpu);
     g_mode = StudioMode::None;
@@ -3637,6 +4338,17 @@ void onResetClicked() {
         SetWindowTextA(g_debugSpecEdit, "");
     }
 
+    if (g_multiProcessPathsEdit != nullptr) {
+        SetWindowTextA(
+            g_multiProcessPathsEdit,
+            kDefaultMultiProcessPaths
+        );
+    }
+
+    if (g_pidEdit != nullptr) {
+        SetWindowTextA(g_pidEdit, "1");
+    }
+
     try {
         setEditText(g_sourceEdit, readTextFile(kDefaultSourcePath));
     } catch (...) {
@@ -3645,7 +4357,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.30\n"
+        "Zero-CPU Studio v0.31\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -3678,6 +4390,10 @@ void onResetClicked() {
         "BP field accepts code labels.\n"
         "Conditional breakpoint and watchpoint GUI added.\n"
         "Patch: v1.2-studio-advanced-debug-controls-r1\n"
+        "Multi-process Studio debugger added.\n"
+        "PID selection and PID-scoped debug controls added.\n"
+        "Multi-process snapshot export added.\n"
+        "Patch: v1.2-studio-multiprocess-debugger-r5\n"
         "Datapath canvas layout fixed.\n"
         "Compact datapath canvas layout added.\n"
         "Scroll repaint fixed.\n"
@@ -3697,6 +4413,11 @@ void onResetClicked() {
         "Advanced Debug Controls:\n"
         "  - Cond: work R0 == 3\n"
         "  - Watch: value 8 write\n"
+        "\n"
+        "Multi-Process Debugging:\n"
+        "  - Separate .zbin paths with semicolons\n"
+        "  - [Load MP] starts the multi-process debugger\n"
+        "  - Select PID before BP/Cond/Watch\n"
     );
 
     refreshStateView();
@@ -4142,10 +4863,115 @@ LRESULT CALLBACK windowProc(
         CreateWindowExA(
             0,
             "STATIC",
+            "MP binaries (;):",
+            WS_CHILD | WS_VISIBLE,
+            20,
+            164,
+            120,
+            24,
+            hwnd,
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
+        g_multiProcessPathsEdit = CreateWindowExA(
+            WS_EX_CLIENTEDGE,
+            "EDIT",
+            kDefaultMultiProcessPaths,
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            140,
+            160,
+            700,
+            30,
+            hwnd,
+            controlId(kIdMultiProcessPathsEdit),
+            nullptr,
+            nullptr
+        );
+
+        g_loadMultiProcessButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Load MP",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            850,
+            160,
+            100,
+            30,
+            hwnd,
+            controlId(kIdLoadMultiProcessButton),
+            nullptr,
+            nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
+            "PID:",
+            WS_CHILD | WS_VISIBLE,
+            970,
+            164,
+            45,
+            24,
+            hwnd,
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
+        g_pidEdit = CreateWindowExA(
+            WS_EX_CLIENTEDGE,
+            "EDIT",
+            "1",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            1015,
+            160,
+            80,
+            30,
+            hwnd,
+            controlId(kIdPidEdit),
+            nullptr,
+            nullptr
+        );
+
+        g_selectPidButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Select PID",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            1105,
+            160,
+            110,
+            30,
+            hwnd,
+            controlId(kIdSelectPidButton),
+            nullptr,
+            nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
+            "Step/Run/BP/Cond/Watch use selected PID",
+            WS_CHILD | WS_VISIBLE,
+            1225,
+            164,
+            235,
+            24,
+            hwnd,
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
+        CreateWindowExA(
+            0,
+            "STATIC",
             "Source Editor (.zasm):",
             WS_CHILD | WS_VISIBLE,
             20,
-            160,
+            200,
             240,
             24,
             hwnd,
@@ -4167,9 +4993,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOVSCROLL |
                 ES_AUTOHSCROLL,
             20,
-            186,
+            226,
             450,
-            640,
+            600,
             hwnd,
             controlId(kIdSourceEdit),
             nullptr,
@@ -4182,7 +5008,7 @@ LRESULT CALLBACK windowProc(
             "CPU / Register / Memory View:",
             WS_CHILD | WS_VISIBLE,
             490,
-            160,
+            200,
             320,
             24,
             hwnd,
@@ -4205,9 +5031,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOHSCROLL |
                 ES_READONLY,
             490,
-            186,
+            226,
             460,
-            640,
+            600,
             hwnd,
             controlId(kIdStateEdit),
             nullptr,
@@ -4220,7 +5046,7 @@ LRESULT CALLBACK windowProc(
             "Trace / Execution Log:",
             WS_CHILD | WS_VISIBLE,
             970,
-            160,
+            200,
             320,
             24,
             hwnd,
@@ -4243,9 +5069,9 @@ LRESULT CALLBACK windowProc(
                 ES_AUTOHSCROLL |
                 ES_READONLY,
             970,
-            186,
+            226,
             480,
-            640,
+            600,
             hwnd,
             controlId(kIdTraceEdit),
             nullptr,
@@ -4303,6 +5129,10 @@ LRESULT CALLBACK windowProc(
         applyFont(g_clearConditionalBreakpointsButton, font);
         applyFont(g_addWatchpointButton, font);
         applyFont(g_clearWatchpointsButton, font);
+        applyFont(g_multiProcessPathsEdit, font);
+        applyFont(g_loadMultiProcessButton, font);
+        applyFont(g_pidEdit, font);
+        applyFont(g_selectPidButton, font);
         applyFont(g_traceFilterEdit, font);
         applyFont(g_applyTraceFilterButton, font);
         applyFont(g_sourceEdit, font);
@@ -4457,6 +5287,16 @@ LRESULT CALLBACK windowProc(
             == kIdExportSnapshotButton
         ) {
             onExportSnapshotClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdLoadMultiProcessButton) {
+            onLoadMultiProcessClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdSelectPidButton) {
+            onSelectPidClicked();
             return 0;
         }
 

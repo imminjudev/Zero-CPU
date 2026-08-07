@@ -151,6 +151,7 @@ add_library(zero_cpu_core
     src/debug/MultiProcessDebugConsole.cpp
 
     src/studio/StudioDebugBackend.cpp
+    src/studio/StudioMultiProcessDebugBackend.cpp
 
     src/assembler/Assembler.cpp
 
