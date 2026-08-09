@@ -75,6 +75,7 @@ constexpr int kIdMultiProcessPathsEdit = 1028;
 constexpr int kIdLoadMultiProcessButton = 1029;
 constexpr int kIdPidEdit = 1030;
 constexpr int kIdSelectPidButton = 1031;
+constexpr int kIdStepSourceButton = 1032;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -106,6 +107,7 @@ HWND g_assembleButton = nullptr;
 HWND g_loadAssemblyButton = nullptr;
 HWND g_loadBinaryButton = nullptr;
 HWND g_stepButton = nullptr;
+HWND g_stepSourceButton = nullptr;
 HWND g_runButton = nullptr;
 HWND g_resetButton = nullptr;
 HWND g_sourceEdit = nullptr;
@@ -2784,7 +2786,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.34\n";
+    oss << "Zero-CPU Studio v0.35\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -3963,6 +3965,207 @@ void onStepClicked() {
     refreshStateView();
 }
 
+
+void onStepSourceClicked() {
+    using namespace zero_cpu::debug;
+
+    if (!binaryDebugActive()) {
+        appendTraceText(
+            "\nStep Line requires a loaded "
+            "single-process .zbin debug session.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    if (!g_binaryDebugger->hasSourceMap()) {
+        appendTraceText(
+            "\nStep Line requires debug symbols "
+            "with a source map.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    std::size_t sourceLineBefore = 0;
+
+    try {
+        sourceLineBefore =
+            g_binaryDebugger->currentSourceLine();
+    } catch (const std::exception& ex) {
+        std::ostringstream output;
+        output
+            << "\nStep Line failed: current PC "
+            << "has no mapped source line.\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        appendTraceText(output.str());
+        refreshStateView();
+        return;
+    }
+
+    const std::size_t pcBefore =
+        g_binaryDebugger
+            ->cpu()
+            .state()
+            .pc();
+
+    constexpr std::size_t
+        kStudioSourceStepLimit = 1000;
+
+    DebugStop stop;
+    bool haveStop = false;
+    bool sourceLineChanged = false;
+    bool sourceLineAfterMapped = false;
+
+    std::size_t sourceLineAfter = 0;
+    std::size_t executedInstructions = 0;
+
+    while (
+        executedInstructions
+        < kStudioSourceStepLimit
+    ) {
+        stop = g_binaryDebugger->step();
+        haveStop = true;
+
+        executedInstructions +=
+            stop.executed_steps;
+
+        if (
+            stop.reason
+            != DebugStopReason::StepComplete
+        ) {
+            break;
+        }
+
+        try {
+            sourceLineAfter =
+                g_binaryDebugger
+                    ->currentSourceLine();
+
+            sourceLineAfterMapped = true;
+
+            if (
+                sourceLineAfter
+                != sourceLineBefore
+            ) {
+                sourceLineChanged = true;
+                break;
+            }
+        } catch (const std::exception&) {
+            sourceLineAfterMapped = false;
+        }
+
+        if (stop.executed_steps == 0) {
+            break;
+        }
+    }
+
+    if (!haveStop) {
+        appendTraceText(
+            "\nStep Line failed: no instruction "
+            "was executed.\n"
+        );
+        refreshStateView();
+        return;
+    }
+
+    g_breakpointHit =
+        stop.reason
+            == DebugStopReason::Breakpoint
+        || stop.reason
+            == DebugStopReason::
+                ConditionalBreakpoint
+        || stop.reason
+            == DebugStopReason::Watchpoint;
+
+    if (g_breakpointHit) {
+        g_lastBreakpointPc = stop.pc;
+    }
+
+    if (!sourceLineAfterMapped) {
+        try {
+            sourceLineAfter =
+                g_binaryDebugger
+                    ->currentSourceLine();
+
+            sourceLineAfterMapped = true;
+        } catch (const std::exception&) {
+            sourceLineAfterMapped = false;
+        }
+    }
+
+    std::ostringstream output;
+
+    output
+        << "\n[Studio Source Step]\n"
+        << "Backend = DebugSession\n"
+        << "PC before = "
+        << pcBefore
+        << "\n"
+        << "PC after = "
+        << g_binaryDebugger
+            ->cpu()
+            .state()
+            .pc()
+        << "\n"
+        << "Source Line before = "
+        << sourceLineBefore
+        << "\n"
+        << "Source Line after = ";
+
+    if (sourceLineAfterMapped) {
+        output << sourceLineAfter;
+    } else {
+        output << "<unmapped>";
+    }
+
+    output
+        << "\n"
+        << "Source Line Changed = "
+        << (
+            sourceLineChanged
+                ? "true"
+                : "false"
+        )
+        << "\n"
+        << "Executed Instructions = "
+        << executedInstructions
+        << "\n"
+        << "Stop Reason = "
+        << debugStopReasonToString(
+            stop.reason
+        )
+        << "\n"
+        << "Total Steps = "
+        << stop.total_steps
+        << "\n";
+
+    if (
+        !sourceLineChanged
+        && stop.reason
+            == DebugStopReason::StepComplete
+        && executedInstructions
+            >= kStudioSourceStepLimit
+    ) {
+        output
+            << "Message = Source step "
+            << "instruction limit reached.\n";
+    } else if (!stop.message.empty()) {
+        output
+            << "Message = "
+            << stop.message
+            << "\n";
+    }
+
+    appendTraceText(output.str());
+    refreshStateView();
+}
+
+// Patch: v1.2-studio-source-step-r1
+
 void onRunClicked() {
     if (!g_programLoaded) {
         if (!autoLoadFromInputPath()) {
@@ -4578,7 +4781,7 @@ void onResetClicked() {
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.34\n"
+        "Zero-CPU Studio v0.35\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -4617,6 +4820,9 @@ void onResetClicked() {
         "BP/Cond locations accept line:N.\n"
         "Current source line shown in debugger status.\n"
         "Patch: v1.2-source-level-studio-r2\n"
+        "Source-level Step Line added.\n"
+        "Step Line advances to the next mapped source line.\n"
+        "Patch: v1.2-studio-source-step-r1\n"
         "Source editor current-line highlighting added.\\n"
         "Mapped source auto-loads when no unsaved editor changes exist.\\n"
         "Editor caret/selection is restored when editing resumes.\\n"
@@ -4635,7 +4841,7 @@ void onResetClicked() {
         "  2. [Save Source] or [Assemble] saves it\n"
         "  3. [Assemble] .zasm -> .zbin\n"
         "  4. [Load Binary]\n"
-        "  5. [Step] or [Run]\n"
+        "  5. [Step], [Step Line], or [Run]\n"
         "\n"
         "Breakpoints:\n"
         "  - Type a PC, code label, or line:N and click [Add BP]\n"
@@ -5197,6 +5403,21 @@ LRESULT CALLBACK windowProc(
             nullptr
         );
 
+        g_stepSourceButton = CreateWindowExA(
+            0,
+            "BUTTON",
+            "Step Line",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            350,
+            196,
+            120,
+            28,
+            hwnd,
+            controlId(kIdStepSourceButton),
+            nullptr,
+            nullptr
+        );
+
         g_sourceEdit = CreateWindowExA(
             WS_EX_CLIENTEDGE,
             "EDIT",
@@ -5334,6 +5555,7 @@ LRESULT CALLBACK windowProc(
         applyFont(g_loadAssemblyButton, font);
         applyFont(g_loadBinaryButton, font);
         applyFont(g_stepButton, font);
+        applyFont(g_stepSourceButton, font);
         applyFont(g_runButton, font);
         applyFont(g_resetButton, font);
         applyFont(g_breakpointEdit, font);
@@ -5488,6 +5710,11 @@ LRESULT CALLBACK windowProc(
 
         if (controlIdValue == kIdStepButton) {
             onStepClicked();
+            return 0;
+        }
+
+        if (controlIdValue == kIdStepSourceButton) {
+            onStepSourceClicked();
             return 0;
         }
 
