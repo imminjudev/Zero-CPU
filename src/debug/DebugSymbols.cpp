@@ -7,6 +7,7 @@
 #include <cctype>
 #include <exception>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -18,7 +19,12 @@ namespace zero_cpu::debug {
 namespace {
 
 const char* kHeader =
+    "ZCPU-SYMBOLS 2";
+
+const char* kLegacyHeader =
     "ZCPU-SYMBOLS 1";
+
+// Patch: v1.2-source-debug-map-core-r1
 
 bool isValidSymbolName(
     const std::string& name
@@ -108,6 +114,23 @@ std::size_t parseAddress(
     }
 }
 
+std::size_t parseSourceLine(
+    const std::string& text,
+    std::size_t fileLineNumber
+) {
+    const std::size_t value =
+        parseAddress(text, fileLineNumber);
+
+    if (value == 0) {
+        throw std::runtime_error(
+            "Source line must be greater than zero at line "
+            + std::to_string(fileLineNumber)
+        );
+    }
+
+    return value;
+}
+
 DebugSymbolKind parseKind(
     const std::string& text,
     std::size_t lineNumber
@@ -152,12 +175,31 @@ bool DebugSymbol::operator==(
         && address == other.address;
 }
 
+bool DebugSourceLocation::operator==(
+    const DebugSourceLocation& other
+) const {
+    return address == other.address
+        && line == other.line;
+}
+
 DebugSymbols
 DebugSymbols::fromAssembledProgram(
     const AssembledProgram& program,
-    std::size_t codeBase
+    std::size_t codeBase,
+    const std::string& sourcePath
 ) {
     DebugSymbols symbols;
+    symbols.source_path_ = sourcePath;
+
+    if (
+        !program.instruction_source_lines.empty()
+        && program.instruction_source_lines.size()
+            != program.instructions.size()
+    ) {
+        throw std::runtime_error(
+            "Instruction source-line mapping size mismatch"
+        );
+    }
 
     std::vector<
         std::pair<std::string, std::size_t>
@@ -215,6 +257,30 @@ DebugSymbols::fromAssembledProgram(
         );
     }
 
+    for (
+        std::size_t index = 0;
+        index < program.instruction_source_lines.size();
+        ++index
+    ) {
+        if (
+            index
+            > (
+                std::numeric_limits<std::size_t>::max()
+                - codeBase
+            ) / binary::kInstructionSize
+        ) {
+            throw std::runtime_error(
+                "Source location address overflow"
+            );
+        }
+
+        symbols.addSourceLocation(
+            codeBase
+                + index * binary::kInstructionSize,
+            program.instruction_source_lines[index]
+        );
+    }
+
     return symbols;
 }
 
@@ -232,10 +298,17 @@ DebugSymbols DebugSymbols::readFile(
 
     std::string line;
 
-    if (
-        !std::getline(input, line)
-        || line != kHeader
-    ) {
+    if (!std::getline(input, line)) {
+        throw std::runtime_error(
+            "Invalid debug symbols header: "
+            + path
+        );
+    }
+
+    const bool legacy =
+        line == kLegacyHeader;
+
+    if (!legacy && line != kHeader) {
         throw std::runtime_error(
             "Invalid debug symbols header: "
             + path
@@ -254,16 +327,71 @@ DebugSymbols DebugSymbols::readFile(
 
         std::istringstream parser(line);
 
-        std::string kindText;
+        std::string recordType;
+        parser >> recordType;
+
+        if (!legacy && recordType == "SOURCE") {
+            std::string sourcePath;
+            std::string extra;
+
+            if (
+                !(parser >> std::quoted(sourcePath))
+                || parser >> extra
+            ) {
+                throw std::runtime_error(
+                    "Malformed source path at line "
+                    + std::to_string(lineNumber)
+                );
+            }
+
+            if (!symbols.source_path_.empty()) {
+                throw std::runtime_error(
+                    "Duplicate source path at line "
+                    + std::to_string(lineNumber)
+                );
+            }
+
+            symbols.source_path_ =
+                std::move(sourcePath);
+            continue;
+        }
+
+        if (!legacy && recordType == "LINE") {
+            std::string addressText;
+            std::string sourceLineText;
+            std::string extra;
+
+            if (
+                !(parser
+                    >> addressText
+                    >> sourceLineText)
+                || parser >> extra
+            ) {
+                throw std::runtime_error(
+                    "Malformed source location at line "
+                    + std::to_string(lineNumber)
+                );
+            }
+
+            symbols.addSourceLocation(
+                parseAddress(
+                    addressText,
+                    lineNumber
+                ),
+                parseSourceLine(
+                    sourceLineText,
+                    lineNumber
+                )
+            );
+            continue;
+        }
+
         std::string name;
         std::string addressText;
         std::string extra;
 
         if (
-            !(parser
-                >> kindText
-                >> name
-                >> addressText)
+            !(parser >> name >> addressText)
             || parser >> extra
         ) {
             throw std::runtime_error(
@@ -274,7 +402,7 @@ DebugSymbols DebugSymbols::readFile(
 
         symbols.add(
             parseKind(
-                kindText,
+                recordType,
                 lineNumber
             ),
             name,
@@ -305,6 +433,13 @@ void DebugSymbols::writeFile(
 
     output << kHeader << "\n";
 
+    if (!source_path_.empty()) {
+        output
+            << "SOURCE "
+            << std::quoted(source_path_)
+            << "\n";
+    }
+
     for (
         const DebugSymbol& symbol :
         entries_
@@ -317,6 +452,18 @@ void DebugSymbols::writeFile(
             << symbol.name
             << " "
             << symbol.address
+            << "\n";
+    }
+
+    for (
+        const DebugSourceLocation& location :
+        source_locations_
+    ) {
+        output
+            << "LINE "
+            << location.address
+            << " "
+            << location.line
             << "\n";
     }
 
@@ -427,6 +574,62 @@ std::size_t DebugSymbols::resolveData(
     return symbol.address;
 }
 
+bool DebugSymbols::hasSourceLocations() const {
+    return !source_locations_.empty();
+}
+
+const std::string&
+DebugSymbols::sourcePath() const {
+    return source_path_;
+}
+
+std::size_t DebugSymbols::resolveSourceLine(
+    std::size_t line
+) const {
+    if (line == 0) {
+        throw std::runtime_error(
+            "Source line must be greater than zero"
+        );
+    }
+
+    for (
+        const DebugSourceLocation& location :
+        source_locations_
+    ) {
+        if (location.line == line) {
+            return location.address;
+        }
+    }
+
+    throw std::runtime_error(
+        "Unknown executable source line: "
+        + std::to_string(line)
+    );
+}
+
+std::size_t DebugSymbols::sourceLineForAddress(
+    std::size_t address
+) const {
+    for (
+        const DebugSourceLocation& location :
+        source_locations_
+    ) {
+        if (location.address == address) {
+            return location.line;
+        }
+    }
+
+    throw std::runtime_error(
+        "No source line for executable address: "
+        + std::to_string(address)
+    );
+}
+
+const std::vector<DebugSourceLocation>&
+DebugSymbols::sourceLocations() const {
+    return source_locations_;
+}
+
 const std::vector<DebugSymbol>&
 DebugSymbols::entries() const {
     return entries_;
@@ -435,7 +638,10 @@ DebugSymbols::entries() const {
 bool DebugSymbols::operator==(
     const DebugSymbols& other
 ) const {
-    return entries_ == other.entries_;
+    return entries_ == other.entries_
+        && source_path_ == other.source_path_
+        && source_locations_
+            == other.source_locations_;
 }
 
 void DebugSymbols::add(
@@ -469,6 +675,43 @@ void DebugSymbols::add(
 
     entries_.push_back(
         std::move(symbol)
+    );
+}
+
+void DebugSymbols::addSourceLocation(
+    std::size_t address,
+    std::size_t line
+) {
+    if (line == 0) {
+        throw std::runtime_error(
+            "Source line must be greater than zero"
+        );
+    }
+
+    for (
+        const DebugSourceLocation& existing :
+        source_locations_
+    ) {
+        if (existing.address == address) {
+            throw std::runtime_error(
+                "Duplicate source address: "
+                + std::to_string(address)
+            );
+        }
+
+        if (existing.line == line) {
+            throw std::runtime_error(
+                "Duplicate executable source line: "
+                + std::to_string(line)
+            );
+        }
+    }
+
+    source_locations_.push_back(
+        DebugSourceLocation{
+            address,
+            line
+        }
     );
 }
 

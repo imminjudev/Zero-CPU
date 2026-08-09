@@ -93,6 +93,54 @@ std::size_t StudioDebugBackend::resolveDataSymbol(
     return session_.resolveDataSymbol(name);
 }
 
+bool StudioDebugBackend::hasSourceMap() const {
+    requireLoaded();
+
+    return session_.hasSymbols()
+        && session_.symbols().hasSourceLocations();
+}
+
+const std::string&
+StudioDebugBackend::sourcePath() const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Studio debugger has no source map"
+        );
+    }
+
+    return session_.symbols().sourcePath();
+}
+
+std::size_t StudioDebugBackend::resolveSourceLine(
+    std::size_t line
+) const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Studio debugger has no source map"
+        );
+    }
+
+    return session_.symbols().resolveSourceLine(line);
+}
+
+std::size_t StudioDebugBackend::currentSourceLine() const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Studio debugger has no source map"
+        );
+    }
+
+    return session_.symbols().sourceLineForAddress(
+        session_.cpu().state().pc()
+    );
+}
+
 std::size_t StudioDebugBackend::addConditionalBreakpoint(
     std::size_t address,
     const std::string& source,
@@ -216,6 +264,28 @@ std::string StudioDebugBackend::statusText() const {
             << "Symbol Count = "
             << session_.symbols().size()
             << "\n";
+    }
+
+    output
+        << "Source Map = "
+        << (hasSourceMap() ? "true" : "false")
+        << "\n";
+
+    if (hasSourceMap()) {
+        output
+            << "Source Path = "
+            << sourcePath()
+            << "\n";
+
+        try {
+            output
+                << "Current Source Line = "
+                << currentSourceLine()
+                << "\n";
+        } catch (const std::exception&) {
+            output
+                << "Current Source Line = <unmapped>\n";
+        }
     }
 
     if (!stop.message.empty()) {

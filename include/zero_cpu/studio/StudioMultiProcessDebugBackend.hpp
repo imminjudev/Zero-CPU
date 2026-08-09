@@ -44,6 +44,16 @@ public:
         const std::string& name
     ) const;
 
+    bool hasSourceMap() const;
+
+    const std::string& sourcePath() const;
+
+    std::size_t resolveSourceLine(
+        std::size_t line
+    ) const;
+
+    std::size_t currentSourceLine() const;
+
     bool addBreakpoint(std::size_t address);
     void clearBreakpoints();
 

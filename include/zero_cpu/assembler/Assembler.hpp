@@ -14,6 +14,9 @@ namespace zero_cpu {
 struct AssembledProgram {
     std::vector<Instruction> instructions;
 
+    // One 1-based source line for each emitted instruction.
+    std::vector<std::size_t> instruction_source_lines;
+
     // Code labels use instruction indices so they remain
     // compatible with vector execution and InstructionEncoder.
     std::unordered_map<

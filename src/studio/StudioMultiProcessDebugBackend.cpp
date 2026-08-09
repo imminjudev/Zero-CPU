@@ -117,6 +117,73 @@ StudioMultiProcessDebugBackend::resolveDataSymbol(
     );
 }
 
+bool StudioMultiProcessDebugBackend::hasSourceMap() const {
+    requireLoaded();
+
+    const auto pid = session_->selectedPid();
+
+    return session_->hasSymbols(pid)
+        && session_->symbols(pid).hasSourceLocations();
+}
+
+const std::string&
+StudioMultiProcessDebugBackend::sourcePath() const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Selected process has no source map"
+        );
+    }
+
+    return session_->symbols(
+        session_->selectedPid()
+    ).sourcePath();
+}
+
+std::size_t
+StudioMultiProcessDebugBackend::resolveSourceLine(
+    std::size_t line
+) const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Selected process has no source map"
+        );
+    }
+
+    return session_->symbols(
+        session_->selectedPid()
+    ).resolveSourceLine(line);
+}
+
+std::size_t
+StudioMultiProcessDebugBackend::currentSourceLine() const {
+    requireLoaded();
+
+    if (!hasSourceMap()) {
+        throw std::runtime_error(
+            "Selected process has no source map"
+        );
+    }
+
+    const auto selected = session_->selectedPid();
+
+    for (const auto& snapshot : session_->processSnapshots()) {
+        if (snapshot.pid == selected) {
+            return session_->symbols(selected)
+                .sourceLineForAddress(
+                    snapshot.context.pc
+                );
+        }
+    }
+
+    throw std::runtime_error(
+        "Selected process snapshot was not found"
+    );
+}
+
 bool StudioMultiProcessDebugBackend::addBreakpoint(
     std::size_t address
 ) {
@@ -337,6 +404,28 @@ StudioMultiProcessDebugBackend::statusText() const {
             << "Symbol Count = "
             << session_->symbols(selected).size()
             << "\n";
+    }
+
+    out
+        << "Source Map = "
+        << (hasSourceMap() ? "true" : "false")
+        << "\n";
+
+    if (hasSourceMap()) {
+        out
+            << "Source Path = "
+            << sourcePath()
+            << "\n";
+
+        try {
+            out
+                << "Current Source Line = "
+                << currentSourceLine()
+                << "\n";
+        } catch (const std::exception&) {
+            out
+                << "Current Source Line = <unmapped>\n";
+        }
     }
 
     out << "\nRecent Context Switches\n";

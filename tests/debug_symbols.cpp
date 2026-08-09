@@ -88,7 +88,8 @@ TemporaryExecutable writeExecutable(
 
     DebugSymbols::fromAssembledProgram(
         assembled,
-        memory_map::kBinaryCodeBase
+        memory_map::kBinaryCodeBase,
+        "debug_symbols_source.zasm"
     ).writeFile(
         symbolsPath
     );
@@ -113,7 +114,8 @@ bool roundTrip(std::string& detail) {
     const DebugSymbols symbols =
         DebugSymbols::fromAssembledProgram(
             assembled,
-            memory_map::kBinaryCodeBase
+            memory_map::kBinaryCodeBase,
+            "round trip source.zasm"
         );
 
     const std::string path =
@@ -141,6 +143,13 @@ bool roundTrip(std::string& detail) {
         || symbols.resolveCode("loop") != 536
         || symbols.resolveCode("done") != 608
         || symbols.resolveData("value") != 0
+        || !symbols.hasSourceLocations()
+        || symbols.sourcePath()
+            != "round trip source.zasm"
+        || symbols.sourceLocations().size() != 5
+        || symbols.resolveSourceLine(9) != 512
+        || symbols.resolveSourceLine(11) != 536
+        || symbols.sourceLineForAddress(608) != 15
     ) {
         detail =
             "debug symbols round-trip mismatch";
@@ -171,6 +180,14 @@ bool automaticLoading(std::string& detail) {
         || session.resolveDataSymbol(
             "value"
         ) != 0
+        || !session.symbols()
+            .hasSourceLocations()
+        || session.symbols()
+            .sourcePath()
+            != "debug_symbols_source.zasm"
+        || session.symbols()
+            .resolveSourceLine(11)
+            != 536
     ) {
         detail =
             "debug symbols were not auto-loaded";
@@ -258,6 +275,47 @@ bool consoleCommands(std::string& detail) {
     ) {
         detail =
             "symbol debugger commands mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+bool legacyV1Compatibility(
+    std::string& detail
+) {
+    using namespace zero_cpu::debug;
+
+    const std::string path =
+        "debug_symbols_legacy_v1.zsym";
+
+    struct Cleanup {
+        std::string path;
+        ~Cleanup() {
+            std::remove(path.c_str());
+        }
+    } cleanup{path};
+
+    {
+        std::ofstream output(path);
+        output
+            << "ZCPU-SYMBOLS 1\n"
+            << "CODE start 512\n"
+            << "DATA value 0\n";
+    }
+
+    const DebugSymbols symbols =
+        DebugSymbols::readFile(path);
+
+    if (
+        symbols.size() != 2
+        || symbols.resolveCode("start") != 512
+        || symbols.resolveData("value") != 0
+        || symbols.hasSourceLocations()
+        || !symbols.sourcePath().empty()
+    ) {
+        detail =
+            "legacy v1 symbols compatibility mismatch";
         return false;
     }
 
@@ -392,6 +450,15 @@ int main() {
         report(
             "Symbol debugger commands",
             consoleCommands(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Legacy v1 symbol compatibility",
+            legacyV1Compatibility(detail),
             detail
         );
     }

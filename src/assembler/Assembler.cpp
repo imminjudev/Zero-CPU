@@ -1270,6 +1270,10 @@ AssembledProgram emitProgram(
                 result.data_labels
             )
         );
+
+        result.instruction_source_lines.push_back(
+            lineNumber
+        );
     }
 
     return result;
