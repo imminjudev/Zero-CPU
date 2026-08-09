@@ -151,6 +151,15 @@ std::size_t g_lastBreakpointPc = 0;
 std::string g_traceFilter;
 int g_scrollY = 0;
 
+
+bool g_sourceEditorProgrammaticUpdate = false;
+bool g_sourceEditorDirty = false;
+std::string g_sourceEditorPath;
+
+bool g_sourceDebugHighlightActive = false;
+DWORD g_sourceDebugSavedSelectionStart = 0;
+DWORD g_sourceDebugSavedSelectionEnd = 0;
+
 bool binaryDebugActive() {
     return g_mode == StudioMode::Binary
         && g_binaryDebugger
@@ -2775,7 +2784,7 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 std::string makeStateView() {
     std::ostringstream oss;
 
-    oss << "Zero-CPU Studio v0.33\n";
+    oss << "Zero-CPU Studio v0.34\n";
     oss << "Mode: " << modeToString(g_mode) << "\n";
 
     if (g_programLoaded) {
@@ -2859,9 +2868,321 @@ std::string makeStateView() {
     return oss.str();
 }
 
+
+std::string normalizeStudioPathForCompare(
+    const std::string& path
+) {
+    std::string normalized = path;
+
+    std::transform(
+        normalized.begin(),
+        normalized.end(),
+        normalized.begin(),
+        [](unsigned char ch) {
+            if (ch == '/') {
+                return '\\';
+            }
+
+            return static_cast<char>(
+                std::tolower(ch)
+            );
+        }
+    );
+
+    return normalized;
+}
+
+bool studioPathsEqual(
+    const std::string& left,
+    const std::string& right
+) {
+    return normalizeStudioPathForCompare(left)
+        == normalizeStudioPathForCompare(right);
+}
+
+void clearSourceDebugHighlight(
+    bool restoreUserSelection
+) {
+    if (!g_sourceDebugHighlightActive) {
+        return;
+    }
+
+    if (
+        restoreUserSelection
+        && g_sourceEdit != nullptr
+    ) {
+        SendMessageA(
+            g_sourceEdit,
+            EM_SETSEL,
+            static_cast<WPARAM>(
+                g_sourceDebugSavedSelectionStart
+            ),
+            static_cast<LPARAM>(
+                g_sourceDebugSavedSelectionEnd
+            )
+        );
+    }
+
+    g_sourceDebugHighlightActive = false;
+}
+
+void setSourceEditorContents(
+    const std::string& text,
+    const std::string& path
+) {
+    clearSourceDebugHighlight(false);
+
+    g_sourceEditorProgrammaticUpdate = true;
+    setEditText(g_sourceEdit, text);
+    g_sourceEditorProgrammaticUpdate = false;
+
+    g_sourceEditorPath = path;
+    g_sourceEditorDirty = false;
+}
+
+bool tryCurrentStudioSourceLocation(
+    std::string& path,
+    std::size_t& line
+) {
+    path.clear();
+    line = 0;
+
+    try {
+        if (multiProcessDebugActive()) {
+            if (
+                !g_multiProcessDebugger
+                    ->hasSourceMap()
+            ) {
+                return false;
+            }
+
+            path =
+                g_multiProcessDebugger
+                    ->sourcePath();
+
+            line =
+                g_multiProcessDebugger
+                    ->currentSourceLine();
+
+            return !path.empty()
+                && line != 0;
+        }
+
+        if (binaryDebugActive()) {
+            if (
+                !g_binaryDebugger
+                    ->hasSourceMap()
+            ) {
+                return false;
+            }
+
+            path =
+                g_binaryDebugger
+                    ->sourcePath();
+
+            line =
+                g_binaryDebugger
+                    ->currentSourceLine();
+
+            return !path.empty()
+                && line != 0;
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    return false;
+}
+
+bool ensureSourceEditorMatchesDebugSource(
+    const std::string& sourcePath
+) {
+    if (g_sourceEditorDirty) {
+        return false;
+    }
+
+    if (
+        !g_sourceEditorPath.empty()
+        && studioPathsEqual(
+            g_sourceEditorPath,
+            sourcePath
+        )
+    ) {
+        return true;
+    }
+
+    try {
+        setSourceEditorContents(
+            readTextFile(sourcePath),
+            sourcePath
+        );
+
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool highlightSourceEditorLine(
+    std::size_t sourceLine
+) {
+    if (
+        g_sourceEdit == nullptr
+        || sourceLine == 0
+    ) {
+        return false;
+    }
+
+    const LRESULT lineStart =
+        SendMessageA(
+            g_sourceEdit,
+            EM_LINEINDEX,
+            static_cast<WPARAM>(
+                sourceLine - 1
+            ),
+            0
+        );
+
+    if (lineStart < 0) {
+        return false;
+    }
+
+    const LRESULT lineLength =
+        SendMessageA(
+            g_sourceEdit,
+            EM_LINELENGTH,
+            static_cast<WPARAM>(
+                lineStart
+            ),
+            0
+        );
+
+    if (lineLength < 0) {
+        return false;
+    }
+
+    if (!g_sourceDebugHighlightActive) {
+        DWORD selectionStart = 0;
+        DWORD selectionEnd = 0;
+
+        SendMessageA(
+            g_sourceEdit,
+            EM_GETSEL,
+            reinterpret_cast<WPARAM>(
+                &selectionStart
+            ),
+            reinterpret_cast<LPARAM>(
+                &selectionEnd
+            )
+        );
+
+        g_sourceDebugSavedSelectionStart =
+            selectionStart;
+
+        g_sourceDebugSavedSelectionEnd =
+            selectionEnd;
+    }
+
+    const DWORD highlightStart =
+        static_cast<DWORD>(lineStart);
+
+    const DWORD highlightEnd =
+        static_cast<DWORD>(
+            lineStart + lineLength
+        );
+
+    SendMessageA(
+        g_sourceEdit,
+        EM_SETSEL,
+        static_cast<WPARAM>(
+            highlightStart
+        ),
+        static_cast<LPARAM>(
+            highlightEnd
+        )
+    );
+
+    const LRESULT firstVisibleLine =
+        SendMessageA(
+            g_sourceEdit,
+            EM_GETFIRSTVISIBLELINE,
+            0,
+            0
+        );
+
+    const std::size_t targetLineIndex =
+        sourceLine - 1;
+
+    const std::size_t contextLineIndex =
+        targetLineIndex > 3
+            ? targetLineIndex - 3
+            : 0;
+
+    const LRESULT verticalDelta =
+        static_cast<LRESULT>(
+            contextLineIndex
+        ) - firstVisibleLine;
+
+    if (verticalDelta != 0) {
+        SendMessageA(
+            g_sourceEdit,
+            EM_LINESCROLL,
+            0,
+            static_cast<LPARAM>(
+                verticalDelta
+            )
+        );
+    }
+
+    InvalidateRect(
+        g_sourceEdit,
+        nullptr,
+        TRUE
+    );
+
+    UpdateWindow(
+        g_sourceEdit
+    );
+
+    g_sourceDebugHighlightActive = true;
+    return true;
+}
+
+void syncSourceEditorToDebugLocation() {
+    std::string sourcePath;
+    std::size_t sourceLine = 0;
+
+    if (
+        !tryCurrentStudioSourceLocation(
+            sourcePath,
+            sourceLine
+        )
+    ) {
+        clearSourceDebugHighlight(true);
+        return;
+    }
+
+    if (
+        !ensureSourceEditorMatchesDebugSource(
+            sourcePath
+        )
+    ) {
+        clearSourceDebugHighlight(true);
+        return;
+    }
+
+    if (!highlightSourceEditorLine(sourceLine)) {
+        clearSourceDebugHighlight(true);
+    }
+}
+
+// Patch: v1.2-studio-source-line-highlight-r1
+
 void refreshStateView() {
     setEditText(g_stateEdit, makeStateView());
 
+
+    syncSourceEditorToDebugLocation();
     if (g_datapathCanvas != nullptr) {
         InvalidateRect(g_datapathCanvas, nullptr, TRUE);
     }
@@ -2871,6 +3192,9 @@ bool saveSourceEditorToFile(const std::string& inputPath) {
     try {
         writeTextFile(inputPath, getWindowTextString(g_sourceEdit));
 
+
+        g_sourceEditorPath = inputPath;
+        g_sourceEditorDirty = false;
         std::ostringstream oss;
         oss << "Saved source file.\n";
         oss << "Path: " << inputPath << "\n";
@@ -2891,7 +3215,7 @@ bool saveSourceEditorToFile(const std::string& inputPath) {
 bool loadSourceFileToEditor(const std::string& inputPath) {
     try {
         const std::string source = readTextFile(inputPath);
-        setEditText(g_sourceEdit, source);
+        setSourceEditorContents(source, inputPath);
 
         std::ostringstream oss;
         oss << "Loaded source into editor.\n";
@@ -3389,7 +3713,9 @@ void onLoadSourceClicked() {
         return;
     }
 
-    loadSourceFileToEditor(inputPath);
+    if (loadSourceFileToEditor(inputPath)) {
+        refreshStateView();
+    }
 }
 
 void onSaveSourceClicked() {
@@ -4207,6 +4533,9 @@ void onClearBreakpointsClicked() {
 }
 
 void onResetClicked() {
+    clearSourceDebugHighlight(false);
+    g_sourceEditorPath.clear();
+    g_sourceEditorDirty = false;
     g_binaryDebugger.reset();
     g_multiProcessDebugger.reset();
     g_cpu.reset();
@@ -4239,14 +4568,17 @@ void onResetClicked() {
     }
 
     try {
-        setEditText(g_sourceEdit, readTextFile(kDefaultSourcePath));
+        setSourceEditorContents(
+            readTextFile(kDefaultSourcePath),
+            kDefaultSourcePath
+        );
     } catch (...) {
-        setEditText(g_sourceEdit, "");
+        setSourceEditorContents("", "");
     }
 
     setEditText(
         g_traceEdit,
-        "Zero-CPU Studio v0.33\n"
+        "Zero-CPU Studio v0.34\n"
         "\n"
         "Ready.\n"
         "Source editor added.\n"
@@ -4285,6 +4617,10 @@ void onResetClicked() {
         "BP/Cond locations accept line:N.\n"
         "Current source line shown in debugger status.\n"
         "Patch: v1.2-source-level-studio-r2\n"
+        "Source editor current-line highlighting added.\\n"
+        "Mapped source auto-loads when no unsaved editor changes exist.\\n"
+        "Editor caret/selection is restored when editing resumes.\\n"
+        "Patch: v1.2-studio-source-line-highlight-r2\\n"
         "Studio program execution is now generic.\n"
         "Load ASM/BIN, then Step or Run; no program-specific runner button.\n"
         "Patch: v1.2-studio-generic-program-flow-r1\n"
@@ -4871,6 +5207,7 @@ LRESULT CALLBACK windowProc(
                 WS_HSCROLL |
                 ES_LEFT |
                 ES_MULTILINE |
+                ES_NOHIDESEL |
                 ES_AUTOVSCROLL |
                 ES_AUTOHSCROLL,
             20,
@@ -5101,6 +5438,28 @@ LRESULT CALLBACK windowProc(
 
     case WM_COMMAND: {
         const int controlIdValue = LOWORD(wParam);
+
+
+        if (controlIdValue == kIdSourceEdit) {
+            const int notificationCode =
+                HIWORD(wParam);
+
+            if (
+                notificationCode
+                == EN_SETFOCUS
+            ) {
+                clearSourceDebugHighlight(true);
+                return 0;
+            }
+
+            if (
+                notificationCode
+                    == EN_CHANGE
+                && !g_sourceEditorProgrammaticUpdate
+            ) {
+                g_sourceEditorDirty = true;
+            }
+        }
 
         if (controlIdValue == kIdLoadSourceButton) {
             onLoadSourceClicked();
