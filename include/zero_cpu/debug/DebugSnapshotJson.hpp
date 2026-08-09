@@ -20,7 +20,7 @@ struct DebugSnapshotOptions {
 class DebugSnapshotJsonWriter {
 public:
     static constexpr std::size_t
-        kSchemaVersion = 1;
+        kSchemaVersion = 2;
 
     static std::string toJson(
         const DebugSession& session,

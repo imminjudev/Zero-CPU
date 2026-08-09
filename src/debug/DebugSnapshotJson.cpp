@@ -1070,6 +1070,76 @@ void appendMultiStop(
     finishField(output, comma);
 }
 
+// Patch: v1.2-snapshot-source-location-r2
+void appendSourceLocation(
+    std::ostringstream& output,
+    const DebugSymbols* symbols,
+    std::size_t address,
+    int fieldIndent,
+    bool comma
+) {
+    bool available = false;
+    std::string path;
+    std::size_t line = 0;
+
+    if (
+        symbols != nullptr
+        && symbols->hasSourceLocations()
+    ) {
+        path = symbols->sourcePath();
+
+        try {
+            line =
+                symbols->sourceLineForAddress(
+                    address
+                );
+
+            available = true;
+        } catch (const std::exception&) {
+            // The executable can legitimately stop just
+            // past its final mapped instruction.
+            available = false;
+        }
+    }
+
+    indent(output, fieldIndent);
+    output << "\"source_location\": {\n";
+
+    boolField(
+        output,
+        fieldIndent + 2,
+        "available",
+        available
+    );
+
+    stringField(
+        output,
+        fieldIndent + 2,
+        "path",
+        path
+    );
+
+    sizeField(
+        output,
+        fieldIndent + 2,
+        "line",
+        line
+    );
+
+    sizeField(
+        output,
+        fieldIndent + 2,
+        "address",
+        address,
+        false
+    );
+
+    indent(output, fieldIndent);
+    output << "}";
+
+    finishField(output, comma);
+}
+
 void appendSingleBreakpoints(
     std::ostringstream& output,
     const DebugSession& session,
@@ -1533,6 +1603,7 @@ void appendMultiWatchpoints(
 void appendProcess(
     std::ostringstream& output,
     const ProcessDebugSnapshot& snapshot,
+    const DebugSymbols* symbols,
     const DebugSnapshotOptions& options,
     int fieldIndent,
     bool comma
@@ -1628,6 +1699,14 @@ void appendProcess(
         true
     );
 
+    appendSourceLocation(
+        output,
+        symbols,
+        snapshot.context.pc,
+        fieldIndent + 2,
+        true
+    );
+
     appendMemory(
         output,
         snapshot.memory,
@@ -1660,9 +1739,19 @@ void appendProcesses(
         index < values.size();
         ++index
     ) {
+        const DebugSymbols* symbols =
+            session.hasSymbols(
+                values[index].pid
+            )
+                ? &session.symbols(
+                    values[index].pid
+                )
+                : nullptr;
+
         appendProcess(
             output,
             values[index],
+            symbols,
             options,
             fieldIndent + 2,
             index + 1 < values.size()
@@ -1969,6 +2058,16 @@ std::string DebugSnapshotJsonWriter::toJson(
     appendExecutable(
         output,
         session.metadata(),
+        2,
+        true
+    );
+
+    appendSourceLocation(
+        output,
+        session.hasSymbols()
+            ? &session.symbols()
+            : nullptr,
+        session.cpu().state().pc(),
         2,
         true
     );

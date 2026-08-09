@@ -1,10 +1,12 @@
 #include "zero_cpu/assembler/Assembler.hpp"
 #include "zero_cpu/binary/BinaryFormat.hpp"
+#include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/debug/DebugCondition.hpp"
 #include "zero_cpu/debug/DebugConsole.hpp"
 #include "zero_cpu/debug/DebugSession.hpp"
 #include "zero_cpu/debug/DebugSnapshotJson.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/debug/MultiProcessDebugConsole.hpp"
 #include "zero_cpu/debug/MultiProcessDebugSession.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
@@ -92,6 +94,60 @@ start:
     ADD R0, 5
     STORE [value], R0
 )ASM";
+
+struct TemporarySourceExecutable {
+    std::string binary_path;
+    std::string symbols_path;
+
+    ~TemporarySourceExecutable() {
+        std::remove(binary_path.c_str());
+        std::remove(symbols_path.c_str());
+    }
+};
+
+TemporarySourceExecutable
+writeSourceExecutable(
+    const std::string& baseName,
+    const std::string& sourcePath
+) {
+    using namespace zero_cpu;
+
+    Assembler assembler;
+
+    const AssembledProgram assembled =
+        assembler.assembleString(
+            kFirstSource
+        );
+
+    const std::string binaryPath =
+        baseName + ".zbin";
+
+    const std::string symbolsPath =
+        debug::debugSymbolsPathForExecutable(
+            binaryPath
+        );
+
+    binary::BinaryWriter writer;
+
+    writer.writeFile(
+        binaryPath,
+        assembled.toBinaryProgram()
+    );
+
+    debug::DebugSymbols::
+        fromAssembledProgram(
+            assembled,
+            memory_map::kBinaryCodeBase,
+            sourcePath
+        ).writeFile(
+            symbolsPath
+        );
+
+    return {
+        binaryPath,
+        symbolsPath
+    };
+}
 
 zero_cpu::debug::DebugSnapshotOptions
 snapshotOptions() {
@@ -284,6 +340,148 @@ bool multiSnapshot(std::string& detail) {
     return true;
 }
 
+bool sourceLocations(std::string& detail) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const TemporarySourceExecutable temporary =
+        writeSourceExecutable(
+            "debug_snapshot_source_location",
+            "examples\\snapshot_source.zasm"
+        );
+
+    {
+        DebugSession session(
+            temporary.binary_path
+        );
+
+        (void)session.step();
+
+        const std::string json =
+            DebugSnapshotJsonWriter::toJson(
+                session,
+                snapshotOptions()
+            );
+
+        if (
+            json.find(
+                "\"schema_version\": 2"
+            ) == std::string::npos
+            || json.find(
+                "\"source_location\": {"
+            ) == std::string::npos
+            || json.find(
+                "\"available\": true"
+            ) == std::string::npos
+            || json.find(
+                "\"path\": "
+                "\"examples\\\\snapshot_source.zasm\""
+            ) == std::string::npos
+            || json.find(
+                "\"line\": 10"
+            ) == std::string::npos
+            || json.find(
+                "\"address\": 536"
+            ) == std::string::npos
+        ) {
+            detail =
+                "single-process source location mismatch";
+            return false;
+        }
+    }
+
+    {
+        MultiProcessDebugSession session(
+            {
+                temporary.binary_path,
+                temporary.binary_path
+            },
+            multiOptions()
+        );
+
+        (void)session.step();
+        (void)session.step();
+
+        const std::string json =
+            DebugSnapshotJsonWriter::toJson(
+                session,
+                snapshotOptions()
+            );
+
+        const std::string sourcePath =
+            "\"path\": "
+            "\"examples\\\\snapshot_source.zasm\"";
+
+        const std::size_t first =
+            json.find(sourcePath);
+
+        const std::size_t second =
+            first == std::string::npos
+                ? std::string::npos
+                : json.find(
+                    sourcePath,
+                    first + sourcePath.size()
+                );
+
+        if (
+            json.find(
+                "\"mode\": \"multi_process\""
+            ) == std::string::npos
+            || first == std::string::npos
+            || second == std::string::npos
+            || json.find(
+                "\"line\": 10"
+            ) == std::string::npos
+            || json.find(
+                "\"address\": 536"
+            ) == std::string::npos
+        ) {
+            detail =
+                "multi-process source location mismatch";
+            return false;
+        }
+    }
+
+    {
+        DebugSession session(
+            makeImage(
+                kFirstSource,
+                "no-source-map.zbin"
+            )
+        );
+
+        const std::string json =
+            DebugSnapshotJsonWriter::toJson(
+                session,
+                snapshotOptions()
+            );
+
+        if (
+            json.find(
+                "\"source_location\": {"
+            ) == std::string::npos
+            || json.find(
+                "\"available\": false"
+            ) == std::string::npos
+            || json.find(
+                "\"path\": \"\""
+            ) == std::string::npos
+            || json.find(
+                "\"line\": 0"
+            ) == std::string::npos
+            || json.find(
+                "\"address\": 512"
+            ) == std::string::npos
+        ) {
+            detail =
+                "source-map fallback mismatch";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool fileWriting(std::string& detail) {
     using namespace zero_cpu::debug;
 
@@ -321,7 +519,7 @@ bool fileWriting(std::string& detail) {
     if (
         json.empty()
         || json.find(
-            "\"schema_version\": 1"
+            "\"schema_version\": 2"
         ) == std::string::npos
         || json.back() != '\n'
     ) {
@@ -604,6 +802,15 @@ int main() {
         report(
             "Multi-process snapshot",
             multiSnapshot(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Snapshot source locations",
+            sourceLocations(detail),
             detail
         );
     }
