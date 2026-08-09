@@ -1042,6 +1042,26 @@ bool MultiProcessDebugConsole::executeCommand(
     }
 
     if (
+        command == "step-line"
+        || command == "sl"
+    ) {
+        const std::size_t maxSteps =
+            optionalPositiveCount(
+                parser,
+                command,
+                options_.default_continue_steps
+            );
+
+        printStop(
+            session_.stepSelectedSourceLine(
+                maxSteps
+            )
+        );
+
+        return false;
+    }
+
+    if (
         command == "continue"
         || command == "c"
     ) {
@@ -1170,6 +1190,7 @@ void MultiProcessDebugConsole::printHelp() {
         << "  watchpoints [PID]\n"
         << "  clear-watchpoints [PID]\n"
         << "  step [count]\n"
+        << "  step-line [max-steps]  (alias: sl)\n"
         << "  continue [max-steps]\n"
         << "  status\n"
         << "  scheduler\n"

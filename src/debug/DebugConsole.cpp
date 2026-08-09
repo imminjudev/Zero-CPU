@@ -251,6 +251,26 @@ bool DebugConsole::executeCommand(
     }
 
     if (
+        command == "step-line"
+        || command == "sl"
+    ) {
+        const std::size_t maxSteps =
+            parseOptionalCount(
+                parser,
+                command,
+                options_.default_continue_steps
+            );
+
+        printStatus(
+            session_.stepSourceLine(
+                maxSteps
+            )
+        );
+
+        return false;
+    }
+
+    if (
         command == "continue"
         || command == "c"
     ) {
@@ -922,6 +942,7 @@ void DebugConsole::printHelp() {
         << "  help\n"
         << "  status\n"
         << "  step [count]\n"
+        << "  step-line [max-steps]  (alias: sl)\n"
         << "  continue [max-steps]\n"
         << "  break <address>\n"
         << "  delete <address>\n"

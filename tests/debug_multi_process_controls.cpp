@@ -843,6 +843,100 @@ loop:
 
 // Patch: v1.2-multiprocess-source-step-core-r1
 
+
+bool consoleSourceStepWorkflow(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const TemporaryExecutables temporary =
+        writeExecutables(
+            "debug_multi_console_source_step"
+        );
+
+    MultiProcessDebugSession session(
+        binaryPaths(temporary),
+        debugOptions()
+    );
+
+    const ProcessDebugSnapshot before =
+        session.processSnapshot(2);
+
+    const std::size_t expectedPc =
+        before.context.pc
+        + binary::kInstructionSize;
+
+    std::istringstream input(
+        "help\n"
+        "process 2\n"
+        "step-line 20\n"
+        "quit\n"
+    );
+
+    std::ostringstream output;
+    std::ostringstream error;
+
+    MultiProcessDebugConsoleOptions options;
+    options.show_prompt = false;
+    options.print_banner = false;
+    options.default_continue_steps = 100;
+
+    MultiProcessDebugConsole console(
+        session,
+        input,
+        output,
+        error,
+        options
+    );
+
+    const MultiProcessDebugConsoleResult result =
+        console.run();
+
+    const ProcessDebugSnapshot after =
+        session.processSnapshot(2);
+
+    const std::string text =
+        output.str();
+
+    if (
+        !result.success()
+        || !result.quit_requested
+        || result.command_count != 4
+        || result.command_error_count != 0
+        || !error.str().empty()
+        || session.selectedPid() != 2
+        || after.context.pc != expectedPc
+        || after.context.registers[
+            static_cast<std::size_t>(
+                RegisterName::R0
+            )
+        ] != 10
+        || session.contextSwitches().empty()
+        || text.find(
+            "step-line [max-steps]"
+        ) == std::string::npos
+        || text.find(
+            "Selected PID 2."
+        ) == std::string::npos
+        || text.find(
+            "Stop reason: StepComplete"
+        ) == std::string::npos
+        || text.find(
+            "Selected PID: 2"
+        ) == std::string::npos
+    ) {
+        detail =
+            "multi-process source-step console "
+            "workflow mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.2-debug-console-source-step-r1
+
 bool consoleWorkflow(
     std::string& detail
 ) {
@@ -1027,6 +1121,15 @@ int main() {
         report(
             "Source-step validation and limit",
             sourceStepValidationAndLimit(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "PID source-step console workflow",
+            consoleSourceStepWorkflow(detail),
             detail
         );
     }

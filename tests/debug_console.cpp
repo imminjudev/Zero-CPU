@@ -2,8 +2,10 @@
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
 #include "zero_cpu/debug/DebugConsole.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 
+#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -132,6 +134,119 @@ bool scriptedWorkflow(std::string& detail) {
 
     return true;
 }
+
+
+bool sourceStepCommand(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const std::string source =
+        R"ASM(.entry start
+.text
+start:
+    MOV R0, 1
+    CALL worker
+    ADD R0, 4
+worker:
+    ADD R0, 2
+    RET
+)ASM";
+
+    Assembler assembler;
+
+    const AssembledProgram assembled =
+        assembler.assembleString(source);
+
+    kernel::ProcessImageLoader loader;
+
+    DebugSession session(
+        loader.loadProgram(
+            assembled.toBinaryProgram(),
+            "debug-console-source-step.zbin"
+        )
+    );
+
+    const std::string symbolsPath =
+        "debug_console_source_step_test.zsym";
+
+    struct Cleanup {
+        std::string path;
+        ~Cleanup() {
+            std::remove(path.c_str());
+        }
+    } cleanup{symbolsPath};
+
+    DebugSymbols::fromAssembledProgram(
+        assembled,
+        memory_map::kBinaryCodeBase,
+        "debug-console-source-step.zasm"
+    ).writeFile(
+        symbolsPath
+    );
+
+    session.loadSymbolsFile(
+        symbolsPath
+    );
+
+    const std::size_t workerAddress =
+        session.resolveCodeSymbol(
+            "worker"
+        );
+
+    std::istringstream input(
+        "help\n"
+        "step-line 20\n"
+        "sl 20\n"
+        "quit\n"
+    );
+
+    std::ostringstream output;
+    std::ostringstream error;
+
+    DebugConsole console(
+        session,
+        input,
+        output,
+        error,
+        options()
+    );
+
+    const DebugConsoleRunResult result =
+        console.run();
+
+    const std::string text =
+        output.str();
+
+    if (
+        !result.success()
+        || !result.quit_requested
+        || result.command_count != 4
+        || result.command_error_count != 0
+        || !error.str().empty()
+        || session.totalSteps() != 2
+        || session.cpu().state().pc()
+            != workerAddress
+        || session.cpu().state()
+            .registers()
+            .get(RegisterName::R0) != 1
+        || text.find(
+            "step-line [max-steps]"
+        ) == std::string::npos
+        || text.find(
+            "Stop reason: StepComplete"
+        ) == std::string::npos
+    ) {
+        detail =
+            "source-step console command mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.2-debug-console-source-step-r1
 
 bool errorsRecover(std::string& detail) {
     using namespace zero_cpu::debug;
@@ -331,6 +446,15 @@ int main() {
         report(
             "Scripted debugger workflow",
             scriptedWorkflow(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Source-step console command",
+            sourceStepCommand(detail),
             detail
         );
     }
