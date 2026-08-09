@@ -48,6 +48,67 @@ start:
     STORE [value], R0
 )ASM";
 
+
+const char* kSourceStepProgram = R"ASM(.entry start
+.text
+start:
+    MOV R0, 1
+    CALL worker
+    ADD R0, 4
+    JMP done
+worker:
+    ADD R0, 2
+    RET
+done:
+    MOV R1, R0
+)ASM";
+
+void writeSourceMappedProgram(
+    const std::string& binaryPath,
+    const std::string& sourcePath,
+    const std::string& source
+) {
+    using namespace zero_cpu;
+
+    Assembler assembler;
+
+    const AssembledProgram assembled =
+        assembler.assembleString(source);
+
+    binary::BinaryWriter writer;
+
+    writer.writeFile(
+        binaryPath,
+        assembled.toBinaryProgram()
+    );
+
+    debug::DebugSymbols::fromAssembledProgram(
+        assembled,
+        memory_map::kBinaryCodeBase,
+        sourcePath
+    ).writeFile(
+        debug::debugSymbolsPathForExecutable(
+            binaryPath
+        )
+    );
+}
+
+struct SourceMappedProgramCleanup {
+    std::string binary_path;
+
+    ~SourceMappedProgramCleanup() {
+        std::remove(
+            zero_cpu::debug::debugSymbolsPathForExecutable(
+                binary_path
+            ).c_str()
+        );
+
+        std::remove(
+            binary_path.c_str()
+        );
+    }
+};
+
 bool stopReasonStrings(std::string& detail) {
     using namespace zero_cpu::debug;
 
@@ -186,6 +247,414 @@ bool singleStepExecution(std::string& detail) {
     }
     return true;
 }
+
+
+bool sourceLineStepping(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const std::string path =
+        "debug_source_step_test.zbin";
+
+    SourceMappedProgramCleanup cleanup{
+        path
+    };
+
+    writeSourceMappedProgram(
+        path,
+        "debug_source_step_test.zasm",
+        kSourceStepProgram
+    );
+
+    DebugSession session(path);
+
+    if (
+        !session.symbols().hasSourceLocations()
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 4
+    ) {
+        detail =
+            "source-step initial mapping mismatch";
+        return false;
+    }
+
+    const DebugStop first =
+        session.stepSourceLine(20);
+
+    if (
+        first.reason
+            != DebugStopReason::StepComplete
+        || first.executed_steps != 1
+        || first.total_steps != 1
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 5
+        || session.cpu().state()
+            .registers()
+            .get(RegisterName::R0) != 1
+    ) {
+        detail =
+            "source step MOV -> CALL mismatch";
+        return false;
+    }
+
+    const DebugStop callStep =
+        session.stepSourceLine(20);
+
+    if (
+        callStep.reason
+            != DebugStopReason::StepComplete
+        || callStep.executed_steps != 1
+        || callStep.total_steps != 2
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 9
+    ) {
+        detail =
+            "source step CALL -> callee mismatch";
+        return false;
+    }
+
+    const DebugStop workerStep =
+        session.stepSourceLine(20);
+
+    if (
+        workerStep.reason
+            != DebugStopReason::StepComplete
+        || workerStep.total_steps != 3
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 10
+        || session.cpu().state()
+            .registers()
+            .get(RegisterName::R0) != 3
+    ) {
+        detail =
+            "source step callee body mismatch";
+        return false;
+    }
+
+    const DebugStop returnStep =
+        session.stepSourceLine(20);
+
+    if (
+        returnStep.reason
+            != DebugStopReason::StepComplete
+        || returnStep.total_steps != 4
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 6
+    ) {
+        detail =
+            "source step RET -> caller mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+bool sourceLineStepBreakpointResume(
+    std::string& detail
+) {
+    using namespace zero_cpu::debug;
+
+    const std::string path =
+        "debug_source_step_breakpoint_test.zbin";
+
+    SourceMappedProgramCleanup cleanup{
+        path
+    };
+
+    writeSourceMappedProgram(
+        path,
+        "debug_source_step_breakpoint_test.zasm",
+        kSourceStepProgram
+    );
+
+    DebugSession session(path);
+
+    const std::size_t callAddress =
+        session.symbols()
+            .resolveSourceLine(5);
+
+    (void)session.addBreakpoint(
+        callAddress
+    );
+
+    const DebugStop breakpoint =
+        session.continueExecution(20);
+
+    if (
+        breakpoint.reason
+            != DebugStopReason::Breakpoint
+        || breakpoint.pc != callAddress
+        || breakpoint.total_steps != 1
+    ) {
+        detail =
+            "source-step breakpoint setup mismatch";
+        return false;
+    }
+
+    const DebugStop stepped =
+        session.stepSourceLine(20);
+
+    if (
+        stepped.reason
+            != DebugStopReason::StepComplete
+        || stepped.executed_steps != 1
+        || stepped.total_steps != 2
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 9
+    ) {
+        detail =
+            "source step did not resume through current breakpoint";
+        return false;
+    }
+
+    return true;
+}
+
+bool sourceLineStepDestinationBreakpoint(
+    std::string& detail
+) {
+    using namespace zero_cpu::debug;
+
+    const std::string path =
+        "debug_source_step_destination_breakpoint_test.zbin";
+
+    SourceMappedProgramCleanup cleanup{
+        path
+    };
+
+    writeSourceMappedProgram(
+        path,
+        "debug_source_step_destination_breakpoint_test.zasm",
+        kSourceStepProgram
+    );
+
+    DebugSession session(path);
+
+    const std::size_t callAddress =
+        session.symbols()
+            .resolveSourceLine(5);
+
+    (void)session.addBreakpoint(
+        callAddress
+    );
+
+    const DebugStop stopped =
+        session.stepSourceLine(20);
+
+    if (
+        stopped.reason
+            != DebugStopReason::Breakpoint
+        || stopped.pc != callAddress
+        || stopped.executed_steps != 1
+        || stopped.total_steps != 1
+    ) {
+        detail =
+            "source step did not honor destination breakpoint";
+        return false;
+    }
+
+    const DebugStop resumed =
+        session.stepSourceLine(20);
+
+    if (
+        resumed.reason
+            != DebugStopReason::StepComplete
+        || resumed.executed_steps != 1
+        || resumed.total_steps != 2
+        || session.symbols()
+            .sourceLineForAddress(
+                session.cpu().state().pc()
+            ) != 9
+    ) {
+        detail =
+            "source step did not resume from destination breakpoint";
+        return false;
+    }
+
+    return true;
+}
+
+bool sourceLineStepWatchpointPriority(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const char* source =
+        R"ASM(.entry start
+.data
+value: .qword 0
+.text
+start:
+    MOV R0, 7
+    STORE [value], R0
+    MOV R1, R0
+)ASM";
+
+    const std::string path =
+        "debug_source_step_watchpoint_test.zbin";
+
+    SourceMappedProgramCleanup cleanup{
+        path
+    };
+
+    writeSourceMappedProgram(
+        path,
+        "debug_source_step_watchpoint_test.zasm",
+        source
+    );
+
+    DebugSession session(path);
+
+    const std::size_t watchpointId =
+        session.addWatchpoint(
+            memory_map::kUserDataBase,
+            sizeof(std::int64_t),
+            MemoryWatchMode::Write
+        );
+
+    const DebugStop first =
+        session.stepSourceLine(20);
+
+    if (
+        first.reason
+            != DebugStopReason::StepComplete
+        || first.total_steps != 1
+    ) {
+        detail =
+            "watchpoint source-step setup mismatch";
+        return false;
+    }
+
+    const DebugStop watched =
+        session.stepSourceLine(20);
+
+    if (
+        watched.reason
+            != DebugStopReason::Watchpoint
+        || !watched.has_watchpoint
+        || watched.watchpoint_id
+            != watchpointId
+        || watched.executed_steps != 1
+        || watched.total_steps != 2
+        || watched.access_mode
+            != MemoryWatchMode::Write
+        || watched.access_address
+            != memory_map::kUserDataBase
+        || session.cpu().state()
+            .memory()
+            .readI64(
+                memory_map::kUserDataBase
+            ) != 7
+    ) {
+        detail =
+            "source-step watchpoint priority mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.2-debug-session-source-step-stop-priority-r1
+
+bool sourceLineStepValidationAndLimit(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    {
+        DebugSession noMap(
+            makeImage(
+                kProgramSource,
+                "source-step-no-map.zbin"
+            )
+        );
+
+        if (
+            !throwsRuntimeError(
+                [&] {
+                    (void)noMap
+                        .stepSourceLine(10);
+                }
+            )
+        ) {
+            detail =
+                "source step accepted a session without a source map";
+            return false;
+        }
+    }
+
+    const char* loopSource =
+        R"ASM(.entry loop
+.text
+loop:
+    JMP loop
+)ASM";
+
+    const std::string path =
+        "debug_source_step_limit_test.zbin";
+
+    SourceMappedProgramCleanup cleanup{
+        path
+    };
+
+    writeSourceMappedProgram(
+        path,
+        "debug_source_step_limit_test.zasm",
+        loopSource
+    );
+
+    DebugSession loop(path);
+
+    if (
+        !throwsRuntimeError(
+            [&] {
+                (void)loop
+                    .stepSourceLine(0);
+            }
+        )
+    ) {
+        detail =
+            "zero source-step limit was accepted";
+        return false;
+    }
+
+    const DebugStop limited =
+        loop.stepSourceLine(5);
+
+    if (
+        limited.reason
+            != DebugStopReason::StepLimit
+        || limited.executed_steps != 5
+        || limited.total_steps != 5
+        || limited.message.empty()
+        || loop.cpu().state().pc()
+            != memory_map::kBinaryCodeBase
+    ) {
+        detail =
+            "source-step limit behavior mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.2-debug-session-source-step-r1
 
 bool faultStop(std::string& detail) {
     using namespace zero_cpu::debug;
@@ -328,6 +797,46 @@ int main() {
     {
         std::string detail;
         report("Single-step execution", singleStepExecution(detail), detail);
+    }
+    {
+        std::string detail;
+        report(
+            "Source-line stepping",
+            sourceLineStepping(detail),
+            detail
+        );
+    }
+    {
+        std::string detail;
+        report(
+            "Source-line breakpoint resume",
+            sourceLineStepBreakpointResume(detail),
+            detail
+        );
+    }
+    {
+        std::string detail;
+        report(
+            "Source-line destination breakpoint",
+            sourceLineStepDestinationBreakpoint(detail),
+            detail
+        );
+    }
+    {
+        std::string detail;
+        report(
+            "Source-line watchpoint priority",
+            sourceLineStepWatchpointPriority(detail),
+            detail
+        );
+    }
+    {
+        std::string detail;
+        report(
+            "Source-line validation and limit",
+            sourceLineStepValidationAndLimit(detail),
+            detail
+        );
     }
     {
         std::string detail;

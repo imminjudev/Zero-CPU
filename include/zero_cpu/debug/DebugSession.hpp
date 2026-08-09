@@ -159,6 +159,11 @@ public:
     watchpoints() const;
 
     DebugStop step();
+
+    DebugStop stepSourceLine(
+        std::size_t maxSteps = CPU::kDefaultMaxSteps
+    );
+
     DebugStop continueExecution(
         std::size_t maxSteps = CPU::kDefaultMaxSteps
     );

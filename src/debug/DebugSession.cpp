@@ -465,6 +465,185 @@ DebugStop DebugSession::step() {
     );
 }
 
+
+DebugStop DebugSession::stepSourceLine(
+    std::size_t maxSteps
+) {
+    requireLoaded();
+
+    if (maxSteps == 0) {
+        throw std::runtime_error(
+            "Debugger source step limit must be greater than zero"
+        );
+    }
+
+    const DebugStop initialState =
+        classifyStoppedState(0);
+
+    if (
+        initialState.reason
+        != DebugStopReason::Ready
+    ) {
+        return initialState;
+    }
+
+    if (!symbols_.hasSourceLocations()) {
+        throw std::runtime_error(
+            "Debugger source stepping requires a source map"
+        );
+    }
+
+    const std::size_t sourceLineBefore =
+        symbols_.sourceLineForAddress(
+            cpu_.state().pc()
+        );
+
+    std::size_t executedSteps = 0;
+
+    // Explicit stepping ignores a breakpoint at the starting PC.
+    // Breakpoints encountered after execution are still honored.
+    bool skipInitialBreakpoint = true;
+
+    while (true) {
+        const DebugStop stopped =
+            classifyStoppedState(
+                executedSteps
+            );
+
+        if (
+            stopped.reason
+            != DebugStopReason::Ready
+        ) {
+            return stopped;
+        }
+
+        const std::size_t pc =
+            cpu_.state().pc();
+
+        if (!skipInitialBreakpoint) {
+            if (hasBreakpoint(pc)) {
+                return makeStop(
+                    DebugStopReason::Breakpoint,
+                    executedSteps
+                );
+            }
+
+            ConditionalBreakpointHit
+                conditionalHit;
+
+            if (
+                findConditionalBreakpointHit(
+                    pc,
+                    conditionalHit
+                )
+            ) {
+                return makeConditionalBreakpointStop(
+                    conditionalHit,
+                    executedSteps
+                );
+            }
+        }
+
+        if (executedSteps >= maxSteps) {
+            return makeStop(
+                DebugStopReason::StepLimit,
+                executedSteps,
+                "Debugger source step limit reached"
+            );
+        }
+
+        cpu_.step();
+        ++executedSteps;
+        ++total_steps_;
+        skipInitialBreakpoint = false;
+
+        const DebugStop after =
+            classifyStoppedState(
+                executedSteps
+            );
+
+        if (
+            after.reason
+                == DebugStopReason::Fault
+            || after.reason
+                == DebugStopReason::Halted
+        ) {
+            return after;
+        }
+
+        WatchpointHit watchpointHit;
+
+        if (
+            findWatchpointHit(
+                watchpointHit
+            )
+        ) {
+            return makeWatchpointStop(
+                watchpointHit,
+                executedSteps
+            );
+        }
+
+        if (
+            after.reason
+            != DebugStopReason::Ready
+        ) {
+            return after;
+        }
+
+        const std::size_t currentPc =
+            cpu_.state().pc();
+
+        if (hasBreakpoint(currentPc)) {
+            return makeStop(
+                DebugStopReason::Breakpoint,
+                executedSteps
+            );
+        }
+
+        ConditionalBreakpointHit
+            conditionalHit;
+
+        if (
+            findConditionalBreakpointHit(
+                currentPc,
+                conditionalHit
+            )
+        ) {
+            return makeConditionalBreakpointStop(
+                conditionalHit,
+                executedSteps
+            );
+        }
+
+        try {
+            const std::size_t
+                sourceLineAfter =
+                    symbols_
+                        .sourceLineForAddress(
+                            currentPc
+                        );
+
+            if (
+                sourceLineAfter
+                != sourceLineBefore
+            ) {
+                return makeStop(
+                    DebugStopReason::StepComplete,
+                    executedSteps
+                );
+            }
+        } catch (const std::runtime_error&) {
+            // Keep stepping through executable addresses that
+            // have no source record until another mapped line
+            // or debugger stop condition is reached.
+        }
+    }
+}
+
+// Patch: v1.2-debug-session-source-step-r1
+// Patch: v1.2-debug-session-source-step-stop-priority-r1
+
 DebugStop DebugSession::continueExecution(std::size_t maxSteps) {
     requireLoaded();
 
