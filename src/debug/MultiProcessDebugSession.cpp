@@ -914,6 +914,213 @@ MultiProcessDebugSession::step() {
     );
 }
 
+
+MultiProcessDebugStop
+MultiProcessDebugSession::stepSelectedSourceLine(
+    std::size_t maxSteps
+) {
+    requireStarted();
+
+    if (maxSteps == 0) {
+        throw std::runtime_error(
+            "Multi-process debugger source step limit "
+            "must be greater than zero"
+        );
+    }
+
+    if (
+        runtime_state_
+        != kernel::ProcessRuntimeState::Running
+    ) {
+        return makeTerminalStop(0);
+    }
+
+    if (selected_pid_ == 0) {
+        throw std::runtime_error(
+            "No process is selected"
+        );
+    }
+
+    const ProcessDebugSnapshot initial =
+        selectedProcessSnapshot();
+
+    if (initial.terminated()) {
+        throw std::runtime_error(
+            "Cannot source-step terminated PID "
+            + std::to_string(selected_pid_)
+        );
+    }
+
+    const auto symbolsFound =
+        symbols_.find(selected_pid_);
+
+    if (
+        symbolsFound == symbols_.end()
+        || !symbolsFound->second
+            .hasSourceLocations()
+    ) {
+        throw std::runtime_error(
+            "Selected PID "
+            + std::to_string(selected_pid_)
+            + " has no source map"
+        );
+    }
+
+    const DebugSymbols& selectedSymbols =
+        symbolsFound->second;
+
+    std::size_t sourceLineBefore = 0;
+
+    try {
+        sourceLineBefore =
+            selectedSymbols.sourceLineForAddress(
+                initial.context.pc
+            );
+    } catch (const std::runtime_error&) {
+        throw std::runtime_error(
+            "Selected PID "
+            + std::to_string(selected_pid_)
+            + " current PC has no source mapping"
+        );
+    }
+
+    const std::size_t sourceStartAddress =
+        initial.context.pc;
+
+    // Source stepping is explicit stepping: ignore a
+    // breakpoint at the selected PID's starting PC once.
+    bool sourceStartSkipActive = true;
+    bool sourceLineChanged = false;
+
+    armResumeSkipFromLastStop();
+
+    std::size_t executed = 0;
+
+    while (true) {
+        if (
+            runtime_state_
+            != kernel::ProcessRuntimeState::Running
+        ) {
+            return makeTerminalStop(executed);
+        }
+
+        if (!table_.hasRunningProcess()) {
+            return makeTerminalStop(executed);
+        }
+
+        refreshResumeSkip();
+
+        const kernel::ProcessId runningPid =
+            table_.runningProcessId();
+
+        const std::size_t address =
+            cpu_.state().pc();
+
+        const bool skipResumeBreakpoint =
+            resume_skip_active_
+            && resume_skip_pid_ == runningPid
+            && resume_skip_address_ == address;
+
+        const bool skipSourceStartBreakpoint =
+            sourceStartSkipActive
+            && runningPid == selected_pid_
+            && address == sourceStartAddress;
+
+        if (
+            !skipResumeBreakpoint
+            && !skipSourceStartBreakpoint
+        ) {
+            if (
+                breakpoints_.find(
+                    {runningPid, address}
+                ) != breakpoints_.end()
+            ) {
+                return makeBreakpointStop(
+                    runningPid,
+                    address,
+                    executed
+                );
+            }
+
+            ConditionalBreakpointHit hit;
+
+            if (
+                findConditionalBreakpointHit(
+                    runningPid,
+                    address,
+                    hit
+                )
+            ) {
+                return makeConditionalBreakpointStop(
+                    hit,
+                    executed
+                );
+            }
+        }
+
+        // A newly scheduled debugger stop wins over
+        // reporting source-line completion.
+        if (sourceLineChanged) {
+            return makeStop(
+                MultiProcessDebugStopReason::
+                    StepComplete,
+                executed
+            );
+        }
+
+        if (executed >= maxSteps) {
+            return makeStop(
+                MultiProcessDebugStopReason::StepLimit,
+                executed,
+                "Multi-process debugger source step "
+                "limit reached"
+            );
+        }
+
+        MultiProcessDebugStop stop = step();
+        ++executed;
+
+        if (
+            stop.reason
+            != MultiProcessDebugStopReason::
+                StepComplete
+        ) {
+            stop.executed_steps = executed;
+            last_stop_ = stop;
+            return last_stop_;
+        }
+
+        const ProcessDebugSnapshot selected =
+            selectedProcessSnapshot();
+
+        sourceStartSkipActive =
+            !selected.terminated()
+            && selected.context.pc
+                == sourceStartAddress;
+
+        if (selected.terminated()) {
+            continue;
+        }
+
+        try {
+            const std::size_t sourceLineAfter =
+                selectedSymbols.sourceLineForAddress(
+                    selected.context.pc
+                );
+
+            sourceLineChanged =
+                sourceLineAfter
+                != sourceLineBefore;
+        } catch (const std::runtime_error&) {
+            // Keep following the real scheduler through
+            // executable addresses absent from a partial map.
+            sourceLineChanged = false;
+        }
+    }
+}
+
+// Patch: v1.2-multiprocess-source-step-core-r1
+
 MultiProcessDebugStop
 MultiProcessDebugSession::continueExecution(
     std::size_t maxSteps

@@ -218,6 +218,46 @@ std::vector<std::string> binaryPaths(
     };
 }
 
+
+TemporaryExecutables writeSingleExecutable(
+    const std::string& prefix,
+    const std::string& source
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    Assembler assembler;
+    binary::BinaryWriter writer;
+
+    const AssembledProgram assembled =
+        assembler.assembleString(source);
+
+    const std::string binaryPath =
+        prefix + ".zbin";
+
+    const std::string symbolsPath =
+        debugSymbolsPathForExecutable(
+            binaryPath
+        );
+
+    writer.writeFile(
+        binaryPath,
+        assembled.toBinaryProgram()
+    );
+
+    DebugSymbols::fromAssembledProgram(
+        assembled,
+        memory_map::kBinaryCodeBase
+    ).writeFile(
+        symbolsPath
+    );
+
+    TemporaryExecutables temporary;
+    temporary.files.push_back(binaryPath);
+    temporary.files.push_back(symbolsPath);
+    return temporary;
+}
+
 bool pidBreakpointIsolation(
     std::string& detail
 ) {
@@ -515,6 +555,294 @@ bool symbolsAndManagement(
     return true;
 }
 
+
+bool selectedPidSourceStepping(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const TemporaryExecutables temporary =
+        writeExecutables(
+            "debug_multi_source_step_scheduler"
+        );
+
+    MultiProcessDebugSession session(
+        binaryPaths(temporary),
+        debugOptions()
+    );
+
+    session.selectProcess(2);
+
+    const ProcessDebugSnapshot initial =
+        session.selectedProcessSnapshot();
+
+    const std::size_t nextAddress =
+        initial.context.pc
+        + binary::kInstructionSize;
+
+    const std::size_t sourceLineBefore =
+        session.symbols(2)
+            .sourceLineForAddress(
+                initial.context.pc
+            );
+
+    const std::size_t expectedLine =
+        session.symbols(2)
+            .sourceLineForAddress(
+                nextAddress
+            );
+
+    const MultiProcessDebugStop stop =
+        session.stepSelectedSourceLine(20);
+
+    const ProcessDebugSnapshot selected =
+        session.selectedProcessSnapshot();
+
+    const std::size_t sourceLineAfter =
+        session.symbols(2)
+            .sourceLineForAddress(
+                selected.context.pc
+            );
+
+    if (
+        stop.reason
+            != MultiProcessDebugStopReason::
+                StepComplete
+        || stop.executed_steps == 0
+        || stop.executed_steps
+            != session.totalSteps()
+        || session.selectedPid() != 2
+        || selected.context.pc
+            != nextAddress
+        || sourceLineBefore == sourceLineAfter
+        || sourceLineAfter != expectedLine
+        || selected.context.registers[
+            static_cast<std::size_t>(
+                RegisterName::R0
+            )
+        ] != 10
+        || session.contextSwitches().empty()
+    ) {
+        detail =
+            "selected PID source stepping did not "
+            "follow the real scheduler";
+        return false;
+    }
+
+    return true;
+}
+
+bool sourceStepStopPriority(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    const TemporaryExecutables temporary =
+        writeExecutables(
+            "debug_multi_source_step_stops"
+        );
+
+    MultiProcessDebugOptions options =
+        debugOptions();
+
+    options.quantum = 100;
+
+    MultiProcessDebugSession session(
+        binaryPaths(temporary),
+        options
+    );
+
+    const ProcessDebugSnapshot initial =
+        session.selectedProcessSnapshot();
+
+    const std::size_t secondAddress =
+        initial.context.pc
+        + binary::kInstructionSize;
+
+    const std::size_t thirdAddress =
+        secondAddress
+        + binary::kInstructionSize;
+
+    (void)session.addBreakpoint(
+        1,
+        secondAddress
+    );
+
+    const MultiProcessDebugStop breakpoint =
+        session.stepSelectedSourceLine(20);
+
+    if (
+        breakpoint.reason
+            != MultiProcessDebugStopReason::
+                Breakpoint
+        || !breakpoint.has_debug_hit
+        || breakpoint.hit_pid != 1
+        || breakpoint.hit_address
+            != secondAddress
+        || breakpoint.executed_steps != 1
+        || session.selectedProcessSnapshot()
+            .context.pc != secondAddress
+    ) {
+        detail =
+            "source step did not honor destination "
+            "breakpoint";
+        return false;
+    }
+
+    const MultiProcessDebugStop resumed =
+        session.stepSelectedSourceLine(20);
+
+    if (
+        resumed.reason
+            != MultiProcessDebugStopReason::
+                StepComplete
+        || resumed.executed_steps != 1
+        || session.selectedProcessSnapshot()
+            .context.pc != thirdAddress
+    ) {
+        detail =
+            "source step did not resume through the "
+            "current breakpoint";
+        return false;
+    }
+
+    const std::size_t watchpointId =
+        session.addWatchpoint(
+            1,
+            memory_map::kUserDataBase,
+            sizeof(std::int64_t),
+            ProcessMemoryWatchMode::Write
+        );
+
+    const MultiProcessDebugStop watched =
+        session.stepSelectedSourceLine(20);
+
+    if (
+        watched.reason
+            != MultiProcessDebugStopReason::
+                Watchpoint
+        || !watched.has_watchpoint
+        || watched.hit_pid != 1
+        || watched.watchpoint_id
+            != watchpointId
+        || watched.access_mode
+            != ProcessMemoryWatchMode::Write
+        || watched.access_address
+            != memory_map::kUserDataBase
+        || session.processSnapshot(1)
+            .memory.readI64(
+                memory_map::kUserDataBase
+            ) != 2
+    ) {
+        detail =
+            "source-step watchpoint priority mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+bool sourceStepValidationAndLimit(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+
+    {
+        MultiProcessDebugSession noMap(
+            normalImages(),
+            debugOptions()
+        );
+
+        if (
+            !throwsRuntimeError(
+                [&] {
+                    (void)noMap
+                        .stepSelectedSourceLine(10);
+                }
+            )
+        ) {
+            detail =
+                "source step accepted a selected PID "
+                "without a source map";
+            return false;
+        }
+    }
+
+    const TemporaryExecutables temporary =
+        writeExecutables(
+            "debug_multi_source_step_validation"
+        );
+
+    MultiProcessDebugSession mapped(
+        binaryPaths(temporary),
+        debugOptions()
+    );
+
+    if (
+        !throwsRuntimeError(
+            [&] {
+                (void)mapped
+                    .stepSelectedSourceLine(0);
+            }
+        )
+    ) {
+        detail =
+            "zero multi-process source-step limit "
+            "was accepted";
+        return false;
+    }
+
+    const char* loopSource =
+        R"ASM(.entry loop
+.text
+loop:
+    JMP loop
+)ASM";
+
+    const TemporaryExecutables loopTemporary =
+        writeSingleExecutable(
+            "debug_multi_source_step_limit",
+            loopSource
+        );
+
+    MultiProcessDebugOptions loopOptions =
+        debugOptions();
+
+    loopOptions.quantum = 100;
+
+    MultiProcessDebugSession loop(
+        {loopTemporary.files.at(0)},
+        loopOptions
+    );
+
+    const MultiProcessDebugStop limited =
+        loop.stepSelectedSourceLine(5);
+
+    if (
+        limited.reason
+            != MultiProcessDebugStopReason::
+                StepLimit
+        || limited.executed_steps != 5
+        || limited.total_steps != 5
+        || limited.message.empty()
+        || loop.selectedProcessSnapshot()
+            .context.pc
+            != memory_map::kBinaryCodeBase
+    ) {
+        detail =
+            "multi-process source-step limit "
+            "behavior mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.2-multiprocess-source-step-core-r1
+
 bool consoleWorkflow(
     std::string& detail
 ) {
@@ -672,6 +1000,33 @@ int main() {
         report(
             "PID symbols and management",
             symbolsAndManagement(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Selected PID source stepping",
+            selectedPidSourceStepping(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Source-step stop priority",
+            sourceStepStopPriority(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Source-step validation and limit",
+            sourceStepValidationAndLimit(detail),
             detail
         );
     }

@@ -310,6 +310,10 @@ public:
 
     MultiProcessDebugStop step();
 
+    MultiProcessDebugStop stepSelectedSourceLine(
+        std::size_t maxSteps = CPU::kDefaultMaxSteps
+    );
+
     MultiProcessDebugStop continueExecution(
         std::size_t maxSteps
     );
