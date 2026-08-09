@@ -1,8 +1,10 @@
 #include "zero_cpu/assembler/Assembler.hpp"
+#include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/DebugOutputDevice.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/debug/DebugSnapshotJson.hpp"
+#include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 #include "zero_cpu/studio/StudioDebugBackend.hpp"
 #include "zero_cpu/studio/StudioMultiProcessDebugBackend.hpp"
@@ -384,6 +386,150 @@ bool multiProcessStudioBackend(
     return true;
 }
 
+
+bool sourceStepBackendDelegation(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    const char* source = R"ASM(.entry start
+.text
+start:
+    MOV R0, 1
+    ADD R0, 2
+    MOV R1, R0
+)ASM";
+
+    const std::string binaryPath =
+        "studio_source_step_backend_test.zbin";
+
+    const std::string symbolsPath =
+        debugSymbolsPathForExecutable(
+            binaryPath
+        );
+
+    struct Cleanup {
+        std::string binary_path;
+        std::string symbols_path;
+
+        ~Cleanup() {
+            std::remove(
+                symbols_path.c_str()
+            );
+
+            std::remove(
+                binary_path.c_str()
+            );
+        }
+    } cleanup{
+        binaryPath,
+        symbolsPath
+    };
+
+    Assembler assembler;
+
+    const AssembledProgram assembled =
+        assembler.assembleString(source);
+
+    binary::BinaryWriter writer;
+
+    writer.writeFile(
+        binaryPath,
+        assembled.toBinaryProgram()
+    );
+
+    DebugSymbols::fromAssembledProgram(
+        assembled,
+        memory_map::kBinaryCodeBase,
+        "studio-source-step-backend.zasm"
+    ).writeFile(
+        symbolsPath
+    );
+
+    {
+        StudioDebugBackend backend;
+        backend.loadBinary(binaryPath);
+
+        const DebugStop stop =
+            backend.stepSourceLine(20);
+
+        if (
+            stop.reason
+                != DebugStopReason::
+                    StepComplete
+            || stop.executed_steps != 1
+            || stop.total_steps != 1
+            || backend.cpu().state().pc()
+                != memory_map::kBinaryCodeBase
+                    + binary::kInstructionSize
+            || backend.cpu().state()
+                .registers().get(
+                    RegisterName::R0
+                ) != 1
+        ) {
+            detail =
+                "single-process Studio source-step "
+                "delegation mismatch";
+            return false;
+        }
+    }
+
+    {
+        MultiProcessDebugOptions options;
+        options.quantum = 1;
+        options.default_continue_steps = 100;
+
+        StudioMultiProcessDebugBackend backend;
+
+        backend.loadBinaries(
+            {
+                binaryPath,
+                binaryPath
+            },
+            options
+        );
+
+        backend.selectProcess(2);
+
+        const MultiProcessDebugStop stop =
+            backend.stepSourceLine(20);
+
+        const ProcessDebugSnapshot selected =
+            backend.session()
+                .selectedProcessSnapshot();
+
+        if (
+            stop.reason
+                != MultiProcessDebugStopReason::
+                    StepComplete
+            || stop.executed_steps == 0
+            || backend.selectedPid() != 2
+            || selected.context.pc
+                != memory_map::kBinaryCodeBase
+                    + binary::kInstructionSize
+            || selected.context.registers[
+                static_cast<std::size_t>(
+                    RegisterName::R0
+                )
+            ] != 1
+            || backend.session()
+                .contextSwitches()
+                .empty()
+        ) {
+            detail =
+                "multi-process Studio source-step "
+                "delegation mismatch";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Patch: v1.2-studio-source-step-core-delegation-r1
+
 bool snapshotAndStatus(std::string& detail) {
     using namespace zero_cpu::debug;
     using namespace zero_cpu::studio;
@@ -561,6 +707,15 @@ int main() {
         report(
             "Studio multi-process debugger",
             multiProcessStudioBackend(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
+            "Studio source-step backend delegation",
+            sourceStepBackendDelegation(detail),
             detail
         );
     }

@@ -75,6 +75,11 @@ public:
     void clearWatchpoints();
 
     debug::MultiProcessDebugStop step();
+
+    debug::MultiProcessDebugStop stepSourceLine(
+        std::size_t maxSteps = CPU::kDefaultMaxSteps
+    );
+
     debug::MultiProcessDebugStop run(
         std::size_t maxSteps
     );

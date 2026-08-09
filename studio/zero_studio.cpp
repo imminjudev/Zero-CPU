@@ -3969,19 +3969,199 @@ void onStepClicked() {
 void onStepSourceClicked() {
     using namespace zero_cpu::debug;
 
-    if (!binaryDebugActive()) {
+    constexpr std::size_t
+        kStudioSourceStepLimit = 1000;
+
+    if (
+        !binaryDebugActive()
+        && !multiProcessDebugActive()
+    ) {
         appendTraceText(
-            "\nStep Line requires a loaded "
-            "single-process .zbin debug session.\n"
+            "\
+Step Line requires a loaded debugger session.\
+"
         );
+        refreshStateView();
+        return;
+    }
+
+    if (multiProcessDebugActive()) {
+        if (!g_multiProcessDebugger->hasSourceMap()) {
+            appendTraceText(
+                "\
+Step Line requires debug symbols "
+                "with a source map for the selected PID.\
+"
+            );
+            refreshStateView();
+            return;
+        }
+
+        const auto selectedPid =
+            g_multiProcessDebugger->selectedPid();
+
+        std::size_t sourceLineBefore = 0;
+
+        try {
+            sourceLineBefore =
+                g_multiProcessDebugger
+                    ->currentSourceLine();
+        } catch (const std::exception& ex) {
+            std::ostringstream output;
+            output
+                << "\
+Step Line failed: selected PID current PC "
+                << "has no mapped source line.\
+"
+                << "PID = "
+                << selectedPid
+                << "\
+"
+                << "Error = "
+                << ex.what()
+                << "\
+";
+
+            appendTraceText(output.str());
+            refreshStateView();
+            return;
+        }
+
+        const auto before =
+            g_multiProcessDebugger
+                ->session()
+                .selectedProcessSnapshot();
+
+        const MultiProcessDebugStop stop =
+            g_multiProcessDebugger
+                ->stepSourceLine(
+                    kStudioSourceStepLimit
+                );
+
+        g_breakpointHit =
+            stop.has_debug_hit;
+
+        if (stop.has_debug_hit) {
+            g_lastBreakpointPc =
+                stop.hit_address;
+        }
+
+        const auto after =
+            g_multiProcessDebugger
+                ->session()
+                .selectedProcessSnapshot();
+
+        bool sourceLineAfterMapped = false;
+        std::size_t sourceLineAfter = 0;
+
+        try {
+            sourceLineAfter =
+                g_multiProcessDebugger
+                    ->currentSourceLine();
+
+            sourceLineAfterMapped = true;
+        } catch (const std::exception&) {
+            sourceLineAfterMapped = false;
+        }
+
+        const bool sourceLineChanged =
+            sourceLineAfterMapped
+            && sourceLineAfter
+                != sourceLineBefore;
+
+        std::ostringstream output;
+
+        output
+            << "\
+[Studio Source Step]\
+"
+            << "Backend = MultiProcessDebugSession\
+"
+            << "Selected PID = "
+            << selectedPid
+            << "\
+"
+            << "PC before = "
+            << before.context.pc
+            << "\
+"
+            << "PC after = "
+            << after.context.pc
+            << "\
+"
+            << "Source Line before = "
+            << sourceLineBefore
+            << "\
+"
+            << "Source Line after = ";
+
+        if (sourceLineAfterMapped) {
+            output << sourceLineAfter;
+        } else {
+            output << "<unmapped>";
+        }
+
+        output
+            << "\
+"
+            << "Source Line Changed = "
+            << (
+                sourceLineChanged
+                    ? "true"
+                    : "false"
+            )
+            << "\
+"
+            << "Executed Lifecycle Steps = "
+            << stop.executed_steps
+            << "\
+"
+            << "Stop Reason = "
+            << multiProcessDebugStopReasonToString(
+                stop.reason
+            )
+            << "\
+"
+            << "Running PID = "
+            << stop.running_pid
+            << "\
+"
+            << "Total Steps = "
+            << stop.total_steps
+            << "\
+";
+
+        if (stop.has_debug_hit) {
+            output
+                << "Hit PID = "
+                << stop.hit_pid
+                << "\
+"
+                << "Hit Address = "
+                << stop.hit_address
+                << "\
+";
+        }
+
+        if (!stop.message.empty()) {
+            output
+                << "Message = "
+                << stop.message
+                << "\
+";
+        }
+
+        appendTraceText(output.str());
         refreshStateView();
         return;
     }
 
     if (!g_binaryDebugger->hasSourceMap()) {
         appendTraceText(
-            "\nStep Line requires debug symbols "
-            "with a source map.\n"
+            "\
+Step Line requires debug symbols "
+            "with a source map.\
+"
         );
         refreshStateView();
         return;
@@ -3995,11 +4175,14 @@ void onStepSourceClicked() {
     } catch (const std::exception& ex) {
         std::ostringstream output;
         output
-            << "\nStep Line failed: current PC "
-            << "has no mapped source line.\n"
+            << "\
+Step Line failed: current PC "
+            << "has no mapped source line.\
+"
             << "Error = "
             << ex.what()
-            << "\n";
+            << "\
+";
 
         appendTraceText(output.str());
         refreshStateView();
@@ -4012,69 +4195,13 @@ void onStepSourceClicked() {
             .state()
             .pc();
 
-    constexpr std::size_t
-        kStudioSourceStepLimit = 1000;
-
-    DebugStop stop;
-    bool haveStop = false;
-    bool sourceLineChanged = false;
-    bool sourceLineAfterMapped = false;
-
-    std::size_t sourceLineAfter = 0;
-    std::size_t executedInstructions = 0;
-
-    while (
-        executedInstructions
-        < kStudioSourceStepLimit
-    ) {
-        stop = g_binaryDebugger->step();
-        haveStop = true;
-
-        executedInstructions +=
-            stop.executed_steps;
-
-        if (
-            stop.reason
-            != DebugStopReason::StepComplete
-        ) {
-            break;
-        }
-
-        try {
-            sourceLineAfter =
-                g_binaryDebugger
-                    ->currentSourceLine();
-
-            sourceLineAfterMapped = true;
-
-            if (
-                sourceLineAfter
-                != sourceLineBefore
-            ) {
-                sourceLineChanged = true;
-                break;
-            }
-        } catch (const std::exception&) {
-            sourceLineAfterMapped = false;
-        }
-
-        if (stop.executed_steps == 0) {
-            break;
-        }
-    }
-
-    if (!haveStop) {
-        appendTraceText(
-            "\nStep Line failed: no instruction "
-            "was executed.\n"
+    const DebugStop stop =
+        g_binaryDebugger->stepSourceLine(
+            kStudioSourceStepLimit
         );
-        refreshStateView();
-        return;
-    }
 
     g_breakpointHit =
-        stop.reason
-            == DebugStopReason::Breakpoint
+        stop.reason == DebugStopReason::Breakpoint
         || stop.reason
             == DebugStopReason::
                 ConditionalBreakpoint
@@ -4085,35 +4212,46 @@ void onStepSourceClicked() {
         g_lastBreakpointPc = stop.pc;
     }
 
-    if (!sourceLineAfterMapped) {
-        try {
-            sourceLineAfter =
-                g_binaryDebugger
-                    ->currentSourceLine();
+    bool sourceLineAfterMapped = false;
+    std::size_t sourceLineAfter = 0;
 
-            sourceLineAfterMapped = true;
-        } catch (const std::exception&) {
-            sourceLineAfterMapped = false;
-        }
+    try {
+        sourceLineAfter =
+            g_binaryDebugger->currentSourceLine();
+
+        sourceLineAfterMapped = true;
+    } catch (const std::exception&) {
+        sourceLineAfterMapped = false;
     }
+
+    const bool sourceLineChanged =
+        sourceLineAfterMapped
+        && sourceLineAfter
+            != sourceLineBefore;
 
     std::ostringstream output;
 
     output
-        << "\n[Studio Source Step]\n"
-        << "Backend = DebugSession\n"
+        << "\
+[Studio Source Step]\
+"
+        << "Backend = DebugSession\
+"
         << "PC before = "
         << pcBefore
-        << "\n"
+        << "\
+"
         << "PC after = "
         << g_binaryDebugger
             ->cpu()
             .state()
             .pc()
-        << "\n"
+        << "\
+"
         << "Source Line before = "
         << sourceLineBefore
-        << "\n"
+        << "\
+"
         << "Source Line after = ";
 
     if (sourceLineAfterMapped) {
@@ -4123,46 +4261,44 @@ void onStepSourceClicked() {
     }
 
     output
-        << "\n"
+        << "\
+"
         << "Source Line Changed = "
         << (
             sourceLineChanged
                 ? "true"
                 : "false"
         )
-        << "\n"
+        << "\
+"
         << "Executed Instructions = "
-        << executedInstructions
-        << "\n"
+        << stop.executed_steps
+        << "\
+"
         << "Stop Reason = "
         << debugStopReasonToString(
             stop.reason
         )
-        << "\n"
+        << "\
+"
         << "Total Steps = "
         << stop.total_steps
-        << "\n";
+        << "\
+";
 
-    if (
-        !sourceLineChanged
-        && stop.reason
-            == DebugStopReason::StepComplete
-        && executedInstructions
-            >= kStudioSourceStepLimit
-    ) {
-        output
-            << "Message = Source step "
-            << "instruction limit reached.\n";
-    } else if (!stop.message.empty()) {
+    if (!stop.message.empty()) {
         output
             << "Message = "
             << stop.message
-            << "\n";
+            << "\
+";
     }
 
     appendTraceText(output.str());
     refreshStateView();
 }
+
+// Patch: v1.2-studio-source-step-core-delegation-r1
 
 // Patch: v1.2-studio-source-step-r1
 

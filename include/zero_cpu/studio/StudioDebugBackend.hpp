@@ -76,6 +76,10 @@ public:
 
     debug::DebugStop step();
 
+    debug::DebugStop stepSourceLine(
+        std::size_t maxSteps = CPU::kDefaultMaxSteps
+    );
+
     debug::DebugStop run(
         std::size_t maxSteps
     );

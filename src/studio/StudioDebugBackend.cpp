@@ -186,6 +186,17 @@ debug::DebugStop StudioDebugBackend::step() {
     return session_.step();
 }
 
+debug::DebugStop
+StudioDebugBackend::stepSourceLine(
+    std::size_t maxSteps
+) {
+    requireLoaded();
+
+    return session_.stepSourceLine(
+        maxSteps
+    );
+}
+
 debug::DebugStop StudioDebugBackend::run(
     std::size_t maxSteps
 ) {

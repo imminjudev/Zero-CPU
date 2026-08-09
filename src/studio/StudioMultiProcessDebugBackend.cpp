@@ -260,6 +260,17 @@ StudioMultiProcessDebugBackend::step() {
 }
 
 debug::MultiProcessDebugStop
+StudioMultiProcessDebugBackend::stepSourceLine(
+    std::size_t maxSteps
+) {
+    requireLoaded();
+
+    return session_->stepSelectedSourceLine(
+        maxSteps
+    );
+}
+
+debug::MultiProcessDebugStop
 StudioMultiProcessDebugBackend::run(
     std::size_t maxSteps
 ) {
