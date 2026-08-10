@@ -555,6 +555,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_multi_process_trace_diff_test
+    tests/multi_process_trace_diff.cpp
+)
+
+target_link_libraries(
+    zero_multi_process_trace_diff_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_multi_process_trace_diff_test
+)
+
+zero_cpu_enable_coverage(
+    zero_multi_process_trace_diff_test
+)
+
+
 add_executable(zero_debug_session_test
     tests/debug_session.cpp
 )
@@ -899,6 +918,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;system;process;trace;json;invariant"
+    )
+
+    add_test(
+        NAME zero_cpu.multi_process_trace_diff
+        COMMAND $<TARGET_FILE:zero_multi_process_trace_diff_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.multi_process_trace_diff
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;system;process;trace;diff;golden"
     )
 
     add_test(

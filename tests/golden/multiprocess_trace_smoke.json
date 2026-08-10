@@ -1,0 +1,600 @@
+{
+  "schema": "zero_cpu_multiprocess_trace",
+  "schema_version": 1,
+  "producer": "zero_cpu",
+  "producer_version": "v1.3-golden",
+  "mode": "ProtectedMultiProcess",
+  "runtime_state": "Completed",
+  "step_limit_reached": false,
+  "lifecycle_steps": 7,
+  "process_count": 2,
+  "termination_count": 2,
+  "fault_count": 1,
+  "preemption_count": 4,
+  "context_switch_count": 4,
+  "invariants": {
+    "passed": true,
+    "violation_count": 0,
+    "violations": [
+    ]
+  },
+  "execution_event_count": 6,
+  "execution_trace": [
+    {
+      "lifecycle_step": 1,
+      "pid": 1,
+      "event": {
+        "index": 0,
+        "pc_before": 512,
+        "pc_after": 536,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R0, 1",
+        "state_before": {
+          "pc": 512,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 1,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0512 | MOV R0, 1 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R0:0->1 | NextPC=0536",
+        "full": "[PC=0512] MOV R0, 1\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 512\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=1 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 0 -> 1\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0536\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 2,
+      "pid": 2,
+      "event": {
+        "index": 1,
+        "pc_before": 512,
+        "pc_after": 536,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R0, 10",
+        "state_before": {
+          "pc": 512,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 10,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 0,
+            "after": 10
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0512 | MOV R0, 10 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R0:0->10 | NextPC=0536",
+        "full": "[PC=0512] MOV R0, 10\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 512\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=10 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 0 -> 10\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0536\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 3,
+      "pid": 1,
+      "event": {
+        "index": 2,
+        "pc_before": 536,
+        "pc_after": 560,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "ADD R0, 1",
+        "state_before": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 1,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 2,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 1,
+            "after": 2
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "ALU_ADD",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback",
+        "alu_detail": "ALU_ADD | lhs(R0)=1 | rhs(1)=1 | result(R0)=2",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0536 | ADD R0, 1 | stage=EXECUTE | action=ALU_ADD | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback | ALU_ADD | lhs(R0)=1 | rhs(1)=1 | result(R0)=2 | R0:1->2 | NextPC=0560",
+        "full": "[PC=0536] ADD R0, 1\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: ALU_ADD\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback\n\nALU Trace Detail:\n  Operation: ALU_ADD\n  Destination: R0\n  LHS R0 = 1\n  RHS 1 = 1\n  Result: 2\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=1 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=2 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 1 -> 2\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0560\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 4,
+      "pid": 2,
+      "event": {
+        "index": 3,
+        "pc_before": 536,
+        "pc_after": 560,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "ADD R0, 5",
+        "state_before": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 10,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 15,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 10,
+            "after": 15
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "ALU_ADD",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback",
+        "alu_detail": "ALU_ADD | lhs(R0)=10 | rhs(5)=5 | result(R0)=15",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0536 | ADD R0, 5 | stage=EXECUTE | action=ALU_ADD | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback | ALU_ADD | lhs(R0)=10 | rhs(5)=5 | result(R0)=15 | R0:10->15 | NextPC=0560",
+        "full": "[PC=0536] ADD R0, 5\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: ALU_ADD\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback\n\nALU Trace Detail:\n  Operation: ALU_ADD\n  Destination: R0\n  LHS R0 = 10\n  RHS 5 = 5\n  Result: 15\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=10 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=15 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 10 -> 15\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0560\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 5,
+      "pid": 1,
+      "event": {
+        "index": 4,
+        "pc_before": 560,
+        "pc_after": 560,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "DIV R0, R1",
+        "state_before": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 2,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": true,
+          "has_error": true,
+          "error_message": "ALU division by zero",
+          "registers": {
+            "R0": 2,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "ALU_DIV",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback",
+        "alu_detail": "ALU_DIV | lhs(R0)=2 | rhs(R1)=0 | result(R0)=2",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0560 | DIV R0, R1 | stage=EXECUTE | action=ALU_DIV | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback | ALU_DIV | lhs(R0)=2 | rhs(R1)=0 | result(R0)=2 | halted:false->true | ERROR: ALU division by zero | NextPC=0560",
+        "full": "[PC=0560] DIV R0, R1\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: ALU_DIV\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> ALU -> Flags -> Writeback\n\nALU Trace Detail:\n  Operation: ALU_DIV\n  Destination: R0\n  LHS R0 = 2\n  RHS R1 = 0\n  Result: 2\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=2 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = true\nError = ALU division by zero\nRegisters: R0=2 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0560\n\nError:\n  ALU division by zero\n",
+        "has_error": true,
+        "error": "ALU division by zero"
+      }
+    },
+    {
+      "lifecycle_step": 6,
+      "pid": 2,
+      "event": {
+        "index": 5,
+        "pc_before": 560,
+        "pc_after": 584,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R1, R0",
+        "state_before": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 15,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 584,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 15,
+            "R1": 15,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R1",
+            "before": 0,
+            "after": 15
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0560 | MOV R1, R0 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R1:0->15 | NextPC=0584",
+        "full": "[PC=0560] MOV R1, R0\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=15 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 584\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=15 R1=15 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R1: 0 -> 15\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0584\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    }
+  ],
+  "context_switch_event_count": 6,
+  "context_switches": [
+    {
+      "lifecycle_step": 1,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 2,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 3,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 4,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 5,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": false,
+      "caused_by_termination": true
+    },
+    {
+      "lifecycle_step": 7,
+      "from_pid": 2,
+      "to_pid": 0,
+      "preempted": false,
+      "caused_by_termination": true
+    }
+  ],
+  "processes": [
+    {
+      "pid": 1,
+      "source_name": "golden-fault.zbin",
+      "state": "Terminated",
+      "has_exit_code": true,
+      "exit_code": -77,
+      "termination_kind": "CpuFault",
+      "termination_message": "ALU division by zero",
+      "pc": 560,
+      "sp": 2048,
+      "has_executable_image": true,
+      "code_end_exclusive": 584,
+      "data_base": 0,
+      "data_size": 0
+    },
+    {
+      "pid": 2,
+      "source_name": "golden-healthy.zbin",
+      "state": "Terminated",
+      "has_exit_code": true,
+      "exit_code": 0,
+      "termination_kind": "NormalExit",
+      "termination_message": "",
+      "pc": 584,
+      "sp": 2048,
+      "has_executable_image": true,
+      "code_end_exclusive": 584,
+      "data_base": 0,
+      "data_size": 0
+    }
+  ]
+}

@@ -487,7 +487,12 @@ std::int64_t requiredNumber(
     return value.number;
 }
 
-void validateTraceDocument(
+enum class TraceDocumentKind {
+    SingleProcess,
+    MultiProcess
+};
+
+TraceDocumentKind validateTraceDocument(
     const JsonValue& root,
     const std::string& label
 ) {
@@ -497,36 +502,144 @@ void validateTraceDocument(
         );
     }
 
-    if (requiredString(root, "schema") != "zero_cpu_trace") {
-        throw std::runtime_error(
-            label + " trace uses unsupported schema"
-        );
+    const std::string schema =
+        requiredString(root, "schema");
+
+    const std::int64_t schemaVersion =
+        requiredNumber(root, "schema_version");
+
+    if (schema == "zero_cpu_trace") {
+        if (schemaVersion != 3) {
+            throw std::runtime_error(
+                label
+                + " single-process trace uses "
+                  "unsupported schema version"
+            );
+        }
+
+        const JsonValue& events =
+            requiredField(root, "events");
+
+        if (events.type != JsonType::Array) {
+            throw std::runtime_error(
+                label
+                + " trace events field must be an array"
+            );
+        }
+
+        const std::int64_t declaredCount =
+            requiredNumber(root, "event_count");
+
+        if (
+            declaredCount < 0
+            || static_cast<std::size_t>(
+                declaredCount
+            ) != events.array.size()
+        ) {
+            throw std::runtime_error(
+                label
+                + " trace event_count does not match events"
+            );
+        }
+
+        return TraceDocumentKind::SingleProcess;
     }
 
-    if (requiredNumber(root, "schema_version") != 3) {
-        throw std::runtime_error(
-            label + " trace uses unsupported schema version"
-        );
+    if (schema == "zero_cpu_multiprocess_trace") {
+        if (schemaVersion != 1) {
+            throw std::runtime_error(
+                label
+                + " multi-process trace uses "
+                  "unsupported schema version"
+            );
+        }
+
+        const JsonValue& executionTrace =
+            requiredField(root, "execution_trace");
+
+        const JsonValue& contextSwitches =
+            requiredField(root, "context_switches");
+
+        const JsonValue& processes =
+            requiredField(root, "processes");
+
+        if (
+            executionTrace.type != JsonType::Array
+            || contextSwitches.type != JsonType::Array
+            || processes.type != JsonType::Array
+        ) {
+            throw std::runtime_error(
+                label
+                + " multi-process trace arrays are invalid"
+            );
+        }
+
+        const std::int64_t executionCount =
+            requiredNumber(
+                root,
+                "execution_event_count"
+            );
+
+        const std::int64_t contextSwitchCount =
+            requiredNumber(
+                root,
+                "context_switch_event_count"
+            );
+
+        const std::int64_t processCount =
+            requiredNumber(
+                root,
+                "process_count"
+            );
+
+        if (
+            executionCount < 0
+            || static_cast<std::size_t>(
+                executionCount
+            ) != executionTrace.array.size()
+        ) {
+            throw std::runtime_error(
+                label
+                + " multi-process execution_event_count "
+                  "does not match execution_trace"
+            );
+        }
+
+        if (
+            contextSwitchCount < 0
+            || static_cast<std::size_t>(
+                contextSwitchCount
+            ) != contextSwitches.array.size()
+        ) {
+            throw std::runtime_error(
+                label
+                + " multi-process "
+                  "context_switch_event_count does not "
+                  "match context_switches"
+            );
+        }
+
+        if (
+            processCount < 0
+            || static_cast<std::size_t>(
+                processCount
+            ) != processes.array.size()
+        ) {
+            throw std::runtime_error(
+                label
+                + " multi-process process_count does not "
+                  "match processes"
+            );
+        }
+
+        (void)requiredField(root, "invariants");
+
+        return TraceDocumentKind::MultiProcess;
     }
 
-    const JsonValue& events = requiredField(root, "events");
-
-    if (events.type != JsonType::Array) {
-        throw std::runtime_error(
-            label + " trace events field must be an array"
-        );
-    }
-
-    const std::int64_t declaredCount =
-        requiredNumber(root, "event_count");
-
-    if (declaredCount < 0 ||
-        static_cast<std::size_t>(declaredCount) !=
-            events.array.size()) {
-        throw std::runtime_error(
-            label + " trace event_count does not match events"
-        );
-    }
+    throw std::runtime_error(
+        label + " trace uses unsupported schema: " + schema
+    );
 }
 
 JsonValue selectObjectFields(
@@ -548,12 +661,9 @@ JsonValue selectObjectFields(
     return JsonValue::makeObject(std::move(selected));
 }
 
-JsonValue architecturalView(const JsonValue& root) {
-    const JsonValue& events = requiredField(root, "events");
-
-    std::vector<JsonValue> selectedEvents;
-    selectedEvents.reserve(events.array.size());
-
+JsonValue traceEventArchitecturalView(
+    const JsonValue& event
+) {
     const std::vector<std::string> eventFields = {
         "index",
         "pc_before",
@@ -570,32 +680,337 @@ JsonValue architecturalView(const JsonValue& root) {
         "error"
     };
 
+    return selectObjectFields(
+        event,
+        eventFields
+    );
+}
+
+JsonValue singleProcessArchitecturalView(
+    const JsonValue& root
+) {
+    const JsonValue& events =
+        requiredField(root, "events");
+
+    std::vector<JsonValue> selectedEvents;
+    selectedEvents.reserve(events.array.size());
+
     for (const JsonValue& event : events.array) {
         selectedEvents.push_back(
-            selectObjectFields(event, eventFields)
+            traceEventArchitecturalView(event)
         );
     }
 
     std::map<std::string, JsonValue> selectedRoot;
+
     selectedRoot.emplace(
         "schema",
         requiredField(root, "schema")
     );
+
     selectedRoot.emplace(
         "schema_version",
         requiredField(root, "schema_version")
     );
-    selectedRoot.emplace("mode", requiredField(root, "mode"));
+
+    selectedRoot.emplace(
+        "mode",
+        requiredField(root, "mode")
+    );
+
     selectedRoot.emplace(
         "event_count",
         requiredField(root, "event_count")
     );
+
     selectedRoot.emplace(
         "events",
-        JsonValue::makeArray(std::move(selectedEvents))
+        JsonValue::makeArray(
+            std::move(selectedEvents)
+        )
     );
 
-    return JsonValue::makeObject(std::move(selectedRoot));
+    return JsonValue::makeObject(
+        std::move(selectedRoot)
+    );
+}
+
+JsonValue multiProcessInvariantArchitecturalView(
+    const JsonValue& invariants
+) {
+    const JsonValue& violations =
+        requiredField(
+            invariants,
+            "violations"
+        );
+
+    if (violations.type != JsonType::Array) {
+        throw std::runtime_error(
+            "Multi-process invariant violations "
+            "must be an array"
+        );
+    }
+
+    std::vector<JsonValue> selectedViolations;
+    selectedViolations.reserve(
+        violations.array.size()
+    );
+
+    const std::vector<std::string>
+        violationFields = {
+            "code",
+            "lifecycle_step",
+            "pid"
+        };
+
+    for (
+        const JsonValue& violation :
+            violations.array
+    ) {
+        selectedViolations.push_back(
+            selectObjectFields(
+                violation,
+                violationFields
+            )
+        );
+    }
+
+    std::map<std::string, JsonValue> selected;
+
+    selected.emplace(
+        "passed",
+        requiredField(
+            invariants,
+            "passed"
+        )
+    );
+
+    selected.emplace(
+        "violation_count",
+        requiredField(
+            invariants,
+            "violation_count"
+        )
+    );
+
+    selected.emplace(
+        "violations",
+        JsonValue::makeArray(
+            std::move(selectedViolations)
+        )
+    );
+
+    return JsonValue::makeObject(
+        std::move(selected)
+    );
+}
+
+JsonValue multiProcessArchitecturalView(
+    const JsonValue& root
+) {
+    const JsonValue& executionTrace =
+        requiredField(
+            root,
+            "execution_trace"
+        );
+
+    const JsonValue& contextSwitches =
+        requiredField(
+            root,
+            "context_switches"
+        );
+
+    const JsonValue& processes =
+        requiredField(
+            root,
+            "processes"
+        );
+
+    std::vector<JsonValue> selectedExecution;
+    selectedExecution.reserve(
+        executionTrace.array.size()
+    );
+
+    for (
+        const JsonValue& record :
+            executionTrace.array
+    ) {
+        std::map<std::string, JsonValue> selected;
+
+        selected.emplace(
+            "lifecycle_step",
+            requiredField(
+                record,
+                "lifecycle_step"
+            )
+        );
+
+        selected.emplace(
+            "pid",
+            requiredField(
+                record,
+                "pid"
+            )
+        );
+
+        selected.emplace(
+            "event",
+            traceEventArchitecturalView(
+                requiredField(
+                    record,
+                    "event"
+                )
+            )
+        );
+
+        selectedExecution.push_back(
+            JsonValue::makeObject(
+                std::move(selected)
+            )
+        );
+    }
+
+    std::vector<JsonValue>
+        selectedContextSwitches;
+
+    selectedContextSwitches.reserve(
+        contextSwitches.array.size()
+    );
+
+    const std::vector<std::string>
+        contextSwitchFields = {
+            "lifecycle_step",
+            "from_pid",
+            "to_pid",
+            "preempted",
+            "caused_by_termination"
+        };
+
+    for (
+        const JsonValue& record :
+            contextSwitches.array
+    ) {
+        selectedContextSwitches.push_back(
+            selectObjectFields(
+                record,
+                contextSwitchFields
+            )
+        );
+    }
+
+    std::vector<JsonValue> selectedProcesses;
+    selectedProcesses.reserve(
+        processes.array.size()
+    );
+
+    const std::vector<std::string>
+        processFields = {
+            "pid",
+            "state",
+            "has_exit_code",
+            "exit_code",
+            "termination_kind",
+            "termination_message",
+            "pc",
+            "sp",
+            "has_executable_image",
+            "code_end_exclusive",
+            "data_base",
+            "data_size"
+        };
+
+    for (
+        const JsonValue& process :
+            processes.array
+    ) {
+        selectedProcesses.push_back(
+            selectObjectFields(
+                process,
+                processFields
+            )
+        );
+    }
+
+    std::map<std::string, JsonValue> selectedRoot;
+
+    const std::vector<std::string> rootFields = {
+        "schema",
+        "schema_version",
+        "mode",
+        "runtime_state",
+        "step_limit_reached",
+        "lifecycle_steps",
+        "process_count",
+        "termination_count",
+        "fault_count",
+        "preemption_count",
+        "context_switch_count",
+        "execution_event_count",
+        "context_switch_event_count"
+    };
+
+    for (const std::string& field : rootFields) {
+        selectedRoot.emplace(
+            field,
+            requiredField(root, field)
+        );
+    }
+
+    selectedRoot.emplace(
+        "invariants",
+        multiProcessInvariantArchitecturalView(
+            requiredField(
+                root,
+                "invariants"
+            )
+        )
+    );
+
+    selectedRoot.emplace(
+        "execution_trace",
+        JsonValue::makeArray(
+            std::move(selectedExecution)
+        )
+    );
+
+    selectedRoot.emplace(
+        "context_switches",
+        JsonValue::makeArray(
+            std::move(selectedContextSwitches)
+        )
+    );
+
+    selectedRoot.emplace(
+        "processes",
+        JsonValue::makeArray(
+            std::move(selectedProcesses)
+        )
+    );
+
+    return JsonValue::makeObject(
+        std::move(selectedRoot)
+    );
+}
+
+JsonValue architecturalView(
+    const JsonValue& root,
+    TraceDocumentKind kind
+) {
+    switch (kind) {
+    case TraceDocumentKind::SingleProcess:
+        return singleProcessArchitecturalView(
+            root
+        );
+
+    case TraceDocumentKind::MultiProcess:
+        return multiProcessArchitecturalView(
+            root
+        );
+    }
+
+    throw std::runtime_error(
+        "Invalid trace document kind"
+    );
 }
 
 std::string typeName(JsonType type) {
@@ -859,18 +1274,39 @@ TraceJsonDiffResult TraceJsonDiff::compareText(
     const JsonValue expectedRoot = expectedParser.parse();
     const JsonValue actualRoot = actualParser.parse();
 
-    validateTraceDocument(expectedRoot, "Expected");
-    validateTraceDocument(actualRoot, "Actual");
+    const TraceDocumentKind expectedKind =
+        validateTraceDocument(
+            expectedRoot,
+            "Expected"
+        );
+
+    const TraceDocumentKind actualKind =
+        validateTraceDocument(
+            actualRoot,
+            "Actual"
+        );
+
+    if (expectedKind != actualKind) {
+        throw std::runtime_error(
+            "Trace schemas are not comparable"
+        );
+    }
 
     const JsonValue expectedView =
         options.strict
             ? expectedRoot
-            : architecturalView(expectedRoot);
+            : architecturalView(
+                expectedRoot,
+                expectedKind
+            );
 
     const JsonValue actualView =
         options.strict
             ? actualRoot
-            : architecturalView(actualRoot);
+            : architecturalView(
+                actualRoot,
+                actualKind
+            );
 
     DiffAccumulator differences;
 
@@ -914,5 +1350,7 @@ TraceJsonDiffResult TraceJsonDiff::compareFiles(
         options
     );
 }
+
+// Patch: v1.3-multiprocess-structural-diff-golden-r1
 
 } // namespace zero_cpu
