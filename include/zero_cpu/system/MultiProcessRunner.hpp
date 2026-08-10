@@ -1,6 +1,8 @@
 #pragma once
 
 #include "zero_cpu/core/Memory.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/SoftwareInterruptHandler.hpp"
 #include "zero_cpu/kernel/ProcessContext.hpp"
 #include "zero_cpu/kernel/ProcessImage.hpp"
 #include "zero_cpu/kernel/ProcessLifecycleManager.hpp"
@@ -10,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,6 +27,11 @@ struct MultiProcessRunOptions {
 
     std::int64_t normal_exit_code = 0;
     std::int64_t fault_exit_code = -1;
+
+    std::shared_ptr<MMIOBus> mmio_bus;
+
+    std::shared_ptr<SoftwareInterruptHandler>
+        software_interrupt_handler;
 };
 
 struct ProcessExecutionTraceRecord {
@@ -119,5 +127,7 @@ public:
         const MultiProcessRunOptions& options = {}
     ) const;
 };
+
+// Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu::system

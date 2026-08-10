@@ -4,6 +4,7 @@
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/core/SoftwareInterruptHandler.hpp"
 
 #include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryLoader.hpp"
@@ -440,6 +441,29 @@ bool CPU::hasInterruptController() const {
     return static_cast<bool>(interrupt_controller_);
 }
 
+void CPU::setSoftwareInterruptHandler(
+    std::shared_ptr<SoftwareInterruptHandler> handler
+) {
+    if (!handler) {
+        throw std::runtime_error(
+            "Software interrupt handler must not be null"
+        );
+    }
+
+    software_interrupt_handler_ =
+        std::move(handler);
+}
+
+void CPU::clearSoftwareInterruptHandler() {
+    software_interrupt_handler_.reset();
+}
+
+bool CPU::hasSoftwareInterruptHandler() const {
+    return static_cast<bool>(
+        software_interrupt_handler_
+    );
+}
+
 void CPU::addClockedDevice(std::shared_ptr<ClockedDevice> device) {
     if (!device) {
         throw std::runtime_error("Clocked device must not be null");
@@ -493,6 +517,48 @@ bool CPU::servicePendingInterruptIfNeeded() {
     state_.registers().set(RegisterName::R1, request.payload);
 
     state_.setPc(handlerAddress);
+    return true;
+}
+
+bool CPU::serviceHostSoftwareInterrupt(
+    std::uint8_t vector,
+    std::size_t returnAddress
+) {
+    if (
+        !software_interrupt_handler_
+        || !software_interrupt_handler_->handles(
+            vector
+        )
+    ) {
+        return false;
+    }
+
+    pushInterruptFrame(returnAddress);
+
+    state_.registers().set(
+        RegisterName::R0,
+        static_cast<std::int64_t>(vector)
+    );
+
+    try {
+        software_interrupt_handler_->handle(
+            vector,
+            state_,
+            mmio_bus_.get()
+        );
+    } catch (...) {
+        restoreInterruptFrame(
+            "Negative host software interrupt "
+            "return address"
+        );
+        throw;
+    }
+
+    restoreInterruptFrame(
+        "Negative host software interrupt "
+        "return address"
+    );
+
     return true;
 }
 
@@ -1193,6 +1259,18 @@ void CPU::executeBinaryInstruction(
         const std::uint8_t vector =
             static_cast<std::uint8_t>(vectorValue);
 
+        const std::size_t returnAddress =
+            state_.pc() + binary::kInstructionSize;
+
+        if (
+            serviceHostSoftwareInterrupt(
+                vector,
+                returnAddress
+            )
+        ) {
+            break;
+        }
+
         const std::size_t handlerAddress =
             interrupt_controller_->vectorHandler(vector);
 
@@ -1201,9 +1279,6 @@ void CPU::executeBinaryInstruction(
                 "INT handler is outside loaded binary code section"
             );
         }
-
-        const std::size_t returnAddress =
-            state_.pc() + binary::kInstructionSize;
 
         pushInterruptFrame(returnAddress);
 
@@ -1941,6 +2016,17 @@ void CPU::executeInt(const Instruction& instruction) {
     const std::uint8_t vector =
         static_cast<std::uint8_t>(vectorValue);
 
+    const std::size_t returnAddress = state_.pc() + 1;
+
+    if (
+        serviceHostSoftwareInterrupt(
+            vector,
+            returnAddress
+        )
+    ) {
+        return;
+    }
+
     const std::size_t handlerAddress =
         interrupt_controller_->vectorHandler(vector);
 
@@ -1949,8 +2035,6 @@ void CPU::executeInt(const Instruction& instruction) {
             "INT handler is outside loaded program"
         );
     }
-
-    const std::size_t returnAddress = state_.pc() + 1;
 
     pushInterruptFrame(returnAddress);
 
@@ -2414,5 +2498,7 @@ void CPU::advancePcUnlessHalted() {
 void CPU::setRuntimeError(const std::string& message) {
     state_.setError(message);
 }
+
+// Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu

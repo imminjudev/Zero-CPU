@@ -172,6 +172,7 @@ add_library(zero_cpu_core
     src/kernel/ProcessImage.cpp
     src/kernel/ProcessImageLoader.cpp
     src/kernel/ProcessAddressSpace.cpp
+    src/kernel/ProtectedSyscallDispatcher.cpp
     src/system/MultiProcessRunner.cpp
     src/system/MultiProcessInvariantVerifier.cpp
     src/system/MultiProcessTraceJsonWriter.cpp
@@ -533,6 +534,25 @@ zero_cpu_enable_sanitizers(
 
 zero_cpu_enable_coverage(
     zero_multi_process_runner_test
+)
+
+
+add_executable(zero_protected_syscall_hardware_test
+    tests/protected_syscall_hardware.cpp
+)
+
+target_link_libraries(
+    zero_protected_syscall_hardware_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_protected_syscall_hardware_test
+)
+
+zero_cpu_enable_coverage(
+    zero_protected_syscall_hardware_test
 )
 
 
@@ -905,6 +925,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;system;process;runner;multitasking"
+    )
+
+    add_test(
+        NAME zero_cpu.protected_syscall_hardware
+        COMMAND $<TARGET_FILE:zero_protected_syscall_hardware_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.protected_syscall_hardware
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;syscall;process;mmio;hardware"
     )
 
     add_test(

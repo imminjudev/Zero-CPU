@@ -262,6 +262,19 @@ MultiProcessRunner::runImages(
     }
 
     CPU cpu;
+
+    if (options.mmio_bus) {
+        cpu.setMMIOBus(
+            options.mmio_bus
+        );
+    }
+
+    if (options.software_interrupt_handler) {
+        cpu.setSoftwareInterruptHandler(
+            options.software_interrupt_handler
+        );
+    }
+
     kernel::RoundRobinScheduler scheduler;
 
     kernel::TimerPreemptiveScheduler preemptive(
@@ -419,5 +432,7 @@ MultiProcessRunner::runImages(
 
     return result;
 }
+
+// Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu::system

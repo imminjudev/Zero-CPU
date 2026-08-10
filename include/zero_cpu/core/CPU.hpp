@@ -19,6 +19,8 @@
 
 namespace zero_cpu {
 
+class SoftwareInterruptHandler;
+
 class CPU {
 public:
     using LabelTable = std::unordered_map<std::string, std::size_t>;
@@ -89,6 +91,12 @@ public:
     void clearInterruptController();
     bool hasInterruptController() const;
 
+    void setSoftwareInterruptHandler(
+        std::shared_ptr<SoftwareInterruptHandler> handler
+    );
+    void clearSoftwareInterruptHandler();
+    bool hasSoftwareInterruptHandler() const;
+
     void addClockedDevice(std::shared_ptr<ClockedDevice> device);
     void clearClockedDevices();
     std::size_t clockedDeviceCount() const;
@@ -113,9 +121,16 @@ private:
 
     std::shared_ptr<MMIOBus> mmio_bus_;
     std::shared_ptr<InterruptController> interrupt_controller_;
+    std::shared_ptr<SoftwareInterruptHandler>
+        software_interrupt_handler_;
     std::vector<std::shared_ptr<ClockedDevice>> clocked_devices_;
 
     bool servicePendingInterruptIfNeeded();
+
+    bool serviceHostSoftwareInterrupt(
+        std::uint8_t vector,
+        std::size_t returnAddress
+    );
     void tickClockedDevices();
 
     void requireDataMemoryAccess(
@@ -275,5 +290,7 @@ private:
     void advancePcUnlessHalted();
     void setRuntimeError(const std::string& message);
 };
+
+// Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu
