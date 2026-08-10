@@ -329,49 +329,143 @@ void appendEvent(
     std::ostringstream& oss,
     const TraceEvent& event,
     std::size_t index,
+    int objectIndent,
     bool comma
 ) {
-    indent(oss, 4);
+    const int fieldIndent =
+        objectIndent + 2;
+
+    indent(oss, objectIndent);
     oss << "{\n";
 
-    sizeField(oss, 6, "index", index);
-    sizeField(oss, 6, "pc_before", event.pcBefore());
-    sizeField(oss, 6, "pc_after", event.pcAfter());
-    sizeField(oss, 6, "sp_before", event.before().sp());
-    sizeField(oss, 6, "sp_after", event.after().sp());
-    stringField(oss, 6, "instruction", event.instruction().toString());
-
-    appendState(oss, "state_before", event.before(), 6, true);
-    appendState(oss, "state_after", event.after(), 6, true);
-
-    appendRegisterChanges(oss, event, 6, true);
-    appendFlagChanges(oss, event, 6, true);
-    appendMemoryChanges(oss, event, 6, true);
-
-    stringField(oss, 6, "stage", event.stage());
-    stringField(oss, 6, "action", event.action());
-    stringField(oss, 6, "datapath", event.datapathString());
-    stringField(oss, 6, "alu_detail", event.aluDetailString());
-    stringField(oss, 6, "memory_detail", event.memoryDetailString());
-    stringField(oss, 6, "stack_detail", event.stackDetailString());
+    sizeField(oss, fieldIndent, "index", index);
+    sizeField(oss, fieldIndent, "pc_before", event.pcBefore());
+    sizeField(oss, fieldIndent, "pc_after", event.pcAfter());
+    sizeField(oss, fieldIndent, "sp_before", event.before().sp());
+    sizeField(oss, fieldIndent, "sp_after", event.after().sp());
     stringField(
         oss,
-        6,
+        fieldIndent,
+        "instruction",
+        event.instruction().toString()
+    );
+
+    appendState(
+        oss,
+        "state_before",
+        event.before(),
+        fieldIndent,
+        true
+    );
+    appendState(
+        oss,
+        "state_after",
+        event.after(),
+        fieldIndent,
+        true
+    );
+
+    appendRegisterChanges(
+        oss,
+        event,
+        fieldIndent,
+        true
+    );
+    appendFlagChanges(
+        oss,
+        event,
+        fieldIndent,
+        true
+    );
+    appendMemoryChanges(
+        oss,
+        event,
+        fieldIndent,
+        true
+    );
+
+    stringField(oss, fieldIndent, "stage", event.stage());
+    stringField(oss, fieldIndent, "action", event.action());
+    stringField(
+        oss,
+        fieldIndent,
+        "datapath",
+        event.datapathString()
+    );
+    stringField(
+        oss,
+        fieldIndent,
+        "alu_detail",
+        event.aluDetailString()
+    );
+    stringField(
+        oss,
+        fieldIndent,
+        "memory_detail",
+        event.memoryDetailString()
+    );
+    stringField(
+        oss,
+        fieldIndent,
+        "stack_detail",
+        event.stackDetailString()
+    );
+    stringField(
+        oss,
+        fieldIndent,
         "control_flow_detail",
         event.controlFlowDetailString()
     );
-    stringField(oss, 6, "compact", event.toCompactString());
-    stringField(oss, 6, "full", event.toFullString());
-    boolField(oss, 6, "has_error", event.hasError());
-    stringField(oss, 6, "error", event.errorMessage(), false);
+    stringField(
+        oss,
+        fieldIndent,
+        "compact",
+        event.toCompactString()
+    );
+    stringField(
+        oss,
+        fieldIndent,
+        "full",
+        event.toFullString()
+    );
+    boolField(
+        oss,
+        fieldIndent,
+        "has_error",
+        event.hasError()
+    );
+    stringField(
+        oss,
+        fieldIndent,
+        "error",
+        event.errorMessage(),
+        false
+    );
 
-    indent(oss, 4);
+    indent(oss, objectIndent);
     oss << "}";
 
     finishField(oss, comma);
 }
 
 } // namespace
+
+std::string TraceJsonWriter::eventToJson(
+    const TraceEvent& event,
+    std::size_t index
+) {
+    std::ostringstream oss;
+
+    appendEvent(
+        oss,
+        event,
+        index,
+        0,
+        false
+    );
+
+    return oss.str();
+}
 
 std::string TraceJsonWriter::toJson(
     const std::vector<TraceEvent>& events,
@@ -392,7 +486,13 @@ std::string TraceJsonWriter::toJson(
     oss << "\"events\": [\n";
 
     for (std::size_t i = 0; i < events.size(); ++i) {
-        appendEvent(oss, events[i], i, i + 1 < events.size());
+        appendEvent(
+            oss,
+            events[i],
+            i,
+            4,
+            i + 1 < events.size()
+        );
     }
 
     indent(oss, 2);

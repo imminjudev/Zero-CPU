@@ -173,6 +173,8 @@ add_library(zero_cpu_core
     src/kernel/ProcessImageLoader.cpp
     src/kernel/ProcessAddressSpace.cpp
     src/system/MultiProcessRunner.cpp
+    src/system/MultiProcessInvariantVerifier.cpp
+    src/system/MultiProcessTraceJsonWriter.cpp
     src/system/BioOSRunner.cpp
 )
 
@@ -534,6 +536,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_multi_process_trace_test
+    tests/multi_process_trace.cpp
+)
+
+target_link_libraries(
+    zero_multi_process_trace_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_multi_process_trace_test
+)
+
+zero_cpu_enable_coverage(
+    zero_multi_process_trace_test
+)
+
+
 add_executable(zero_debug_session_test
     tests/debug_session.cpp
 )
@@ -865,6 +886,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;system;process;runner;multitasking"
+    )
+
+    add_test(
+        NAME zero_cpu.multi_process_trace
+        COMMAND $<TARGET_FILE:zero_multi_process_trace_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.multi_process_trace
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;system;process;trace;json;invariant"
     )
 
     add_test(

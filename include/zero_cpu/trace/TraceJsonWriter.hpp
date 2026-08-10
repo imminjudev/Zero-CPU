@@ -19,6 +19,11 @@ class TraceJsonWriter {
 public:
     inline static constexpr std::size_t kSchemaVersion = 3;
 
+    static std::string eventToJson(
+        const TraceEvent& event,
+        std::size_t index = 0
+    );
+
     static std::string toJson(
         const std::vector<TraceEvent>& events,
         const TraceJsonMetadata& metadata = {}
