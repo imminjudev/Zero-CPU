@@ -1,0 +1,9 @@
+# Protected debugger CLI integration
+# Patch: v1.4-protected-debug-cli-r1
+
+continue 100
+processes
+continue 100
+processes
+scheduler
+quit

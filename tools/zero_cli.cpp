@@ -2642,6 +2642,7 @@ parseHardwareRegisterExpectation(
 }
 
 // Patch: v1.4-protected-runtime-cli-r1
+// Patch: v1.4-protected-debug-cli-r1
 
 int runProcessesCommand(
     int argc,
@@ -3211,12 +3212,28 @@ int debugProcessesCommand(
     char* argv[],
     int startIndex
 ) {
+    using namespace zero_cpu;
     using namespace zero_cpu::debug;
+    using namespace zero_cpu::hardware;
+    using namespace zero_cpu::kernel;
 
     MultiProcessDebugOptions sessionOptions;
 
     bool hasCommandFile = false;
     std::string commandFilePath;
+
+    bool protectedSyscalls = false;
+    bool useMockHardware = false;
+
+    std::string serialPort;
+    std::uint32_t serialBaud = 115200;
+    bool baudSpecified = false;
+
+    std::vector<ProcessExitExpectation>
+        exitExpectations;
+
+    std::vector<HardwareRegisterExpectation>
+        hardwareExpectations;
 
     std::vector<std::string> paths;
 
@@ -3284,6 +3301,124 @@ int debugProcessesCommand(
             continue;
         }
 
+        if (argument == "--protected-syscalls") {
+            protectedSyscalls = true;
+            ++index;
+            continue;
+        }
+
+        if (argument == "--hardware-mock") {
+            if (!serialPort.empty()) {
+                throw std::invalid_argument(
+                    "--hardware-mock cannot be combined "
+                    "with --hardware-serial"
+                );
+            }
+
+            useMockHardware = true;
+            protectedSyscalls = true;
+            ++index;
+            continue;
+        }
+
+        if (argument == "--hardware-serial") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--hardware-serial requires a port"
+                );
+            }
+
+            if (useMockHardware) {
+                throw std::invalid_argument(
+                    "--hardware-serial cannot be combined "
+                    "with --hardware-mock"
+                );
+            }
+
+            serialPort = argv[index + 1];
+
+            if (serialPort.empty()) {
+                throw std::invalid_argument(
+                    "--hardware-serial port must not be empty"
+                );
+            }
+
+            protectedSyscalls = true;
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--baud") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--baud requires a value"
+                );
+            }
+
+            const std::uint64_t value =
+                parseRunProcessesPositiveU64(
+                    argv[index + 1],
+                    "--baud"
+                );
+
+            if (
+                value
+                > static_cast<std::uint64_t>(
+                    std::numeric_limits<
+                        std::uint32_t
+                    >::max()
+                )
+            ) {
+                throw std::out_of_range(
+                    "--baud is too large"
+                );
+            }
+
+            serialBaud =
+                static_cast<std::uint32_t>(
+                    value
+                );
+
+            baudSpecified = true;
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--expect-exit") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--expect-exit requires PID=CODE"
+                );
+            }
+
+            exitExpectations.push_back(
+                parseProcessExitExpectation(
+                    argv[index + 1]
+                )
+            );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--expect-hardware") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--expect-hardware requires "
+                    "OFFSET=VALUE"
+                );
+            }
+
+            hardwareExpectations.push_back(
+                parseHardwareRegisterExpectation(
+                    argv[index + 1]
+                )
+            );
+
+            index += 2;
+            continue;
+        }
+
         if (
             argument.rfind("--", 0)
             == 0
@@ -3305,10 +3440,178 @@ int debugProcessesCommand(
         );
     }
 
+    if (baudSpecified && serialPort.empty()) {
+        throw std::invalid_argument(
+            "--baud requires --hardware-serial"
+        );
+    }
+
+    if (
+        !hardwareExpectations.empty()
+        && !useMockHardware
+    ) {
+        throw std::invalid_argument(
+            "--expect-hardware currently requires "
+            "--hardware-mock"
+        );
+    }
+
+    std::shared_ptr<MockHardwareBus>
+        mockHardware;
+
+    std::shared_ptr<HardwareBus>
+        hardwareBus;
+
+    if (useMockHardware) {
+        mockHardware =
+            std::make_shared<MockHardwareBus>(
+                "debug-cli-protected-hardware"
+            );
+
+        mockHardware->connect();
+        hardwareBus = mockHardware;
+    } else if (!serialPort.empty()) {
+        auto transport =
+            std::make_shared<
+                WindowsSerialTransport
+            >(
+                serialPort,
+                serialBaud
+            );
+
+        auto serialHardware =
+            std::make_shared<
+                SerialHardwareBus
+            >(
+                transport
+            );
+
+        serialHardware->connect();
+        hardwareBus = serialHardware;
+
+        std::cout
+            << "Protected debug serial hardware: "
+            << serialPort
+            << " @ "
+            << serialBaud
+            << " baud\n";
+    }
+
+    if (hardwareBus) {
+        auto device =
+            std::make_shared<
+                HardwareMMIODevice
+            >(
+                hardwareBus
+            );
+
+        auto mmio =
+            std::make_shared<MMIOBus>();
+
+        mmio->mapDevice(
+            memory_map::kHardwareBase,
+            memory_map::kHardwareSize,
+            device
+        );
+
+        sessionOptions.mmio_bus = mmio;
+    }
+
+    if (protectedSyscalls) {
+        sessionOptions.software_interrupt_handler =
+            std::make_shared<
+                ProtectedSyscallDispatcher
+            >();
+
+        std::cout
+            << "Protected debug syscalls: enabled\n";
+    }
+
     MultiProcessDebugSession session(
         paths,
         sessionOptions
     );
+
+    auto validateExpectations =
+        [&]() -> bool {
+            bool passed = true;
+
+            for (
+                const ProcessExitExpectation& expectation :
+                exitExpectations
+            ) {
+                bool matched = false;
+                std::int64_t actual = 0;
+
+                try {
+                    const ProcessDebugSnapshot snapshot =
+                        session.processSnapshot(
+                            expectation.pid
+                        );
+
+                    if (snapshot.has_exit_code) {
+                        actual = snapshot.exit_code;
+                        matched =
+                            actual
+                            == expectation.exit_code;
+                    }
+                } catch (const std::exception&) {
+                    matched = false;
+                }
+
+                if (matched) {
+                    std::cout
+                        << "[PASS] Debug PID "
+                        << expectation.pid
+                        << " exit code = "
+                        << expectation.exit_code
+                        << "\n";
+                } else {
+                    std::cout
+                        << "[FAIL] Debug PID "
+                        << expectation.pid
+                        << " exit code expected "
+                        << expectation.exit_code
+                        << " but got "
+                        << actual
+                        << "\n";
+
+                    passed = false;
+                }
+            }
+
+            for (
+                const HardwareRegisterExpectation& expectation :
+                    hardwareExpectations
+            ) {
+                const std::int64_t actual =
+                    mockHardware->registerValue(
+                        expectation.offset
+                    );
+
+                if (actual == expectation.value) {
+                    std::cout
+                        << "[PASS] Debug Hardware["
+                        << expectation.offset
+                        << "] = "
+                        << actual
+                        << "\n";
+                } else {
+                    std::cout
+                        << "[FAIL] Debug Hardware["
+                        << expectation.offset
+                        << "] expected "
+                        << expectation.value
+                        << " but got "
+                        << actual
+                        << "\n";
+
+                    passed = false;
+                }
+            }
+
+            return passed;
+        };
 
     MultiProcessDebugConsoleOptions
         consoleOptions;
@@ -3339,7 +3642,13 @@ int debugProcessesCommand(
             consoleOptions
         );
 
-        return console.run().success()
+        const bool consoleSucceeded =
+            console.run().success();
+
+        return (
+            consoleSucceeded
+            && validateExpectations()
+        )
             ? 0
             : 1;
     }
@@ -3352,7 +3661,13 @@ int debugProcessesCommand(
         consoleOptions
     );
 
-    return console.run().success()
+    const bool consoleSucceeded =
+        console.run().success();
+
+    return (
+        consoleSucceeded
+        && validateExpectations()
+    )
         ? 0
         : 1;
 }
@@ -8083,7 +8398,7 @@ void printUsage() {
     std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] [--protected-syscalls] [--hardware-mock | --hardware-serial PORT] [--baud N] [--expect-exit PID=CODE] [--expect-hardware OFFSET=VALUE] <app1.zbin> [app2.zbin ...]\n";
     std::cout << "  zero_cli debug-binary <input.zbin> [--break <address>...] [--max-steps N] [--step N] [--registers] [--memory <address> <bytes>...] [--disassemble <address> <instructions>...]\n";
     std::cout << "  zero_cli debug-shell <input.zbin> [--commands <file>] [--max-steps N]\n";
-    std::cout << "  zero_cli debug-processes [--quantum N] [--max-steps N] [--commands <file>] <app1.zbin> <app2.zbin> [more.zbin ...]\n";
+    std::cout << "  zero_cli debug-processes [--quantum N] [--max-steps N] [--commands <file>] [--protected-syscalls] [--hardware-mock | --hardware-serial PORT] [--baud N] [--expect-exit PID=CODE] [--expect-hardware OFFSET=VALUE] <app1.zbin> <app2.zbin> [more.zbin ...]\n";
     std::cout << "  zero_cli dump-binary <input.zbin>\n";
     std::cout << "  zero_cli load-binary <input.zbin>\n";
     std::cout << "  zero_cli cpu-load-binary <input.zbin>\n";
