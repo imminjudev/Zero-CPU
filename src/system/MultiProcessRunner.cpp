@@ -153,6 +153,17 @@ ProcessRunSummary makeSummary(
 
 } // namespace
 
+ProcessExecutionTraceRecord::
+ProcessExecutionTraceRecord(
+    std::size_t lifecycleStep,
+    kernel::ProcessId processId,
+    const TraceEvent& traceEvent
+)
+    : lifecycle_step(lifecycleStep),
+      pid(processId),
+      event(traceEvent) {
+}
+
 bool ProcessRunSummary::terminated() const {
     return state == kernel::ProcessState::Terminated
         && has_exit_code;
@@ -274,12 +285,34 @@ MultiProcessRunner::runImages(
 
     std::size_t lifecycleSteps = 0;
 
+    std::vector<ProcessExecutionTraceRecord>
+        executionTrace;
+
+    std::vector<ProcessContextSwitchTraceRecord>
+        contextSwitches;
+
     while (
         runtimeState
             == kernel::ProcessRuntimeState::Running
         && lifecycleSteps
             < options.max_lifecycle_steps
     ) {
+        if (!table.hasRunningProcess()) {
+            throw std::runtime_error(
+                "Running multi-process runtime has "
+                "no Running process"
+            );
+        }
+
+        const kernel::ProcessId beforePid =
+            table.runningProcessId();
+
+        const std::size_t traceSizeBefore =
+            cpu.traceLogger().size();
+
+        const std::uint64_t preemptionsBefore =
+            preemptive.preemptionCount();
+
         if (reachedExecutableEnd(cpu, table)) {
             discardCompletionTimerRequest(
                 preemptive
@@ -298,6 +331,40 @@ MultiProcessRunner::runImages(
 
         runtimeState = stepResult.state;
         ++lifecycleSteps;
+
+        if (
+            cpu.traceLogger().size()
+            > traceSizeBefore
+        ) {
+            executionTrace.emplace_back(
+                lifecycleSteps,
+                beforePid,
+                cpu.traceLogger().last()
+            );
+        }
+
+        const kernel::ProcessId afterPid =
+            table.hasRunningProcess()
+                ? table.runningProcessId()
+                : 0;
+
+        if (beforePid != afterPid) {
+            ProcessContextSwitchTraceRecord record;
+            record.lifecycle_step = lifecycleSteps;
+            record.from_pid = beforePid;
+            record.to_pid = afterPid;
+
+            record.preempted =
+                preemptive.preemptionCount()
+                    > preemptionsBefore;
+
+            record.caused_by_termination =
+                stepResult.process_terminated;
+
+            contextSwitches.push_back(
+                record
+            );
+        }
     }
 
     MultiProcessRunResult result;
@@ -323,6 +390,12 @@ MultiProcessRunner::runImages(
 
     result.context_switch_count =
         preemptive.contextSwitchCount();
+
+    result.execution_trace =
+        std::move(executionTrace);
+
+    result.context_switches =
+        std::move(contextSwitches);
 
     result.processes.reserve(table.size());
 

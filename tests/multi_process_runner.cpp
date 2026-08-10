@@ -1,4 +1,5 @@
 #include "zero_cpu/assembler/Assembler.hpp"
+#include "zero_cpu/binary/BinaryFormat.hpp"
 #include "zero_cpu/binary/BinaryWriter.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
@@ -110,7 +111,10 @@ bool preemptiveExecutionAndIsolation(
         || result.process_count != 2
         || result.termination_count != 2
         || result.fault_count != 0
-        || result.context_switch_count == 0
+        || result.preemption_count != 4
+        || result.context_switch_count != 4
+        || result.execution_trace.size() != 6
+        || result.context_switches.size() != 6
         || !first.terminated()
         || !second.terminated()
         || first.faulted()
@@ -139,6 +143,82 @@ bool preemptiveExecutionAndIsolation(
         detail =
             "preemptive process execution or "
             "memory isolation mismatch";
+        return false;
+    }
+
+    const std::size_t codeBase =
+        memory_map::kBinaryCodeBase;
+
+    const std::size_t instructionSize =
+        binary::kInstructionSize;
+
+    const kernel::ProcessId expectedPids[] = {
+        1, 2, 1, 2, 1, 2
+    };
+
+    const std::size_t expectedLifecycleSteps[] = {
+        1, 2, 3, 4, 5, 7
+    };
+
+    const std::size_t expectedPcs[] = {
+        codeBase,
+        codeBase,
+        codeBase + instructionSize,
+        codeBase + instructionSize,
+        codeBase + instructionSize * 2,
+        codeBase + instructionSize * 2
+    };
+
+    for (std::size_t index = 0; index < 6; ++index) {
+        const ProcessExecutionTraceRecord& record =
+            result.execution_trace[index];
+
+        if (
+            record.pid != expectedPids[index]
+            || record.lifecycle_step
+                != expectedLifecycleSteps[index]
+            || record.event.pcBefore()
+                != expectedPcs[index]
+            || record.event.pcAfter()
+                != expectedPcs[index]
+                    + instructionSize
+            || record.event.hasError()
+        ) {
+            detail =
+                "process execution trace timeline mismatch";
+            return false;
+        }
+    }
+
+    const ProcessContextSwitchTraceRecord&
+        firstPreemption = result.context_switches.front();
+
+    const ProcessContextSwitchTraceRecord&
+        firstTerminationSwitch =
+            result.context_switches[4];
+
+    const ProcessContextSwitchTraceRecord&
+        finalSwitch = result.context_switches.back();
+
+    if (
+        firstPreemption.lifecycle_step != 1
+        || firstPreemption.from_pid != 1
+        || firstPreemption.to_pid != 2
+        || !firstPreemption.preempted
+        || firstPreemption.caused_by_termination
+        || firstTerminationSwitch.lifecycle_step != 6
+        || firstTerminationSwitch.from_pid != 1
+        || firstTerminationSwitch.to_pid != 2
+        || firstTerminationSwitch.preempted
+        || !firstTerminationSwitch.caused_by_termination
+        || finalSwitch.lifecycle_step != 8
+        || finalSwitch.from_pid != 2
+        || finalSwitch.to_pid != 0
+        || finalSwitch.preempted
+        || !finalSwitch.caused_by_termination
+    ) {
+        detail =
+            "process context-switch trace mismatch";
         return false;
     }
 
@@ -199,6 +279,8 @@ start:
         || result.success()
         || result.termination_count != 2
         || result.fault_count != 1
+        || result.execution_trace.size() != 2
+        || result.context_switches.size() != 2
         || !faulted.faulted()
         || faulted.exit_code != -77
         || faulted.termination_message.empty()
@@ -213,6 +295,37 @@ start:
         detail =
             "faulted process did not recover "
             "to the healthy process";
+        return false;
+    }
+
+    const ProcessExecutionTraceRecord& faultTrace =
+        result.execution_trace[0];
+
+    const ProcessExecutionTraceRecord& healthyTrace =
+        result.execution_trace[1];
+
+    if (
+        faultTrace.lifecycle_step != 1
+        || faultTrace.pid != 1
+        || !faultTrace.event.hasError()
+        || faultTrace.event.errorMessage().empty()
+        || healthyTrace.lifecycle_step != 2
+        || healthyTrace.pid != 2
+        || healthyTrace.event.hasError()
+        || result.context_switches[0].from_pid != 1
+        || result.context_switches[0].to_pid != 2
+        || result.context_switches[0].preempted
+        || !result.context_switches[0]
+            .caused_by_termination
+        || result.context_switches[1].from_pid != 2
+        || result.context_switches[1].to_pid != 0
+        || result.context_switches[1].preempted
+        || !result.context_switches[1]
+            .caused_by_termination
+    ) {
+        detail =
+            "fault trace attribution or recovery timeline "
+            "mismatch";
         return false;
     }
 
@@ -398,6 +511,8 @@ bool invalidInput(
 
     return true;
 }
+
+// Patch: v1.3-multiprocess-observable-timeline-r1
 
 } // namespace
 

@@ -6,6 +6,7 @@
 #include "zero_cpu/kernel/ProcessLifecycleManager.hpp"
 #include "zero_cpu/kernel/ProcessState.hpp"
 #include "zero_cpu/kernel/ProcessTermination.hpp"
+#include "zero_cpu/trace/TraceEvent.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,28 @@ struct MultiProcessRunOptions {
 
     std::int64_t normal_exit_code = 0;
     std::int64_t fault_exit_code = -1;
+};
+
+struct ProcessExecutionTraceRecord {
+    ProcessExecutionTraceRecord(
+        std::size_t lifecycleStep,
+        kernel::ProcessId pid,
+        const TraceEvent& event
+    );
+
+    std::size_t lifecycle_step = 0;
+    kernel::ProcessId pid = 0;
+    TraceEvent event;
+};
+
+struct ProcessContextSwitchTraceRecord {
+    std::size_t lifecycle_step = 0;
+
+    kernel::ProcessId from_pid = 0;
+    kernel::ProcessId to_pid = 0;
+
+    bool preempted = false;
+    bool caused_by_termination = false;
 };
 
 struct ProcessRunSummary {
@@ -67,6 +90,12 @@ struct MultiProcessRunResult {
 
     std::uint64_t preemption_count = 0;
     std::uint64_t context_switch_count = 0;
+
+    std::vector<ProcessExecutionTraceRecord>
+        execution_trace;
+
+    std::vector<ProcessContextSwitchTraceRecord>
+        context_switches;
 
     std::vector<ProcessRunSummary> processes;
 
