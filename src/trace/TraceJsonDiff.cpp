@@ -457,6 +457,29 @@ const JsonValue& requiredField(
     return it->second;
 }
 
+const JsonValue* optionalField(
+    const JsonValue& object,
+    std::string_view name
+) {
+    if (object.type != JsonType::Object) {
+        throw std::runtime_error(
+            "Expected JSON object while reading optional field: "
+            + std::string(name)
+        );
+    }
+
+    const auto found =
+        object.object.find(
+            std::string(name)
+        );
+
+    if (found == object.object.end()) {
+        return nullptr;
+    }
+
+    return &found->second;
+}
+
 std::string requiredString(
     const JsonValue& object,
     const std::string& name
@@ -630,6 +653,62 @@ TraceDocumentKind validateTraceDocument(
                 + " multi-process process_count does not "
                   "match processes"
             );
+        }
+
+        const JsonValue* softwareInterrupts =
+            optionalField(
+                root,
+                "software_interrupts"
+            );
+
+        const JsonValue* softwareInterruptCount =
+            optionalField(
+                root,
+                "software_interrupt_event_count"
+            );
+
+        if (
+            (softwareInterrupts == nullptr)
+            != (softwareInterruptCount == nullptr)
+        ) {
+            throw std::runtime_error(
+                label
+                + " multi-process software interrupt "
+                  "count/array fields must appear together"
+            );
+        }
+
+        if (softwareInterrupts != nullptr) {
+            if (
+                softwareInterrupts->type
+                != JsonType::Array
+            ) {
+                throw std::runtime_error(
+                    label
+                    + " multi-process software_interrupts "
+                      "field must be an array"
+                );
+            }
+
+            const std::int64_t declaredCount =
+                requiredNumber(
+                    root,
+                    "software_interrupt_event_count"
+                );
+
+            if (
+                declaredCount < 0
+                || static_cast<std::size_t>(
+                    declaredCount
+                ) != softwareInterrupts->array.size()
+            ) {
+                throw std::runtime_error(
+                    label
+                    + " multi-process "
+                      "software_interrupt_event_count "
+                      "does not match software_interrupts"
+                );
+            }
         }
 
         (void)requiredField(root, "invariants");
@@ -826,6 +905,12 @@ JsonValue multiProcessArchitecturalView(
             "processes"
         );
 
+    const JsonValue* softwareInterrupts =
+        optionalField(
+            root,
+            "software_interrupts"
+        );
+
     std::vector<JsonValue> selectedExecution;
     selectedExecution.reserve(
         executionTrace.array.size()
@@ -868,6 +953,46 @@ JsonValue multiProcessArchitecturalView(
                 std::move(selected)
             )
         );
+    }
+
+    std::vector<JsonValue>
+        selectedSoftwareInterrupts;
+
+    if (softwareInterrupts != nullptr) {
+        selectedSoftwareInterrupts.reserve(
+            softwareInterrupts->array.size()
+        );
+
+        const std::vector<std::string>
+            softwareInterruptFields = {
+                "lifecycle_step",
+                "pid",
+                "vector",
+                "has_service_number",
+                "service_number",
+                "has_argument0",
+                "argument0",
+                "has_argument1",
+                "argument1",
+                "has_status",
+                "status",
+                "has_result",
+                "result_value",
+                "disposition",
+                "exit_code"
+            };
+
+        for (
+            const JsonValue& record :
+                softwareInterrupts->array
+        ) {
+            selectedSoftwareInterrupts.push_back(
+                selectObjectFields(
+                    record,
+                    softwareInterruptFields
+                )
+            );
+        }
     }
 
     std::vector<JsonValue>
@@ -957,6 +1082,16 @@ JsonValue multiProcessArchitecturalView(
     }
 
     selectedRoot.emplace(
+        "software_interrupt_event_count",
+        softwareInterrupts != nullptr
+            ? requiredField(
+                root,
+                "software_interrupt_event_count"
+            )
+            : JsonValue::makeNumber(0)
+    );
+
+    selectedRoot.emplace(
         "invariants",
         multiProcessInvariantArchitecturalView(
             requiredField(
@@ -970,6 +1105,15 @@ JsonValue multiProcessArchitecturalView(
         "execution_trace",
         JsonValue::makeArray(
             std::move(selectedExecution)
+        )
+    );
+
+    selectedRoot.emplace(
+        "software_interrupts",
+        JsonValue::makeArray(
+            std::move(
+                selectedSoftwareInterrupts
+            )
         )
     );
 
@@ -1354,3 +1498,5 @@ TraceJsonDiffResult TraceJsonDiff::compareFiles(
 // Patch: v1.3-multiprocess-structural-diff-golden-r1
 
 } // namespace zero_cpu
+
+// Patch: v1.5-protected-syscall-trace-diff-r1

@@ -1,5 +1,10 @@
 #include "zero_cpu/assembler/Assembler.hpp"
+#include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/hardware/HardwareMMIODevice.hpp"
+#include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/system/MultiProcessTraceJsonWriter.hpp"
 #include "zero_cpu/trace/TraceJsonDiff.hpp"
@@ -17,6 +22,12 @@ constexpr const char* kGoldenPath =
 
 constexpr const char* kActualPath =
     "build/test-output/multiprocess_trace_smoke_actual.json";
+
+constexpr const char* kProtectedGoldenPath =
+    "tests/golden/protected_syscall_trace_smoke.json";
+
+constexpr const char* kProtectedActualPath =
+    "build/test-output/protected_syscall_trace_smoke_actual.json";
 
 zero_cpu::kernel::ProcessImage makeImage(
     const std::string& source,
@@ -75,6 +86,89 @@ start:
     );
 }
 
+zero_cpu::system::MultiProcessRunResult
+makeProtectedResult() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::hardware;
+    using namespace zero_cpu::kernel;
+    using namespace zero_cpu::system;
+
+    auto hardware =
+        std::make_shared<MockHardwareBus>(
+            "golden-protected-hardware"
+        );
+
+    hardware->connect();
+
+    auto device =
+        std::make_shared<HardwareMMIODevice>(
+            hardware
+        );
+
+    auto mmio =
+        std::make_shared<MMIOBus>();
+
+    mmio->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        device
+    );
+
+    const char* protectedSource = R"ASM(
+.entry start
+.text
+start:
+    MOV R1, 20
+    MOV R2, 0
+    MOV R3, 42
+    INT 80
+
+    MOV R1, 21
+    MOV R2, 0
+    INT 80
+    STORE [100], R2
+
+    MOV R1, 3
+    MOV R2, 7
+    INT 80
+
+    MOV R5, 999
+)ASM";
+
+    const char* peerSource = R"ASM(
+.entry start
+.text
+start:
+    MOV R6, 222
+    STORE [116], R6
+)ASM";
+
+    MultiProcessRunOptions options;
+    options.quantum = 100;
+    options.max_lifecycle_steps = 100;
+    options.mmio_bus = mmio;
+    options.software_interrupt_handler =
+        std::make_shared<
+            ProtectedSyscallDispatcher
+        >();
+
+    MultiProcessRunner runner;
+
+    return runner.runImages(
+        {
+            makeImage(
+                protectedSource,
+                "golden-protected.zbin"
+            ),
+            makeImage(
+                peerSource,
+                "golden-protected-peer.zbin"
+            )
+        },
+        options
+    );
+}
+
 std::string makeJson(
     std::uint64_t quantum,
     const std::string& producerVersion
@@ -91,6 +185,44 @@ std::string makeJson(
                 makeResult(quantum),
                 metadata
             );
+}
+
+std::string makeProtectedJson(
+    const std::string& producerVersion
+) {
+    zero_cpu::system::MultiProcessTraceJsonMetadata
+        metadata;
+
+    metadata.producer_version =
+        producerVersion;
+
+    return
+        zero_cpu::system::
+            MultiProcessTraceJsonWriter::toJson(
+                makeProtectedResult(),
+                metadata
+            );
+}
+
+bool replaceFirst(
+    std::string& text,
+    const std::string& expected,
+    const std::string& replacement
+) {
+    const std::size_t position =
+        text.find(expected);
+
+    if (position == std::string::npos) {
+        return false;
+    }
+
+    text.replace(
+        position,
+        expected.size(),
+        replacement
+    );
+
+    return true;
 }
 
 void writeGolden() {
@@ -120,9 +252,26 @@ void writeGolden() {
             metadata
         );
 
+    zero_cpu::system::MultiProcessTraceJsonMetadata
+        protectedMetadata;
+
+    protectedMetadata.producer_version =
+        "v1.5-protected-golden";
+
+    zero_cpu::system::
+        MultiProcessTraceJsonWriter::writeFile(
+            kProtectedGoldenPath,
+            makeProtectedResult(),
+            protectedMetadata
+        );
+
     std::cout
-        << "Wrote initial multi-process golden trace:\n"
+        << "Wrote multi-process golden traces:\n"
+        << "  "
         << kGoldenPath
+        << "\n"
+        << "  "
+        << kProtectedGoldenPath
         << "\n";
 }
 
@@ -257,6 +406,111 @@ bool goldenRegression(
     return true;
 }
 
+bool protectedSyscallRegressionDetected(
+    std::string& detail
+) {
+    const std::string expected =
+        makeProtectedJson(
+            "same-metadata"
+        );
+
+    std::string actual = expected;
+
+    if (
+        !replaceFirst(
+            actual,
+            "\"service_number\": 20",
+            "\"service_number\": 99"
+        )
+    ) {
+        detail =
+            "protected syscall fixture did not contain "
+            "the expected service number";
+        return false;
+    }
+
+    const zero_cpu::TraceJsonDiffResult result =
+        zero_cpu::TraceJsonDiff::compareText(
+            expected,
+            actual
+        );
+
+    if (
+        result.equal
+        || result.difference_count == 0
+        || result.first_path.find(
+            "software_interrupts"
+        ) == std::string::npos
+    ) {
+        detail =
+            "architectural diff did not detect "
+            "protected syscall semantic change";
+        return false;
+    }
+
+    return true;
+}
+
+bool protectedGoldenRegression(
+    std::string& detail
+) {
+    if (
+        !std::filesystem::exists(
+            kProtectedGoldenPath
+        )
+    ) {
+        detail =
+            "protected syscall golden fixture is missing; "
+            "run zero_multi_process_trace_diff_test "
+            "--write-golden once";
+        return false;
+    }
+
+    const std::filesystem::path actualPath(
+        kProtectedActualPath
+    );
+
+    if (
+        actualPath.has_parent_path()
+        && !actualPath.parent_path().empty()
+    ) {
+        std::filesystem::create_directories(
+            actualPath.parent_path()
+        );
+    }
+
+    zero_cpu::system::MultiProcessTraceJsonMetadata
+        metadata;
+
+    metadata.producer_version =
+        "v1.5-protected-actual";
+
+    zero_cpu::system::
+        MultiProcessTraceJsonWriter::writeFile(
+            kProtectedActualPath,
+            makeProtectedResult(),
+            metadata
+        );
+
+    const zero_cpu::TraceJsonDiffResult result =
+        zero_cpu::TraceJsonDiff::compareFiles(
+            kProtectedGoldenPath,
+            kProtectedActualPath
+        );
+
+    if (!result.equal) {
+        detail =
+            result.message
+            + "; expected="
+            + result.expected_value
+            + "; actual="
+            + result.actual_value;
+        return false;
+    }
+
+    return true;
+}
+
 // Patch: v1.3-multiprocess-structural-diff-golden-r1
 
 } // namespace
@@ -365,6 +619,30 @@ int main(int argc, char* argv[]) {
         );
     }
 
+    {
+        std::string detail;
+
+        report(
+            "Protected syscall regression detection",
+            protectedSyscallRegressionDetected(
+                detail
+            ),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+
+        report(
+            "Protected syscall golden trace regression",
+            protectedGoldenRegression(
+                detail
+            ),
+            detail
+        );
+    }
+
     std::cout << "\n";
 
     if (failures == 0) {
@@ -382,3 +660,5 @@ int main(int argc, char* argv[]) {
 
     return 1;
 }
+
+// Patch: v1.5-protected-syscall-trace-diff-r1
