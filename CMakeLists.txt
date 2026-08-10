@@ -575,6 +575,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_protected_syscall_trace_test
+    tests/protected_syscall_trace.cpp
+)
+
+target_link_libraries(
+    zero_protected_syscall_trace_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_protected_syscall_trace_test
+)
+
+zero_cpu_enable_coverage(
+    zero_protected_syscall_trace_test
+)
+
+
 add_executable(zero_multi_process_trace_test
     tests/multi_process_trace.cpp
 )
@@ -1002,6 +1021,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;kernel;syscall;process;lifecycle;scheduler"
+    )
+
+    add_test(
+        NAME zero_cpu.protected_syscall_trace
+        COMMAND $<TARGET_FILE:zero_protected_syscall_trace_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.protected_syscall_trace
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;syscall;process;trace;json;invariant"
     )
 
     add_test(

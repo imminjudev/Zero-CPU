@@ -46,6 +46,19 @@ struct ProcessExecutionTraceRecord {
     TraceEvent event;
 };
 
+struct ProcessSoftwareInterruptTraceRecord {
+    ProcessSoftwareInterruptTraceRecord(
+        std::size_t lifecycleStep,
+        kernel::ProcessId pid,
+        const SoftwareInterruptObservation& observation
+    );
+
+    std::size_t lifecycle_step = 0;
+    kernel::ProcessId pid = 0;
+
+    SoftwareInterruptObservation observation;
+};
+
 struct ProcessContextSwitchTraceRecord {
     std::size_t lifecycle_step = 0;
 
@@ -102,6 +115,9 @@ struct MultiProcessRunResult {
     std::vector<ProcessExecutionTraceRecord>
         execution_trace;
 
+    std::vector<ProcessSoftwareInterruptTraceRecord>
+        software_interrupts;
+
     std::vector<ProcessContextSwitchTraceRecord>
         context_switches;
 
@@ -129,5 +145,7 @@ public:
 };
 
 // Patch: v1.4-protected-syscall-hardware-r1
+
+// Patch: v1.5-protected-syscall-observability-r1
 
 } // namespace zero_cpu::system

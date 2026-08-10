@@ -13,11 +13,40 @@ enum class SoftwareInterruptDisposition
     TerminateProcess = 1
 };
 
+inline const char*
+softwareInterruptDispositionToString(
+    SoftwareInterruptDisposition disposition
+) {
+    switch (disposition) {
+    case SoftwareInterruptDisposition::ReturnToCaller:
+        return "ReturnToCaller";
+    case SoftwareInterruptDisposition::TerminateProcess:
+        return "TerminateProcess";
+    }
+
+    return "Unknown";
+}
+
 struct SoftwareInterruptResult {
     SoftwareInterruptDisposition disposition =
         SoftwareInterruptDisposition::ReturnToCaller;
 
     std::int64_t exit_code = 0;
+
+    bool has_service_number = false;
+    std::int64_t service_number = 0;
+
+    bool has_argument0 = false;
+    std::int64_t argument0 = 0;
+
+    bool has_argument1 = false;
+    std::int64_t argument1 = 0;
+
+    bool has_status = false;
+    std::int64_t status = 0;
+
+    bool has_result = false;
+    std::int64_t result_value = 0;
 
     static SoftwareInterruptResult
     returnToCaller() {
@@ -35,6 +64,11 @@ struct SoftwareInterruptResult {
         result.exit_code = exitCode;
         return result;
     }
+};
+
+struct SoftwareInterruptObservation {
+    std::uint8_t vector = 0;
+    SoftwareInterruptResult result;
 };
 
 class SoftwareInterruptHandler {
@@ -55,3 +89,5 @@ public:
 } // namespace zero_cpu
 
 // Patch: v1.4-protected-syscall-hardware-r1
+
+// Patch: v1.5-protected-syscall-observability-r1

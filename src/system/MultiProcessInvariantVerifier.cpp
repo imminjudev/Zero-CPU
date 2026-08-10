@@ -188,6 +188,136 @@ MultiProcessInvariantVerifier::verify(
         lastPcAfter[record.pid] = record.event.pcAfter();
     }
 
+    std::size_t previousSoftwareInterruptStep = 0;
+
+    for (
+        std::size_t index = 0;
+        index < result.software_interrupts.size();
+        ++index
+    ) {
+        const ProcessSoftwareInterruptTraceRecord& record =
+            result.software_interrupts[index];
+
+        if (
+            record.lifecycle_step == 0
+            || record.lifecycle_step > result.lifecycle_steps
+        ) {
+            addViolation(
+                report,
+                "software_interrupt_step_out_of_range",
+                "software interrupt lifecycle step is out of range",
+                record.lifecycle_step,
+                record.pid
+            );
+        }
+
+        if (
+            index != 0
+            && record.lifecycle_step
+                <= previousSoftwareInterruptStep
+        ) {
+            addViolation(
+                report,
+                "software_interrupt_steps_not_strict",
+                "software interrupt events are not strictly ordered",
+                record.lifecycle_step,
+                record.pid
+            );
+        }
+
+        previousSoftwareInterruptStep =
+            record.lifecycle_step;
+
+        if (processIds.find(record.pid) == processIds.end()) {
+            addViolation(
+                report,
+                "software_interrupt_unknown_pid",
+                "software interrupt references an unknown PID",
+                record.lifecycle_step,
+                record.pid
+            );
+        }
+
+        bool matchingExecution = false;
+
+        for (
+            const ProcessExecutionTraceRecord& execution :
+                result.execution_trace
+        ) {
+            if (
+                execution.lifecycle_step
+                    == record.lifecycle_step
+                && execution.pid == record.pid
+            ) {
+                matchingExecution = true;
+                break;
+            }
+        }
+
+        if (!matchingExecution) {
+            addViolation(
+                report,
+                "software_interrupt_without_execution",
+                "software interrupt has no matching execution event",
+                record.lifecycle_step,
+                record.pid
+            );
+        }
+
+        if (
+            record.observation.result.disposition
+            == SoftwareInterruptDisposition::
+                TerminateProcess
+        ) {
+            bool matchingTerminationSwitch = false;
+
+            for (
+                const ProcessContextSwitchTraceRecord& contextSwitch :
+                    result.context_switches
+            ) {
+                if (
+                    contextSwitch.lifecycle_step
+                        == record.lifecycle_step
+                    && contextSwitch.from_pid
+                        == record.pid
+                    && contextSwitch.caused_by_termination
+                ) {
+                    matchingTerminationSwitch = true;
+                    break;
+                }
+            }
+
+            if (!matchingTerminationSwitch) {
+                addViolation(
+                    report,
+                    "terminating_software_interrupt_without_handoff",
+                    "terminating software interrupt has no termination handoff",
+                    record.lifecycle_step,
+                    record.pid
+                );
+            }
+
+            if (processIds.find(record.pid) != processIds.end()) {
+                const ProcessRunSummary& process =
+                    result.process(record.pid);
+
+                if (
+                    !process.has_exit_code
+                    || process.exit_code
+                        != record.observation.result.exit_code
+                ) {
+                    addViolation(
+                        report,
+                        "software_interrupt_exit_code_mismatch",
+                        "software interrupt exit code does not match process summary",
+                        record.lifecycle_step,
+                        record.pid
+                    );
+                }
+            }
+        }
+    }
+
     std::size_t previousSwitchStep = 0;
     std::size_t preemptedSwitches = 0;
     std::size_t terminationSwitches = 0;
@@ -425,3 +555,5 @@ MultiProcessInvariantVerifier::verify(
 }
 
 } // namespace zero_cpu::system
+
+// Patch: v1.5-protected-syscall-observability-r1

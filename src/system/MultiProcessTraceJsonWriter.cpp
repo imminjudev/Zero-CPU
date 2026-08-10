@@ -328,6 +328,164 @@ void appendExecutionTrace(
     oss << "],\n";
 }
 
+void appendSoftwareInterrupts(
+    std::ostringstream& oss,
+    const MultiProcessRunResult& result
+) {
+    if (result.software_interrupts.empty()) {
+        return;
+    }
+
+    sizeField(
+        oss,
+        2,
+        "software_interrupt_event_count",
+        result.software_interrupts.size()
+    );
+
+    indent(oss, 2);
+    oss << "\"software_interrupts\": [\n";
+
+    for (
+        std::size_t index = 0;
+        index < result.software_interrupts.size();
+        ++index
+    ) {
+        const ProcessSoftwareInterruptTraceRecord& record =
+            result.software_interrupts[index];
+
+        const SoftwareInterruptResult& resultValue =
+            record.observation.result;
+
+        indent(oss, 4);
+        oss << "{\n";
+
+        sizeField(
+            oss,
+            6,
+            "lifecycle_step",
+            record.lifecycle_step
+        );
+
+        sizeField(
+            oss,
+            6,
+            "pid",
+            static_cast<std::size_t>(
+                record.pid
+            )
+        );
+
+        sizeField(
+            oss,
+            6,
+            "vector",
+            static_cast<std::size_t>(
+                record.observation.vector
+            )
+        );
+
+        boolField(
+            oss,
+            6,
+            "has_service_number",
+            resultValue.has_service_number
+        );
+
+        int64Field(
+            oss,
+            6,
+            "service_number",
+            resultValue.service_number
+        );
+
+        boolField(
+            oss,
+            6,
+            "has_argument0",
+            resultValue.has_argument0
+        );
+
+        int64Field(
+            oss,
+            6,
+            "argument0",
+            resultValue.argument0
+        );
+
+        boolField(
+            oss,
+            6,
+            "has_argument1",
+            resultValue.has_argument1
+        );
+
+        int64Field(
+            oss,
+            6,
+            "argument1",
+            resultValue.argument1
+        );
+
+        boolField(
+            oss,
+            6,
+            "has_status",
+            resultValue.has_status
+        );
+
+        int64Field(
+            oss,
+            6,
+            "status",
+            resultValue.status
+        );
+
+        boolField(
+            oss,
+            6,
+            "has_result",
+            resultValue.has_result
+        );
+
+        int64Field(
+            oss,
+            6,
+            "result_value",
+            resultValue.result_value
+        );
+
+        stringField(
+            oss,
+            6,
+            "disposition",
+            softwareInterruptDispositionToString(
+                resultValue.disposition
+            )
+        );
+
+        int64Field(
+            oss,
+            6,
+            "exit_code",
+            resultValue.exit_code,
+            false
+        );
+
+        indent(oss, 4);
+        oss << "}";
+
+        finishField(
+            oss,
+            index + 1
+                < result.software_interrupts.size()
+        );
+    }
+
+    indent(oss, 2);
+    oss << "],\n";
+}
+
 void appendContextSwitches(
     std::ostringstream& oss,
     const MultiProcessRunResult& result
@@ -658,6 +816,11 @@ std::string MultiProcessTraceJsonWriter::toJson(
         result
     );
 
+    appendSoftwareInterrupts(
+        oss,
+        result
+    );
+
     appendContextSwitches(
         oss,
         result
@@ -704,3 +867,5 @@ void MultiProcessTraceJsonWriter::writeFile(
 }
 
 } // namespace zero_cpu::system
+
+// Patch: v1.5-protected-syscall-observability-r1

@@ -23,10 +23,21 @@ ProtectedSyscallDispatcher::handle(
     CPUState& state,
     MMIOBus* mmioBus
 ) {
+    SoftwareInterruptResult result;
+
+    auto finish = [&](
+        std::int64_t status
+    ) {
+        setStatus(state, status);
+        result.has_status = true;
+        result.status = status;
+        return result;
+    };
+
     if (!handles(vector)) {
-        setStatus(state, kStatusUnsupported);
-        return SoftwareInterruptResult::
-            returnToCaller();
+        return finish(
+            kStatusUnsupported
+        );
     }
 
     const std::int64_t syscallNumber =
@@ -34,30 +45,39 @@ ProtectedSyscallDispatcher::handle(
             RegisterName::R1
         );
 
+    result.has_service_number = true;
+    result.service_number = syscallNumber;
+
     if (syscallNumber == kExitSyscall) {
         const std::int64_t exitCode =
             state.registers().get(
                 RegisterName::R2
             );
 
+        result.has_argument0 = true;
+        result.argument0 = exitCode;
+
+        result.disposition =
+            SoftwareInterruptDisposition::
+                TerminateProcess;
+
+        result.exit_code = exitCode;
+
         state.registers().set(
             RegisterName::R7,
             exitCode
         );
 
-        setStatus(state, kStatusOk);
-
-        return SoftwareInterruptResult::
-            terminateProcess(exitCode);
+        return finish(kStatusOk);
     }
 
     if (
         syscallNumber != kHardwareWriteSyscall
         && syscallNumber != kHardwareReadSyscall
     ) {
-        setStatus(state, kStatusUnsupported);
-        return SoftwareInterruptResult::
-            returnToCaller();
+        return finish(
+            kStatusUnsupported
+        );
     }
 
     const std::int64_t offsetValue =
@@ -65,22 +85,19 @@ ProtectedSyscallDispatcher::handle(
             RegisterName::R2
         );
 
+    result.has_argument0 = true;
+    result.argument0 = offsetValue;
+
     if (!validHardwareOffset(offsetValue)) {
-        setStatus(
-            state,
+        return finish(
             kStatusInvalidHardwareOffset
         );
-        return SoftwareInterruptResult::
-            returnToCaller();
     }
 
     if (mmioBus == nullptr) {
-        setStatus(
-            state,
+        return finish(
             kStatusHardwareUnavailable
         );
-        return SoftwareInterruptResult::
-            returnToCaller();
     }
 
     const std::size_t offset =
@@ -92,12 +109,9 @@ ProtectedSyscallDispatcher::handle(
         memory_map::kHardwareBase + offset;
 
     if (!mmioBus->hasDeviceAt(address)) {
-        setStatus(
-            state,
+        return finish(
             kStatusHardwareUnavailable
         );
-        return SoftwareInterruptResult::
-            returnToCaller();
     }
 
     try {
@@ -110,10 +124,11 @@ ProtectedSyscallDispatcher::handle(
                     RegisterName::R3
                 );
 
+            result.has_argument1 = true;
+            result.argument1 = value;
+
             mmioBus->write(address, value);
-            setStatus(state, kStatusOk);
-            return SoftwareInterruptResult::
-                returnToCaller();
+            return finish(kStatusOk);
         }
 
         const std::int64_t value =
@@ -124,16 +139,15 @@ ProtectedSyscallDispatcher::handle(
             value
         );
 
-        setStatus(state, kStatusOk);
+        result.has_result = true;
+        result.result_value = value;
+
+        return finish(kStatusOk);
     } catch (const std::exception&) {
-        setStatus(
-            state,
+        return finish(
             kStatusHardwareError
         );
     }
-
-    return SoftwareInterruptResult::
-        returnToCaller();
 }
 
 bool ProtectedSyscallDispatcher::
@@ -166,3 +180,5 @@ void ProtectedSyscallDispatcher::setStatus(
 } // namespace zero_cpu::kernel
 
 // Patch: v1.4-protected-syscall-hardware-r1
+
+// Patch: v1.5-protected-syscall-observability-r1

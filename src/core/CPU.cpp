@@ -98,6 +98,9 @@ void CPU::reset() {
 
     process_exit_requested_ = false;
     process_exit_code_ = 0;
+
+    has_software_interrupt_observation_ = false;
+    software_interrupt_observation_ = {};
 }
 
 void CPU::loadProgram(
@@ -123,6 +126,7 @@ void CPU::loadProgram(
 
     process_exit_requested_ = false;
     process_exit_code_ = 0;
+
 }
 
 void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
@@ -156,12 +160,15 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
 
     process_exit_requested_ = false;
     process_exit_code_ = 0;
+
 }
 
 void CPU::step() {
     if (state_.halted() || state_.hasError()) {
         return;
     }
+
+    clearSoftwareInterruptObservation();
 
     const CPUState before_interrupt = state_;
 
@@ -473,6 +480,26 @@ bool CPU::hasSoftwareInterruptHandler() const {
     );
 }
 
+bool CPU::hasSoftwareInterruptObservation() const {
+    return has_software_interrupt_observation_;
+}
+
+const SoftwareInterruptObservation&
+CPU::softwareInterruptObservation() const {
+    if (!has_software_interrupt_observation_) {
+        throw std::runtime_error(
+            "CPU has no software interrupt observation"
+        );
+    }
+
+    return software_interrupt_observation_;
+}
+
+void CPU::clearSoftwareInterruptObservation() {
+    has_software_interrupt_observation_ = false;
+    software_interrupt_observation_ = {};
+}
+
 bool CPU::hasProcessExitRequest() const {
     return process_exit_requested_;
 }
@@ -589,6 +616,14 @@ bool CPU::serviceHostSoftwareInterrupt(
         "Negative host software interrupt "
         "return address"
     );
+
+    software_interrupt_observation_.vector =
+        vector;
+
+    software_interrupt_observation_.result =
+        result;
+
+    has_software_interrupt_observation_ = true;
 
     if (
         result.disposition
@@ -2543,3 +2578,6 @@ void CPU::setRuntimeError(const std::string& message) {
 // Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu
+// Patch: v1.5-protected-syscall-observability-r1
+
+// Patch: v1.5-protected-syscall-observability-fix-r3

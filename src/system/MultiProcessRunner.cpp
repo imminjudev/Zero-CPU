@@ -164,6 +164,17 @@ ProcessExecutionTraceRecord(
       event(traceEvent) {
 }
 
+ProcessSoftwareInterruptTraceRecord::
+ProcessSoftwareInterruptTraceRecord(
+    std::size_t lifecycleStep,
+    kernel::ProcessId processId,
+    const SoftwareInterruptObservation& interruptObservation
+)
+    : lifecycle_step(lifecycleStep),
+      pid(processId),
+      observation(interruptObservation) {
+}
+
 bool ProcessRunSummary::terminated() const {
     return state == kernel::ProcessState::Terminated
         && has_exit_code;
@@ -301,6 +312,9 @@ MultiProcessRunner::runImages(
     std::vector<ProcessExecutionTraceRecord>
         executionTrace;
 
+    std::vector<ProcessSoftwareInterruptTraceRecord>
+        softwareInterrupts;
+
     std::vector<ProcessContextSwitchTraceRecord>
         contextSwitches;
 
@@ -356,6 +370,18 @@ MultiProcessRunner::runImages(
             );
         }
 
+        if (
+            cpu.hasSoftwareInterruptObservation()
+        ) {
+            softwareInterrupts.emplace_back(
+                lifecycleSteps,
+                beforePid,
+                cpu.softwareInterruptObservation()
+            );
+
+            cpu.clearSoftwareInterruptObservation();
+        }
+
         const kernel::ProcessId afterPid =
             table.hasRunningProcess()
                 ? table.runningProcessId()
@@ -407,6 +433,9 @@ MultiProcessRunner::runImages(
     result.execution_trace =
         std::move(executionTrace);
 
+    result.software_interrupts =
+        std::move(softwareInterrupts);
+
     result.context_switches =
         std::move(contextSwitches);
 
@@ -436,3 +465,5 @@ MultiProcessRunner::runImages(
 // Patch: v1.4-protected-syscall-hardware-r1
 
 } // namespace zero_cpu::system
+
+// Patch: v1.5-protected-syscall-observability-r1

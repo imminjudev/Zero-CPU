@@ -5,6 +5,7 @@
 #include "zero_cpu/core/CPUState.hpp"
 #include "zero_cpu/core/InterruptController.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
+#include "zero_cpu/core/SoftwareInterruptHandler.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
@@ -18,8 +19,6 @@
 #include <vector>
 
 namespace zero_cpu {
-
-class SoftwareInterruptHandler;
 
 class CPU {
 public:
@@ -97,6 +96,13 @@ public:
     void clearSoftwareInterruptHandler();
     bool hasSoftwareInterruptHandler() const;
 
+    bool hasSoftwareInterruptObservation() const;
+
+    const SoftwareInterruptObservation&
+    softwareInterruptObservation() const;
+
+    void clearSoftwareInterruptObservation();
+
     bool hasProcessExitRequest() const;
     std::int64_t processExitCode() const;
     void clearProcessExitRequest();
@@ -127,6 +133,11 @@ private:
     std::shared_ptr<InterruptController> interrupt_controller_;
     std::shared_ptr<SoftwareInterruptHandler>
         software_interrupt_handler_;
+
+    bool has_software_interrupt_observation_ = false;
+
+    SoftwareInterruptObservation
+        software_interrupt_observation_;
 
     bool process_exit_requested_ = false;
     std::int64_t process_exit_code_ = 0;
@@ -300,5 +311,7 @@ private:
 };
 
 // Patch: v1.4-protected-syscall-hardware-r1
+
+// Patch: v1.5-protected-syscall-observability-r1
 
 } // namespace zero_cpu
