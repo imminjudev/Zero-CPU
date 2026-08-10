@@ -556,6 +556,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_protected_process_exit_test
+    tests/protected_process_exit.cpp
+)
+
+target_link_libraries(
+    zero_protected_process_exit_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_protected_process_exit_test
+)
+
+zero_cpu_enable_coverage(
+    zero_protected_process_exit_test
+)
+
+
 add_executable(zero_multi_process_trace_test
     tests/multi_process_trace.cpp
 )
@@ -938,6 +957,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;kernel;syscall;process;mmio;hardware"
+    )
+
+    add_test(
+        NAME zero_cpu.protected_process_exit
+        COMMAND $<TARGET_FILE:zero_protected_process_exit_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.protected_process_exit
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;kernel;syscall;process;lifecycle;scheduler"
     )
 
     add_test(

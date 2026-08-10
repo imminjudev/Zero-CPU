@@ -95,6 +95,9 @@ void CPU::reset() {
 
     kernel_stack_pointer_ = memory_map::kKernelStackBase;
     using_kernel_interrupt_stack_ = false;
+
+    process_exit_requested_ = false;
+    process_exit_code_ = 0;
 }
 
 void CPU::loadProgram(
@@ -117,6 +120,9 @@ void CPU::loadProgram(
 
     kernel_stack_pointer_ = memory_map::kKernelStackBase;
     using_kernel_interrupt_stack_ = false;
+
+    process_exit_requested_ = false;
+    process_exit_code_ = 0;
 }
 
 void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
@@ -147,6 +153,9 @@ void CPU::loadBinaryProgram(const binary::BinaryProgram& program) {
 
     kernel_stack_pointer_ = memory_map::kKernelStackBase;
     using_kernel_interrupt_stack_ = false;
+
+    process_exit_requested_ = false;
+    process_exit_code_ = 0;
 }
 
 void CPU::step() {
@@ -464,6 +473,25 @@ bool CPU::hasSoftwareInterruptHandler() const {
     );
 }
 
+bool CPU::hasProcessExitRequest() const {
+    return process_exit_requested_;
+}
+
+std::int64_t CPU::processExitCode() const {
+    if (!process_exit_requested_) {
+        throw std::runtime_error(
+            "CPU has no process exit request"
+        );
+    }
+
+    return process_exit_code_;
+}
+
+void CPU::clearProcessExitRequest() {
+    process_exit_requested_ = false;
+    process_exit_code_ = 0;
+}
+
 void CPU::addClockedDevice(std::shared_ptr<ClockedDevice> device) {
     if (!device) {
         throw std::runtime_error("Clocked device must not be null");
@@ -540,12 +568,15 @@ bool CPU::serviceHostSoftwareInterrupt(
         static_cast<std::int64_t>(vector)
     );
 
+    SoftwareInterruptResult result;
+
     try {
-        software_interrupt_handler_->handle(
-            vector,
-            state_,
-            mmio_bus_.get()
-        );
+        result =
+            software_interrupt_handler_->handle(
+                vector,
+                state_,
+                mmio_bus_.get()
+            );
     } catch (...) {
         restoreInterruptFrame(
             "Negative host software interrupt "
@@ -558,6 +589,16 @@ bool CPU::serviceHostSoftwareInterrupt(
         "Negative host software interrupt "
         "return address"
     );
+
+    if (
+        result.disposition
+        == SoftwareInterruptDisposition::
+            TerminateProcess
+    ) {
+        process_exit_requested_ = true;
+        process_exit_code_ = result.exit_code;
+        state_.setHalted(true);
+    }
 
     return true;
 }

@@ -142,6 +142,15 @@ ProcessLifecycleManager::step(
             ? cpu.state().errorMessage()
             : std::string();
 
+    const bool hasRequestedExitCode =
+        !faulted
+        && cpu.hasProcessExitRequest();
+
+    const std::int64_t normalExitCode =
+        hasRequestedExitCode
+            ? cpu.processExitCode()
+            : normal_exit_code_;
+
     const ProcessContext finalContext =
         captureProcessContextSnapshot(
             terminatedPid,
@@ -165,7 +174,7 @@ ProcessLifecycleManager::step(
             terminatedPid,
             finalContext,
             cpu.state().memory(),
-            normal_exit_code_
+            normalExitCode
         );
     }
 
@@ -185,6 +194,13 @@ ProcessLifecycleManager::step(
 
     table = std::move(stagedTable);
     scheduler = std::move(stagedScheduler);
+
+    if (
+        hasRequestedExitCode
+        && cpu.hasProcessExitRequest()
+    ) {
+        cpu.clearProcessExitRequest();
+    }
 
     ++termination_count_;
 

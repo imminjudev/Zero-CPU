@@ -97,6 +97,10 @@ public:
     void clearSoftwareInterruptHandler();
     bool hasSoftwareInterruptHandler() const;
 
+    bool hasProcessExitRequest() const;
+    std::int64_t processExitCode() const;
+    void clearProcessExitRequest();
+
     void addClockedDevice(std::shared_ptr<ClockedDevice> device);
     void clearClockedDevices();
     std::size_t clockedDeviceCount() const;
@@ -123,6 +127,10 @@ private:
     std::shared_ptr<InterruptController> interrupt_controller_;
     std::shared_ptr<SoftwareInterruptHandler>
         software_interrupt_handler_;
+
+    bool process_exit_requested_ = false;
+    std::int64_t process_exit_code_ = 0;
+
     std::vector<std::shared_ptr<ClockedDevice>> clocked_devices_;
 
     bool servicePendingInterruptIfNeeded();

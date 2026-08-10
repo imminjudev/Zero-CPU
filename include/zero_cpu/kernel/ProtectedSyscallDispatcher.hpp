@@ -13,6 +13,9 @@ public:
         kSyscallVector = 80;
 
     inline static constexpr std::int64_t
+        kExitSyscall = 3;
+
+    inline static constexpr std::int64_t
         kHardwareWriteSyscall = 20;
 
     inline static constexpr std::int64_t
@@ -37,7 +40,7 @@ public:
         std::uint8_t vector
     ) const override;
 
-    void handle(
+    SoftwareInterruptResult handle(
         std::uint8_t vector,
         CPUState& state,
         MMIOBus* mmioBus

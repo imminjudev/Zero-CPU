@@ -17,14 +17,16 @@ bool ProtectedSyscallDispatcher::handles(
     return vector == kSyscallVector;
 }
 
-void ProtectedSyscallDispatcher::handle(
+SoftwareInterruptResult
+ProtectedSyscallDispatcher::handle(
     std::uint8_t vector,
     CPUState& state,
     MMIOBus* mmioBus
 ) {
     if (!handles(vector)) {
         setStatus(state, kStatusUnsupported);
-        return;
+        return SoftwareInterruptResult::
+            returnToCaller();
     }
 
     const std::int64_t syscallNumber =
@@ -32,12 +34,30 @@ void ProtectedSyscallDispatcher::handle(
             RegisterName::R1
         );
 
+    if (syscallNumber == kExitSyscall) {
+        const std::int64_t exitCode =
+            state.registers().get(
+                RegisterName::R2
+            );
+
+        state.registers().set(
+            RegisterName::R7,
+            exitCode
+        );
+
+        setStatus(state, kStatusOk);
+
+        return SoftwareInterruptResult::
+            terminateProcess(exitCode);
+    }
+
     if (
         syscallNumber != kHardwareWriteSyscall
         && syscallNumber != kHardwareReadSyscall
     ) {
         setStatus(state, kStatusUnsupported);
-        return;
+        return SoftwareInterruptResult::
+            returnToCaller();
     }
 
     const std::int64_t offsetValue =
@@ -50,7 +70,8 @@ void ProtectedSyscallDispatcher::handle(
             state,
             kStatusInvalidHardwareOffset
         );
-        return;
+        return SoftwareInterruptResult::
+            returnToCaller();
     }
 
     if (mmioBus == nullptr) {
@@ -58,7 +79,8 @@ void ProtectedSyscallDispatcher::handle(
             state,
             kStatusHardwareUnavailable
         );
-        return;
+        return SoftwareInterruptResult::
+            returnToCaller();
     }
 
     const std::size_t offset =
@@ -74,7 +96,8 @@ void ProtectedSyscallDispatcher::handle(
             state,
             kStatusHardwareUnavailable
         );
-        return;
+        return SoftwareInterruptResult::
+            returnToCaller();
     }
 
     try {
@@ -89,7 +112,8 @@ void ProtectedSyscallDispatcher::handle(
 
             mmioBus->write(address, value);
             setStatus(state, kStatusOk);
-            return;
+            return SoftwareInterruptResult::
+                returnToCaller();
         }
 
         const std::int64_t value =
@@ -107,6 +131,9 @@ void ProtectedSyscallDispatcher::handle(
             kStatusHardwareError
         );
     }
+
+    return SoftwareInterruptResult::
+        returnToCaller();
 }
 
 bool ProtectedSyscallDispatcher::

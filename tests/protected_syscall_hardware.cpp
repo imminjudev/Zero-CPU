@@ -42,7 +42,7 @@ public:
         return dispatcher_.handles(vector);
     }
 
-    void handle(
+    zero_cpu::SoftwareInterruptResult handle(
         std::uint8_t vector,
         zero_cpu::CPUState& state,
         zero_cpu::MMIOBus* mmioBus
@@ -56,7 +56,7 @@ public:
             all_kernel_mode_ = false;
         }
 
-        dispatcher_.handle(
+        return dispatcher_.handle(
             vector,
             state,
             mmioBus
