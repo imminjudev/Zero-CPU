@@ -19,6 +19,7 @@
 #include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/debug/MultiProcessDebugSession.hpp"
 #include "zero_cpu/debug/MultiProcessDebugConsole.hpp"
+#include "zero_cpu/hardware/HardwareBus.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/HardwareProtocol.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -29,6 +30,7 @@
 #include "zero_cpu/isa/Instruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
@@ -2477,6 +2479,170 @@ std::size_t parseRunProcessesPositiveSize(
     );
 }
 
+struct ProcessExitExpectation {
+    zero_cpu::kernel::ProcessId pid = 0;
+    std::int64_t exit_code = 0;
+};
+
+struct HardwareRegisterExpectation {
+    std::size_t offset = 0;
+    std::int64_t value = 0;
+};
+
+ProcessExitExpectation
+parseProcessExitExpectation(
+    const std::string& text
+) {
+    const std::size_t separator =
+        text.find('=');
+
+    if (
+        separator == std::string::npos
+        || separator == 0
+        || separator + 1 >= text.size()
+    ) {
+        throw std::invalid_argument(
+            "Invalid --expect-exit value. "
+            "Expected PID=CODE, got: "
+            + text
+        );
+    }
+
+    const std::string pidText =
+        text.substr(0, separator);
+
+    std::size_t parsedPidLength = 0;
+    const unsigned long long rawPid =
+        std::stoull(
+            pidText,
+            &parsedPidLength,
+            0
+        );
+
+    if (
+        parsedPidLength != pidText.size()
+        || rawPid == 0
+        || rawPid
+            > static_cast<unsigned long long>(
+                std::numeric_limits<
+                    zero_cpu::kernel::ProcessId
+                >::max()
+            )
+    ) {
+        throw std::invalid_argument(
+            "Invalid process ID in --expect-exit: "
+            + text
+        );
+    }
+
+    const std::string codeText =
+        text.substr(separator + 1);
+
+    std::size_t parsedCodeLength = 0;
+    const long long rawCode =
+        std::stoll(
+            codeText,
+            &parsedCodeLength,
+            0
+        );
+
+    if (parsedCodeLength != codeText.size()) {
+        throw std::invalid_argument(
+            "Invalid exit code in --expect-exit: "
+            + text
+        );
+    }
+
+    ProcessExitExpectation expectation;
+    expectation.pid =
+        static_cast<
+            zero_cpu::kernel::ProcessId
+        >(rawPid);
+    expectation.exit_code =
+        static_cast<std::int64_t>(rawCode);
+
+    return expectation;
+}
+
+HardwareRegisterExpectation
+parseHardwareRegisterExpectation(
+    const std::string& text
+) {
+    const std::size_t separator =
+        text.find('=');
+
+    if (
+        separator == std::string::npos
+        || separator == 0
+        || separator + 1 >= text.size()
+    ) {
+        throw std::invalid_argument(
+            "Invalid --expect-hardware value. "
+            "Expected OFFSET=VALUE, got: "
+            + text
+        );
+    }
+
+    const std::string offsetText =
+        text.substr(0, separator);
+
+    std::size_t parsedOffsetLength = 0;
+    const unsigned long long rawOffset =
+        std::stoull(
+            offsetText,
+            &parsedOffsetLength,
+            0
+        );
+
+    if (
+        parsedOffsetLength != offsetText.size()
+        || rawOffset
+            >= static_cast<unsigned long long>(
+                zero_cpu::memory_map::
+                    kHardwareSize
+            )
+        || rawOffset
+            % zero_cpu::memory_map::
+                kHardwareRegisterWidth
+            != 0
+    ) {
+        throw std::invalid_argument(
+            "Invalid hardware offset in "
+            "--expect-hardware: "
+            + text
+        );
+    }
+
+    const std::string valueText =
+        text.substr(separator + 1);
+
+    std::size_t parsedValueLength = 0;
+    const long long rawValue =
+        std::stoll(
+            valueText,
+            &parsedValueLength,
+            0
+        );
+
+    if (parsedValueLength != valueText.size()) {
+        throw std::invalid_argument(
+            "Invalid hardware value in "
+            "--expect-hardware: "
+            + text
+        );
+    }
+
+    HardwareRegisterExpectation expectation;
+    expectation.offset =
+        static_cast<std::size_t>(rawOffset);
+    expectation.value =
+        static_cast<std::int64_t>(rawValue);
+
+    return expectation;
+}
+
+// Patch: v1.4-protected-runtime-cli-r1
+
 int runProcessesCommand(
     int argc,
     char* argv[],
@@ -2488,6 +2654,19 @@ int runProcessesCommand(
 
     MultiProcessRunOptions options;
     std::vector<std::string> paths;
+
+    bool protectedSyscalls = false;
+    bool useMockHardware = false;
+
+    std::string serialPort;
+    std::uint32_t serialBaud = 115200;
+    bool baudSpecified = false;
+
+    std::vector<ProcessExitExpectation>
+        exitExpectations;
+
+    std::vector<HardwareRegisterExpectation>
+        hardwareExpectations;
 
     int index = startIndex;
 
@@ -2529,6 +2708,124 @@ int runProcessesCommand(
             continue;
         }
 
+        if (argument == "--protected-syscalls") {
+            protectedSyscalls = true;
+            ++index;
+            continue;
+        }
+
+        if (argument == "--hardware-mock") {
+            if (!serialPort.empty()) {
+                throw std::invalid_argument(
+                    "--hardware-mock cannot be combined "
+                    "with --hardware-serial"
+                );
+            }
+
+            useMockHardware = true;
+            protectedSyscalls = true;
+            ++index;
+            continue;
+        }
+
+        if (argument == "--hardware-serial") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--hardware-serial requires a port"
+                );
+            }
+
+            if (useMockHardware) {
+                throw std::invalid_argument(
+                    "--hardware-serial cannot be combined "
+                    "with --hardware-mock"
+                );
+            }
+
+            serialPort = argv[index + 1];
+
+            if (serialPort.empty()) {
+                throw std::invalid_argument(
+                    "--hardware-serial port must not be empty"
+                );
+            }
+
+            protectedSyscalls = true;
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--baud") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--baud requires a value"
+                );
+            }
+
+            const std::uint64_t value =
+                parseRunProcessesPositiveU64(
+                    argv[index + 1],
+                    "--baud"
+                );
+
+            if (
+                value
+                > static_cast<std::uint64_t>(
+                    std::numeric_limits<
+                        std::uint32_t
+                    >::max()
+                )
+            ) {
+                throw std::out_of_range(
+                    "--baud is too large"
+                );
+            }
+
+            serialBaud =
+                static_cast<std::uint32_t>(
+                    value
+                );
+
+            baudSpecified = true;
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--expect-exit") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--expect-exit requires PID=CODE"
+                );
+            }
+
+            exitExpectations.push_back(
+                parseProcessExitExpectation(
+                    argv[index + 1]
+                )
+            );
+
+            index += 2;
+            continue;
+        }
+
+        if (argument == "--expect-hardware") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument(
+                    "--expect-hardware requires "
+                    "OFFSET=VALUE"
+                );
+            }
+
+            hardwareExpectations.push_back(
+                parseHardwareRegisterExpectation(
+                    argv[index + 1]
+                )
+            );
+
+            index += 2;
+            continue;
+        }
+
         if (argument.rfind("--", 0) == 0) {
             throw std::invalid_argument(
                 "Unknown run-processes option: "
@@ -2547,10 +2844,177 @@ int runProcessesCommand(
         );
     }
 
+    if (baudSpecified && serialPort.empty()) {
+        throw std::invalid_argument(
+            "--baud requires --hardware-serial"
+        );
+    }
+
+    if (
+        !hardwareExpectations.empty()
+        && !useMockHardware
+    ) {
+        throw std::invalid_argument(
+            "--expect-hardware currently requires "
+            "--hardware-mock"
+        );
+    }
+
+    std::shared_ptr<
+        hardware::MockHardwareBus
+    > mockHardware;
+
+    std::shared_ptr<
+        hardware::HardwareBus
+    > hardwareBus;
+
+    if (useMockHardware) {
+        mockHardware =
+            std::make_shared<
+                hardware::MockHardwareBus
+            >(
+                "cli-protected-hardware"
+            );
+
+        mockHardware->connect();
+        hardwareBus = mockHardware;
+    } else if (!serialPort.empty()) {
+        auto transport =
+            std::make_shared<
+                hardware::WindowsSerialTransport
+            >(
+                serialPort,
+                serialBaud
+            );
+
+        auto serialHardware =
+            std::make_shared<
+                hardware::SerialHardwareBus
+            >(
+                transport
+            );
+
+        serialHardware->connect();
+        hardwareBus = serialHardware;
+
+        std::cout
+            << "Protected serial hardware: "
+            << serialPort
+            << " @ "
+            << serialBaud
+            << " baud\n";
+    }
+
+    if (hardwareBus) {
+        auto device =
+            std::make_shared<
+                hardware::HardwareMMIODevice
+            >(
+                hardwareBus
+            );
+
+        auto mmio =
+            std::make_shared<MMIOBus>();
+
+        mmio->mapDevice(
+            memory_map::kHardwareBase,
+            memory_map::kHardwareSize,
+            device
+        );
+
+        options.mmio_bus = mmio;
+    }
+
+    if (protectedSyscalls) {
+        options.software_interrupt_handler =
+            std::make_shared<
+                kernel::ProtectedSyscallDispatcher
+            >();
+
+        std::cout
+            << "Protected syscalls: enabled\n";
+    }
+
     MultiProcessRunner runner;
 
     const MultiProcessRunResult result =
         runner.runFiles(paths, options);
+
+    bool expectationsPassed = true;
+
+    for (
+        const ProcessExitExpectation& expectation :
+        exitExpectations
+    ) {
+        bool passed = false;
+        std::int64_t actual = 0;
+
+        try {
+            const ProcessRunSummary& process =
+                result.process(
+                    expectation.pid
+                );
+
+            if (process.has_exit_code) {
+                actual = process.exit_code;
+                passed =
+                    actual
+                    == expectation.exit_code;
+            }
+        } catch (const std::exception&) {
+            passed = false;
+        }
+
+        if (passed) {
+            std::cout
+                << "[PASS] PID "
+                << expectation.pid
+                << " exit code = "
+                << expectation.exit_code
+                << "\n";
+        } else {
+            std::cout
+                << "[FAIL] PID "
+                << expectation.pid
+                << " exit code expected "
+                << expectation.exit_code
+                << " but got "
+                << actual
+                << "\n";
+
+            expectationsPassed = false;
+        }
+    }
+
+    for (
+        const HardwareRegisterExpectation& expectation :
+        hardwareExpectations
+    ) {
+        const std::int64_t actual =
+            mockHardware->registerValue(
+                expectation.offset
+            );
+
+        if (actual == expectation.value) {
+            std::cout
+                << "[PASS] Hardware["
+                << expectation.offset
+                << "] = "
+                << actual
+                << "\n";
+        } else {
+            std::cout
+                << "[FAIL] Hardware["
+                << expectation.offset
+                << "] expected "
+                << expectation.value
+                << " but got "
+                << actual
+                << "\n";
+
+            expectationsPassed = false;
+        }
+    }
 
     std::cout
         << "=== Zero-CPU Multi-Process Run ==="
@@ -2693,6 +3157,10 @@ int runProcessesCommand(
         == ProcessRuntimeState::Deadlocked
     ) {
         return 4;
+    }
+
+    if (!expectationsPassed) {
+        return 3;
     }
 
     if (result.fault_count != 0) {
@@ -7612,7 +8080,7 @@ void printUsage() {
     std::cout << "  zero_cli bio-os-runner-test <bio_os_directory>\n";
     std::cout << "  zero_cli syscall-table\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
-    std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] <app1.zbin> [app2.zbin ...]\n";
+    std::cout << "  zero_cli run-processes [--quantum N] [--max-steps N] [--protected-syscalls] [--hardware-mock | --hardware-serial PORT] [--baud N] [--expect-exit PID=CODE] [--expect-hardware OFFSET=VALUE] <app1.zbin> [app2.zbin ...]\n";
     std::cout << "  zero_cli debug-binary <input.zbin> [--break <address>...] [--max-steps N] [--step N] [--registers] [--memory <address> <bytes>...] [--disassemble <address> <instructions>...]\n";
     std::cout << "  zero_cli debug-shell <input.zbin> [--commands <file>] [--max-steps N]\n";
     std::cout << "  zero_cli debug-processes [--quantum N] [--max-steps N] [--commands <file>] <app1.zbin> <app2.zbin> [more.zbin ...]\n";

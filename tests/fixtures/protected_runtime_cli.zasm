@@ -1,0 +1,23 @@
+; v1.4 protected run-processes CLI integration
+; Patch: v1.4-protected-runtime-cli-r1
+
+.entry start
+.text
+
+start:
+    MOV R1, 20
+    MOV R2, 0
+    MOV R3, 42
+    INT 80
+
+    MOV R1, 21
+    MOV R2, 0
+    INT 80
+    STORE [100], R2
+
+    MOV R1, 3
+    MOV R2, 7
+    INT 80
+
+    MOV R5, 999
+    STORE [108], R5
