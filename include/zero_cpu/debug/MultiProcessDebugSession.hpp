@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -32,6 +33,11 @@ struct MultiProcessDebugOptions {
 
     std::int64_t normal_exit_code = 0;
     std::int64_t fault_exit_code = -1;
+
+    std::shared_ptr<MMIOBus> mmio_bus;
+
+    std::shared_ptr<SoftwareInterruptHandler>
+        software_interrupt_handler;
 };
 
 enum class ProcessMemoryWatchMode {
@@ -473,5 +479,7 @@ private:
         bool causedByTermination
     );
 };
+
+// Patch: v1.4-protected-debug-runtime-r1
 
 } // namespace zero_cpu::debug

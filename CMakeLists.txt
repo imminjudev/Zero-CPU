@@ -746,6 +746,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_protected_debug_runtime_test
+    tests/protected_debug_runtime.cpp
+)
+
+target_link_libraries(
+    zero_protected_debug_runtime_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_protected_debug_runtime_test
+)
+
+zero_cpu_enable_coverage(
+    zero_protected_debug_runtime_test
+)
+
+
 add_executable(zero_debug_multi_process_controls_test
     tests/debug_multi_process_controls.cpp
 )
@@ -853,6 +872,19 @@ if (BUILD_TESTING)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             TIMEOUT 60
             LABELS "zero-cpu;debugger;process;scheduler;multitasking"
+    )
+
+    add_test(
+        NAME zero_cpu.protected_debug_runtime
+        COMMAND $<TARGET_FILE:zero_protected_debug_runtime_test>
+    )
+
+    set_tests_properties(
+        zero_cpu.protected_debug_runtime
+        PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            TIMEOUT 60
+            LABELS "zero-cpu;debugger;process;syscall;mmio;hardware"
     )
 
     add_test(

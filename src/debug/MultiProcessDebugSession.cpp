@@ -1270,6 +1270,18 @@ void MultiProcessDebugSession::initialize(
         );
     }
 
+    if (options_.mmio_bus) {
+        cpu_.setMMIOBus(
+            options_.mmio_bus
+        );
+    }
+
+    if (options_.software_interrupt_handler) {
+        cpu_.setSoftwareInterruptHandler(
+            options_.software_interrupt_handler
+        );
+    }
+
     runtime_state_ =
         lifecycle_.start(
             cpu_,
@@ -1883,5 +1895,7 @@ void MultiProcessDebugSession::recordContextSwitch(
         record
     );
 }
+
+// Patch: v1.4-protected-debug-runtime-r1
 
 } // namespace zero_cpu::debug
