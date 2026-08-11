@@ -1,137 +1,161 @@
 # Zero-CPU Documentation Index
 
-This page collects the detailed Zero-CPU documentation.
+Zero-CPU is a **verifiable and observable protected virtual computer platform**.
 
-The README is intentionally short. Detailed design notes, release notes, and
-debugger documents live here.
+This index separates current platform documentation from older milestone notes.
 
-## Project Overview
+## Start Here
+
+```text
+README.md
+docs/project-overview.md
+docs/syscall-convention.md
+```
+
+`README.md` is the portfolio-friendly entry point.
+
+`docs/project-overview.md` describes the current architecture, protected runtime,
+process model, hardware path, debugger, and verification layers.
+
+`docs/syscall-convention.md` defines both syscall layers that currently coexist:
+
+```text
+1. guest mini-kernel / BIO-OS services
+2. protected host dispatcher services
+```
+
+## Current Architecture and Semantics
 
 ```text
 docs/project-overview.md
-```
-
-This file preserves the original long-form README content and gives a fuller
-overview of the project.
-
-## Current Roadmap
-
-```text
-docs/roadmap-v0.4.md
-docs/roadmap-hardware.md
-```
-
-## Architectural Semantics
-
-```text
 docs/semantics.md
+docs/syscall-convention.md
 ```
 
-This document defines the current CPU state transitions and instruction behavior
-used as the baseline for trace-based verification.
+`docs/semantics.md` remains the detailed instruction/state-transition reference.
+Where an older milestone note conflicts with the current overview or source,
+the current source and current overview take precedence.
 
-## Trace JSON Format
+## Trace and Verification
 
 ```text
 docs/trace-json-format-v2.md
-```
-
-This document defines the structured schema used by trace export, regression
-fixtures, and the upcoming Trace Diff CLI.
-
-## Trace Diff CLI
-
-```text
 docs/trace-diff-cli.md
-```
-
-This command compares schema v2 traces and reports the first structural
-architectural mismatch.
-
-## Golden Trace Regression
-
-```text
 docs/golden-trace-regression.md
 ```
 
-This test compares a fresh deterministic execution with a committed architectural
-trace during the full test suite.
+The current implementation also includes multi-process trace export, invariant
+verification, architectural/strict diffing, and protected-syscall semantic
+events. Some filenames retain the milestone version in which they were first
+introduced.
 
-## Hardware Abstraction
+## Hardware
 
 ```text
 docs/hardware-abstraction-v0.6.md
-```
-
-This layer connects Zero-CPU MMIO operations to a replaceable hardware
-transport. The first implementation is a deterministic mock bus; USB serial and
-ESP32 support follow in v0.7.
-
-## Serial Hardware Protocol
-
-```text
 docs/serial-hardware-v0.6.md
+docs/windows-serial-hardware-v0.7.md
+docs/roadmap-hardware.md
 ```
 
-This layer defines the versioned request/response protocol, serial transport
-boundary, deterministic ESP32 simulator, and `SerialHardwareBus` implementation.
-
-## Windows Serial ESP32 Bridge
+Current hardware architecture supports:
 
 ```text
-docs/windows-serial-hardware-v0.7.md
+MMIO hardware window
+mock hardware bus
+serial hardware protocol
+Windows serial transport
+physical ESP32-oriented bridge path
+protected hardware syscalls
 ```
 
-This layer opens a physical Windows COM port, performs the versioned ESP32
-handshake, and runs Zero-CPU MMIO instructions against the real bridge firmware.
-
-## Studio Debugger
+## Studio and Debugger History
 
 ```text
 docs/studio-debugger-v0.2.md
 docs/v0.3-debugger-showcase-guide.md
 docs/studio-default-debugger-showcase.md
-```
 
-## v0.3 Debugger Detail Layers
-
-```text
 docs/v0.3-alu-trace-detail.md
 docs/v0.3-memory-trace-detail.md
 docs/v0.3-stack-trace-detail.md
 docs/v0.3-control-flow-trace-detail.md
-```
 
-## v0.4 Debugger Usability Layer
-
-```text
 docs/v0.4-trace-export-json.md
 docs/v0.4-breakpoint-polish.md
 docs/v0.4-trace-filter.md
 docs/v0.4-watch-expressions.md
 ```
 
-## Release Notes
+These documents are historical design records for the Studio layers. The current
+Studio additionally supports:
 
 ```text
+DebugSession backend delegation
+MultiProcessDebugSession backend delegation
+PID selection
+source-line stepping/highlighting
+conditional breakpoints
+watchpoints
+debug snapshots
+protected syscall observations
+```
+
+## Historical Roadmaps and Releases
+
+```text
+docs/roadmap-v0.4.md
 docs/release-notes-v0.3.md
 docs/release-notes-v0.4.md
 ```
 
-## Suggested Future Documentation
+These files describe older milestones and should not be read as the current
+project roadmap.
 
-These are good next documentation targets:
+Current direction is summarized in the root README and project overview.
+
+## Current Platform Snapshot
 
 ```text
-docs/isa-reference.md
-docs/syscall-reference.md
-docs/memory-map.md
-docs/design-decisions.md
-docs/research/trace-based-verification.md
+.zasm
+  → Assembler
+  → .zbin + .zsym
+  → Loader
+  → Protected CPU
+  → Processes / Address Spaces
+  → Timer Preemption / Scheduler
+  → Syscalls / MMIO / Hardware
+  → Debugger
+  → Trace Verification
+  → Zero Studio
+```
+
+Current milestone:
+
+```text
+v1.5 protected runtime observability
+```
+
+Current regression suite:
+
+```text
+70 stages
+All Zero-CPU tests passed.
 ```
 
 ## Documentation Policy
 
-The root README should stay short and portfolio-friendly.
+The root README should remain concise and portfolio-friendly.
 
-Detailed explanations should go under `docs/`.
+Detailed architectural rules belong under `docs/`.
+
+Milestone-specific documents may remain for history, but new current-state
+documentation must clearly distinguish:
+
+```text
+implemented behavior
+historical behavior
+future direction
+```
+
+<!-- Patch: v1.6-docs-current-platform-r1 -->
