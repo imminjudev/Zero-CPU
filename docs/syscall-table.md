@@ -1,141 +1,150 @@
 # Zero-CPU Syscall Table
 
-Zero-CPU currently uses a mini-kernel style software interrupt convention based on `INT 80`.
-
-## Calling Convention
+Zero-CPU currently has **two `INT 80` syscall ABIs**:
 
 ```text
-R1 = syscall number
+Guest Mini-Kernel / BIO-OS ABI
+Protected Host Runtime ABI
+```
+
+They share the interrupt entry mechanism but use different handlers and service
+tables.
+
+For detailed behavior and protected interrupt-frame semantics, see
+`docs/syscall-convention.md`.
+
+## Common INT 80 Convention
+
+```text
+R0 = interrupt vector (set by CPU)
+R1 = syscall / service number
 R2 = argument 0 / return value
 R3 = argument 1
-R4 = argument 2
 INT 80
 ```
 
-The interrupt handler receives:
+## Guest Mini-Kernel / BIO-OS Syscalls
+
+This ABI is implemented by guest `.zasm` Kernel handlers and is used by the
+mini-kernel examples and BIO-OS.
+
+Guest-specific register use:
 
 ```text
-R0 = interrupt vector
-R1 = syscall number
-R2 = argument 0
-R3 = argument 1
 R4 = argument 2
+R7 = guest exit/status value where applicable
 ```
-
-For the current mini-kernel and BIO-OS demos, the syscall interrupt vector is:
-
-```text
-80
-```
-
-## Current Syscalls
 
 | Number | Name | Inputs | Returns / State | Effect |
 |---:|---|---|---|---|
-| 1 | debug output | `R2 = value` | none | writes `value` to `DebugOutputDevice` |
+| 1 | debug output | `R2 = value` | none | writes to `DebugOutputDevice` |
 | 2 | memory write | `R2 = address`, `R3 = value` | none | writes `Memory[R2] = R3` |
-| 3 | exit | `R2 = exit code` | `R7 = exit code` | stores exit code and halts CPU |
+| 3 | exit | `R2 = exit code` | `R7 = exit code` | halts guest CPU path |
 | 4 | timer read | none | `R2 = tick count` | reads `TimerDevice` tick count |
-| 5 | timer enable | `R2 = interval`, `R3 = vector` | none | configures interval/vector and enables timer |
+| 5 | timer enable | `R2 = interval`, `R3 = vector` | none | configures/enables timer |
 | 6 | timer disable | none | none | disables timer |
-| 7 | timer configure | `R2 = interval`, `R3 = vector`, `R4 = payload` | none | configures timer interval/vector/payload |
+| 7 | timer configure | `R2 = interval`, `R3 = vector`, `R4 = payload` | none | configures timer |
 
-## Examples
+These numbers remain part of the guest demo ABI. They are not automatically
+services of the protected host runtime.
 
-### Debug Output
+## Protected Host Runtime Syscalls
 
-```asm
-MOV R1, 1
-MOV R2, 72
-INT 80
-```
-
-### Memory Write
-
-```asm
-MOV R1, 2
-MOV R2, 500
-MOV R3, 999
-INT 80
-```
-
-Equivalent effect:
+This ABI is implemented by:
 
 ```text
-Memory[500] = 999
+zero_cpu::kernel::ProtectedSyscallDispatcher
 ```
 
-### Exit
+Protected-specific register use:
+
+```text
+R4 = status
+R7 = exit/status value
+```
+
+| Service | Name | Inputs | Returns | Effect |
+|---:|---|---|---|---|
+| 3 | process exit | `R2 = exit code` | `R7 = exit code`, `R4 = status` | terminates current process |
+| 20 | hardware write | `R2 = hardware offset`, `R3 = value` | `R4 = status` | protected hardware MMIO write |
+| 21 | hardware read | `R2 = hardware offset` | `R2 = value`, `R4 = status` | protected hardware MMIO read |
+
+The CLI obtains protected service numbers from
+`ProtectedSyscallDispatcher` constants instead of duplicating numeric values.
+
+## Protected Status Codes
+
+| Status | Meaning |
+|---:|---|
+| `0` | OK |
+| `-1` | unsupported service |
+| `-2` | invalid hardware offset |
+| `-3` | hardware unavailable |
+| `-4` | hardware error |
+
+## Protected Hardware Offsets
+
+```text
+0   GPIO output
+8   GPIO input
+16  PWM output
+24  ADC input
+32  status
+40  command
+```
+
+Example protected write:
 
 ```asm
-MOV R1, 3
+MOV R1, 20
+MOV R2, 0
+MOV R3, 42
+INT 80
+```
+
+Example protected read:
+
+```asm
+MOV R1, 21
 MOV R2, 0
 INT 80
 ```
 
-### Timer Read
+Example protected process exit:
 
 ```asm
-MOV R1, 4
-INT 80
-STORE [120], R2
-```
-
-### Timer Enable
-
-```asm
-MOV R1, 5
-MOV R2, 8
-MOV R3, 44
+MOV R1, 3
+MOV R2, 7
 INT 80
 ```
 
-### Timer Disable
+## CLI Reference
 
-```asm
-MOV R1, 6
-INT 80
+```bat
+.\build\Debug\zero_cli.exe syscall-table
 ```
 
-### Timer Configure
+The command prints both ABI sections plus protected status codes.
 
-```asm
-MOV R1, 7
-MOV R2, 8
-MOV R3, 44
-MOV R4, 888
-INT 80
+The full regression suite checks that the guest table and protected service
+`3/20/21` remain visible:
+
+```bat
+scripts\test_all.bat
 ```
 
-## BIO-OS Usage
+## Design Rule
 
-The current BIO-OS demo uses these syscalls for:
+When adding a protected host service:
 
 ```text
-boot.zasm:
-- syscall 1: boot debug output
-- syscall 7: configure timer
-- syscall 5: enable timer
-- syscall 3: exit
-
-user_program.zasm:
-- syscall 1: user debug output
-- syscall 4: read timer
-- syscall 2: memory write
-
-kernel.zasm:
-- syscall handler dispatches by R1
-- timer_handler handles TimerDevice interrupt vector 44
+1. define its number in ProtectedSyscallDispatcher
+2. implement core semantics there
+3. add focused tests
+4. expose the core constant in CLI/documentation
+5. do not duplicate protected numeric values in consumer logic
 ```
 
-## Future Direction
+Guest mini-kernel and protected host services remain separate ABIs.
 
-Possible future improvements:
-
-```text
-- move syscall numbers into a shared assembler include/prelude
-- add string output syscall
-- add memory read syscall
-- add process/user-mode simulation concepts
-- expose syscall names in Zero-CPU Studio
-```
+<!-- Patch: v1.6-cli-syscall-abi-split-r1 -->

@@ -7598,14 +7598,14 @@ int runBioOSCombinedBootTest() {
 
 
 struct SyscallInfo {
-    int number;
+    std::int64_t number;
     const char* name;
     const char* inputs;
     const char* returns;
     const char* effect;
 };
 
-const std::vector<SyscallInfo>& syscallTable() {
+const std::vector<SyscallInfo>& guestSyscallTable() {
     static const std::vector<SyscallInfo> table = {
         {
             1,
@@ -7626,7 +7626,7 @@ const std::vector<SyscallInfo>& syscallTable() {
             "exit",
             "R2 = exit code",
             "R7 = exit code",
-            "halted CPU",
+            "halt guest CPU"
         },
         {
             4,
@@ -7661,17 +7661,44 @@ const std::vector<SyscallInfo>& syscallTable() {
     return table;
 }
 
-void printSyscallTable() {
-    std::cout << "=== Zero-CPU Syscall Table ===\n\n";
-    std::cout << "Convention:\n";
-    std::cout << "  R1 = syscall number\n";
-    std::cout << "  R2 = argument 0 / return value\n";
-    std::cout << "  R3 = argument 1\n";
-    std::cout << "  R4 = argument 2\n";
-    std::cout << "  INT 80\n\n";
+const std::vector<SyscallInfo>& protectedSyscallTable() {
+    using Dispatcher =
+        zero_cpu::kernel::ProtectedSyscallDispatcher;
 
-    for (const SyscallInfo& syscall : syscallTable()) {
-        std::cout << "syscall "
+    static const std::vector<SyscallInfo> table = {
+        {
+            Dispatcher::kExitSyscall,
+            "process exit",
+            "R2 = exit code",
+            "R7 = exit code, R4 = status",
+            "terminate current process"
+        },
+        {
+            Dispatcher::kHardwareWriteSyscall,
+            "hardware write",
+            "R2 = hardware offset, R3 = value",
+            "R4 = status",
+            "write through protected hardware MMIO"
+        },
+        {
+            Dispatcher::kHardwareReadSyscall,
+            "hardware read",
+            "R2 = hardware offset",
+            "R2 = value, R4 = status",
+            "read through protected hardware MMIO"
+        }
+    };
+
+    return table;
+}
+
+void printSyscallEntries(
+    const std::vector<SyscallInfo>& table,
+    const char* prefix
+) {
+    for (const SyscallInfo& syscall : table) {
+        std::cout << prefix
+                  << " "
                   << syscall.number
                   << " = "
                   << syscall.name
@@ -7681,6 +7708,60 @@ void printSyscallTable() {
         std::cout << "  effect : " << syscall.effect << "\n\n";
     }
 }
+
+void printProtectedStatusCodes() {
+    using Dispatcher =
+        zero_cpu::kernel::ProtectedSyscallDispatcher;
+
+    std::cout << "Protected status codes:\n";
+    std::cout << "  status " << Dispatcher::kStatusOk
+              << " = OK\n";
+    std::cout << "  status " << Dispatcher::kStatusUnsupported
+              << " = unsupported service\n";
+    std::cout << "  status " << Dispatcher::kStatusInvalidHardwareOffset
+              << " = invalid hardware offset\n";
+    std::cout << "  status " << Dispatcher::kStatusHardwareUnavailable
+              << " = hardware unavailable\n";
+    std::cout << "  status " << Dispatcher::kStatusHardwareError
+              << " = hardware error\n";
+}
+
+void printSyscallTable() {
+    using Dispatcher =
+        zero_cpu::kernel::ProtectedSyscallDispatcher;
+
+    std::cout << "=== Zero-CPU Syscall Table ===\n\n";
+    std::cout << "Common INT "
+              << static_cast<int>(Dispatcher::kSyscallVector)
+              << " convention:\n";
+    std::cout << "  R0 = interrupt vector (set by CPU)\n";
+    std::cout << "  R1 = syscall / service number\n";
+    std::cout << "  R2 = argument 0 / return value\n";
+    std::cout << "  R3 = argument 1\n";
+    std::cout << "  INT "
+              << static_cast<int>(Dispatcher::kSyscallVector)
+              << "\n\n";
+
+    std::cout
+        << "=== Guest Mini-Kernel / BIO-OS Syscalls ===\n";
+    std::cout << "Guest ABI:\n";
+    std::cout << "  R4 = argument 2\n";
+    std::cout << "  handler is guest .zasm Kernel code\n\n";
+    printSyscallEntries(guestSyscallTable(), "syscall");
+
+    std::cout
+        << "=== Protected Host Runtime Syscalls ===\n";
+    std::cout << "Protected ABI:\n";
+    std::cout << "  R4 = status\n";
+    std::cout << "  R7 = exit/status value\n";
+    std::cout
+        << "  handler = ProtectedSyscallDispatcher\n\n";
+    printSyscallEntries(protectedSyscallTable(), "service");
+
+    printProtectedStatusCodes();
+}
+
+// Patch: v1.6-cli-syscall-abi-split-r1
 
 
 int runInterruptFlagsRestoreTest() {

@@ -560,8 +560,57 @@ echo.
 
 echo.
 echo [2/70] Running syscall table command...
-"%ZERO_CLI%" syscall-table
+if not exist "build\test-output" mkdir "build\test-output"
+set "SYSCALL_TABLE_OUTPUT=build\test-output\syscall_table.txt"
+
+"%ZERO_CLI%" syscall-table > "%SYSCALL_TABLE_OUTPUT%"
 if errorlevel 1 goto fail
+
+type "%SYSCALL_TABLE_OUTPUT%"
+
+findstr /C:"=== Guest Mini-Kernel / BIO-OS Syscalls ===" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing guest ABI section.
+    goto fail
+)
+
+findstr /C:"syscall 7 = timer configure" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing guest syscall 7.
+    goto fail
+)
+
+findstr /C:"=== Protected Host Runtime Syscalls ===" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing protected ABI section.
+    goto fail
+)
+
+findstr /C:"service 3 = process exit" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing protected exit service.
+    goto fail
+)
+
+findstr /C:"service 20 = hardware write" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing protected hardware write service.
+    goto fail
+)
+
+findstr /C:"service 21 = hardware read" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing protected hardware read service.
+    goto fail
+)
+
+findstr /C:"status -4 = hardware error" "%SYSCALL_TABLE_OUTPUT%" >nul
+if errorlevel 1 (
+    echo ERROR: syscall-table missing protected status codes.
+    goto fail
+)
+
+echo [PASS] syscall-table guest/protected ABI split
 
 echo [3/70] Running ALU unit test...
 "%ZERO_CLI%" alu-test
@@ -1076,3 +1125,5 @@ echo ========================================
 echo.
 
 exit /b 1
+
+rem Patch: v1.6-cli-syscall-abi-split-r1
