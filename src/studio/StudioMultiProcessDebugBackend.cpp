@@ -439,6 +439,95 @@ StudioMultiProcessDebugBackend::statusText() const {
         }
     }
 
+    out << "\nRecent Software Interrupts\n";
+
+    const auto& softwareInterrupts =
+        session_->softwareInterrupts();
+
+    if (softwareInterrupts.empty()) {
+        out << "(none)\n";
+    } else {
+        constexpr std::size_t visible = 8;
+
+        const std::size_t begin =
+            softwareInterrupts.size() > visible
+                ? softwareInterrupts.size() - visible
+                : 0;
+
+        for (
+            std::size_t i = begin;
+            i < softwareInterrupts.size();
+            ++i
+        ) {
+            const auto& record =
+                softwareInterrupts[i];
+
+            const auto& observation =
+                record.observation;
+
+            const auto& result =
+                observation.result;
+
+            out
+                << "#"
+                << record.lifecycle_step
+                << " PID "
+                << record.pid
+                << " INT "
+                << static_cast<unsigned int>(
+                    observation.vector
+                );
+
+            if (result.has_service_number) {
+                out
+                    << " svc="
+                    << result.service_number;
+            }
+
+            if (result.has_argument0) {
+                out
+                    << " arg0="
+                    << result.argument0;
+            }
+
+            if (result.has_argument1) {
+                out
+                    << " arg1="
+                    << result.argument1;
+            }
+
+            if (result.has_status) {
+                out
+                    << " status="
+                    << result.status;
+            }
+
+            if (result.has_result) {
+                out
+                    << " result="
+                    << result.result_value;
+            }
+
+            out
+                << " disposition="
+                << softwareInterruptDispositionToString(
+                    result.disposition
+                );
+
+            if (
+                result.disposition
+                == SoftwareInterruptDisposition::
+                    TerminateProcess
+            ) {
+                out
+                    << " exit="
+                    << result.exit_code;
+            }
+
+            out << "\n";
+        }
+    }
+
     out << "\nRecent Context Switches\n";
 
     const auto& switches = session_->contextSwitches();
@@ -493,3 +582,5 @@ StudioMultiProcessDebugBackend::requireLoaded() const {
 }
 
 } // namespace zero_cpu::studio
+
+// Patch: v1.5-studio-syscall-observability-r1

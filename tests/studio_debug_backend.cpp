@@ -3,9 +3,12 @@
 #include "zero_cpu/core/DebugOutputDevice.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/hardware/HardwareMMIODevice.hpp"
+#include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/debug/DebugSnapshotJson.hpp"
 #include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/studio/StudioDebugBackend.hpp"
 #include "zero_cpu/studio/StudioMultiProcessDebugBackend.hpp"
 
@@ -387,6 +390,151 @@ bool multiProcessStudioBackend(
 }
 
 
+bool protectedSyscallStudioStatus(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::hardware;
+    using namespace zero_cpu::kernel;
+    using namespace zero_cpu::studio;
+
+    const char* protectedSource = R"ASM(
+.entry start
+.text
+start:
+    MOV R1, 20
+    MOV R2, 0
+    MOV R3, 42
+    INT 80
+
+    MOV R1, 21
+    MOV R2, 0
+    INT 80
+
+    MOV R1, 3
+    MOV R2, 7
+    INT 80
+)ASM";
+
+    const char* peerSource = R"ASM(
+.entry start
+.text
+start:
+    MOV R6, 222
+)ASM";
+
+    Assembler assembler;
+    ProcessImageLoader loader;
+
+    const auto protectedImage =
+        loader.loadProgram(
+            assembler
+                .assembleString(protectedSource)
+                .toBinaryProgram(),
+            "studio-protected-a.zbin"
+        );
+
+    const auto peerImage =
+        loader.loadProgram(
+            assembler
+                .assembleString(peerSource)
+                .toBinaryProgram(),
+            "studio-protected-b.zbin"
+        );
+
+    auto hardware =
+        std::make_shared<MockHardwareBus>(
+            "studio-backend-protected-hardware"
+        );
+
+    hardware->connect();
+
+    auto device =
+        std::make_shared<HardwareMMIODevice>(
+            hardware
+        );
+
+    auto mmio =
+        std::make_shared<MMIOBus>();
+
+    mmio->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        device
+    );
+
+    MultiProcessDebugOptions options;
+    options.quantum = 100;
+    options.default_continue_steps = 100;
+    options.mmio_bus = mmio;
+    options.software_interrupt_handler =
+        std::make_shared<
+            ProtectedSyscallDispatcher
+        >();
+
+    StudioMultiProcessDebugBackend backend;
+
+    backend.loadImages(
+        {
+            protectedImage,
+            peerImage
+        },
+        options
+    );
+
+    const MultiProcessDebugStop firstStop =
+        backend.run(100);
+
+    if (
+        firstStop.reason
+            != MultiProcessDebugStopReason::
+                ProcessTerminated
+        || firstStop.terminated_pid != 1
+        || backend.session()
+            .softwareInterrupts()
+            .size() != 3
+    ) {
+        detail =
+            "Studio protected syscall runtime mismatch";
+        return false;
+    }
+
+    const std::string status =
+        backend.statusText();
+
+    if (
+        status.find(
+            "Recent Software Interrupts"
+        ) == std::string::npos
+        || status.find("PID 1 INT 80 svc=20")
+            == std::string::npos
+        || status.find("arg1=42")
+            == std::string::npos
+        || status.find("PID 1 INT 80 svc=21")
+            == std::string::npos
+        || status.find("result=42")
+            == std::string::npos
+        || status.find("PID 1 INT 80 svc=3")
+            == std::string::npos
+        || status.find(
+            "disposition=TerminateProcess"
+        ) == std::string::npos
+        || status.find("exit=7")
+            == std::string::npos
+        || hardware->registerValue(
+            memory_map::kHardwareGpioOutputOffset
+        ) != 42
+    ) {
+        detail =
+            "Studio protected syscall status mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+
 bool sourceStepBackendDelegation(
     std::string& detail
 ) {
@@ -714,6 +862,15 @@ int main() {
     {
         std::string detail;
         report(
+            "Studio protected syscall status",
+            protectedSyscallStudioStatus(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
             "Studio source-step backend delegation",
             sourceStepBackendDelegation(detail),
             detail
@@ -756,3 +913,6 @@ int main() {
 
     return 1;
 }
+
+// Patch: v1.5-studio-syscall-observability-r1
+

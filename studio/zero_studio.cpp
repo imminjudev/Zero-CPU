@@ -15,6 +15,9 @@
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/TimerDevice.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
+#include "zero_cpu/hardware/HardwareMMIODevice.hpp"
+#include "zero_cpu/hardware/MockHardwareBus.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
@@ -3532,6 +3535,36 @@ void onLoadMultiProcessClicked() {
         options.quantum = 1;
         options.default_continue_steps = 1000;
 
+        auto hardware =
+            std::make_shared<
+                zero_cpu::hardware::MockHardwareBus
+            >(
+                "studio-protected-hardware"
+            );
+
+        hardware->connect();
+
+        auto hardwareDevice =
+            std::make_shared<
+                zero_cpu::hardware::HardwareMMIODevice
+            >(hardware);
+
+        auto mmio =
+            std::make_shared<zero_cpu::MMIOBus>();
+
+        mmio->mapDevice(
+            zero_cpu::memory_map::kHardwareBase,
+            zero_cpu::memory_map::kHardwareSize,
+            hardwareDevice
+        );
+
+        options.mmio_bus = mmio;
+        options.software_interrupt_handler =
+            std::make_shared<
+                zero_cpu::kernel::
+                    ProtectedSyscallDispatcher
+            >();
+
         auto debugger =
             std::make_unique<
                 StudioMultiProcessDebugBackend
@@ -3578,6 +3611,8 @@ void onLoadMultiProcessClicked() {
             << "\n"
             << "Execution Backend = "
             << "MultiProcessDebugSession\n"
+            << "Protected Syscalls = enabled\n"
+            << "Hardware Backend = mock\n"
             << "\nBinaries\n";
 
         for (
@@ -6016,3 +6051,5 @@ int WINAPI WinMain(
 
     return static_cast<int>(message.wParam);
 }
+
+// Patch: v1.5-studio-syscall-observability-r1
