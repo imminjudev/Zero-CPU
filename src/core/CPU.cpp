@@ -614,7 +614,10 @@ bool CPU::serviceHostSoftwareInterrupt(
 
     restoreInterruptFrame(
         "Negative host software interrupt "
-        "return address"
+        "return address",
+        result.disposition
+            == SoftwareInterruptDisposition::
+                TerminateProcess
     );
 
     software_interrupt_observation_.vector =
@@ -2442,7 +2445,8 @@ void CPU::pushInterruptFrame(std::size_t returnAddress) {
 }
 
 void CPU::restoreInterruptFrame(
-    const char* returnAddressError
+    const char* returnAddressError,
+    bool allowUserCodeEnd
 ) {
     requireStackPopSlots(kInterruptFrameSlotCount);
 
@@ -2486,10 +2490,20 @@ void CPU::restoreInterruptFrame(
     const std::size_t restoredSp =
         static_cast<std::size_t>(savedSpValue);
 
-    requireExecutionAddress(
-        restoredPc,
-        restoredPrivilege
-    );
+    const bool returningToUserCodeEnd =
+        allowUserCodeEnd
+        && restoredPrivilege
+            == PrivilegeLevel::User
+        && has_user_code_range_
+        && restoredPc
+            == user_code_end_exclusive_;
+
+    if (!returningToUserCodeEnd) {
+        requireExecutionAddress(
+            restoredPc,
+            restoredPrivilege
+        );
+    }
 
     if (restoredPrivilege == PrivilegeLevel::User) {
         requireStackPointerInRange(
@@ -2581,3 +2595,5 @@ void CPU::setRuntimeError(const std::string& message) {
 // Patch: v1.5-protected-syscall-observability-r1
 
 // Patch: v1.5-protected-syscall-observability-fix-r3
+
+// Patch: v1.5-final-exit-core-fix-r1

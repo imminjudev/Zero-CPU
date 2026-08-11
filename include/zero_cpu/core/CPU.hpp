@@ -299,7 +299,11 @@ private:
     std::int64_t peekValue() const;
 
     void pushInterruptFrame(std::size_t returnAddress);
-    void restoreInterruptFrame(const char* returnAddressError);
+
+    void restoreInterruptFrame(
+        const char* returnAddressError,
+        bool allowUserCodeEnd = false
+    );
 
     void requireNoOperand(const Instruction& instruction) const;
     void requireSingleOperand(const Instruction& instruction) const;
@@ -315,3 +319,5 @@ private:
 // Patch: v1.5-protected-syscall-observability-r1
 
 } // namespace zero_cpu
+
+// Patch: v1.5-final-exit-core-fix-r1
