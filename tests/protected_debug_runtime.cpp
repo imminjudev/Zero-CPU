@@ -1,6 +1,7 @@
 #include "zero_cpu/assembler/Assembler.hpp"
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
+#include "zero_cpu/debug/MultiProcessDebugConsole.hpp"
 #include "zero_cpu/debug/MultiProcessDebugSession.hpp"
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
@@ -10,6 +11,7 @@
 #include <cstddef>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -357,6 +359,71 @@ start:
         return false;
     }
 
+    std::istringstream consoleInput(
+        "syscalls\n"
+        "syscalls 1\n"
+        "syscalls 2\n"
+        "quit\n"
+    );
+
+    std::ostringstream consoleOutput;
+    std::ostringstream consoleError;
+
+    MultiProcessDebugConsoleOptions consoleOptions;
+    consoleOptions.show_prompt = false;
+    consoleOptions.print_banner = false;
+
+    MultiProcessDebugConsole console(
+        session,
+        consoleInput,
+        consoleOutput,
+        consoleError,
+        consoleOptions
+    );
+
+    const MultiProcessDebugConsoleResult
+        consoleResult =
+            console.run();
+
+    const std::string consoleText =
+        consoleOutput.str();
+
+    if (
+        !consoleResult.success()
+        || !consoleResult.quit_requested
+        || consoleResult.command_count != 4
+        || !consoleError.str().empty()
+        || consoleText.find(
+            "Software interrupts (3):"
+        ) == std::string::npos
+        || consoleText.find("pid=1")
+            == std::string::npos
+        || consoleText.find("vector=80")
+            == std::string::npos
+        || consoleText.find("service=20")
+            == std::string::npos
+        || consoleText.find("arg1=42")
+            == std::string::npos
+        || consoleText.find("service=21")
+            == std::string::npos
+        || consoleText.find("result=42")
+            == std::string::npos
+        || consoleText.find("service=3")
+            == std::string::npos
+        || consoleText.find(
+            "disposition=TerminateProcess"
+        ) == std::string::npos
+        || consoleText.find("exit=7")
+            == std::string::npos
+        || consoleText.find(
+            "No observed software interrupts."
+        ) == std::string::npos
+    ) {
+        detail =
+            "protected syscall console output mismatch";
+        return false;
+    }
+
     return true;
 }
 
@@ -396,3 +463,5 @@ int main() {
 }
 
 // Patch: v1.5-debugger-syscall-observability-r1
+
+// Patch: v1.5-debugger-syscall-console-r1

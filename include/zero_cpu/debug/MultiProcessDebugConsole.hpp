@@ -86,6 +86,12 @@ private:
         >& values
     );
 
+    void printSoftwareInterrupts(
+        const std::vector<
+            ProcessSoftwareInterruptDebugRecord
+        >& values
+    );
+
     void printScheduler();
     void printRegisters();
 
@@ -116,3 +122,5 @@ private:
 };
 
 } // namespace zero_cpu::debug
+
+// Patch: v1.5-debugger-syscall-console-r1

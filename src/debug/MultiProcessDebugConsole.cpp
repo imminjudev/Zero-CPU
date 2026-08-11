@@ -1091,6 +1091,31 @@ bool MultiProcessDebugConsole::executeCommand(
     }
 
     if (
+        command == "syscalls"
+        || command == "sc"
+    ) {
+        kernel::ProcessId pid = 0;
+
+        if (
+            parseOptionalPid(
+                parser,
+                command,
+                pid
+            )
+        ) {
+            printSoftwareInterrupts(
+                session_.softwareInterrupts(pid)
+            );
+        } else {
+            printSoftwareInterrupts(
+                session_.softwareInterrupts()
+            );
+        }
+
+        return false;
+    }
+
+    if (
         command == "scheduler"
         || command == "sched"
     ) {
@@ -1193,6 +1218,7 @@ void MultiProcessDebugConsole::printHelp() {
         << "  step-line [max-steps]  (alias: sl)\n"
         << "  continue [max-steps]\n"
         << "  status\n"
+        << "  syscalls [pid]\n"
         << "  scheduler\n"
         << "  registers\n"
         << "  memory <address> <bytes>\n"
@@ -1559,6 +1585,95 @@ void MultiProcessDebugConsole::printWatchpoints(
     }
 }
 
+void MultiProcessDebugConsole::
+printSoftwareInterrupts(
+    const std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    >& values
+) {
+    if (values.empty()) {
+        output_
+            << "No observed software interrupts.\n";
+        return;
+    }
+
+    output_
+        << "Software interrupts ("
+        << values.size()
+        << "):\n";
+
+    for (
+        const ProcessSoftwareInterruptDebugRecord&
+            record :
+                values
+    ) {
+        const SoftwareInterruptObservation&
+            observation =
+                record.observation;
+
+        const SoftwareInterruptResult& result =
+            observation.result;
+
+        output_
+            << "  step="
+            << record.lifecycle_step
+            << " pid="
+            << record.pid
+            << " vector="
+            << static_cast<unsigned int>(
+                observation.vector
+            );
+
+        if (result.has_service_number) {
+            output_
+                << " service="
+                << result.service_number;
+        }
+
+        if (result.has_argument0) {
+            output_
+                << " arg0="
+                << result.argument0;
+        }
+
+        if (result.has_argument1) {
+            output_
+                << " arg1="
+                << result.argument1;
+        }
+
+        if (result.has_status) {
+            output_
+                << " status="
+                << result.status;
+        }
+
+        if (result.has_result) {
+            output_
+                << " result="
+                << result.result_value;
+        }
+
+        output_
+            << " disposition="
+            << softwareInterruptDispositionToString(
+                result.disposition
+            );
+
+        if (
+            result.disposition
+            == SoftwareInterruptDisposition::
+                TerminateProcess
+        ) {
+            output_
+                << " exit="
+                << result.exit_code;
+        }
+
+        output_ << "\n";
+    }
+}
+
 void MultiProcessDebugConsole::printScheduler() {
     output_
         << "Scheduler:\n"
@@ -1889,3 +2004,5 @@ MultiProcessDebugConsole::parsePositiveCount(
 }
 
 } // namespace zero_cpu::debug
+
+// Patch: v1.5-debugger-syscall-console-r1

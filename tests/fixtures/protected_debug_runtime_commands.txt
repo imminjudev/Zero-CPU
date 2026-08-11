@@ -2,8 +2,13 @@
 # Patch: v1.4-protected-debug-cli-r1
 
 continue 100
+syscalls 1
 processes
 continue 100
+syscalls
+syscalls 2
 processes
 scheduler
 quit
+
+# Patch: v1.5-debugger-syscall-console-r1
