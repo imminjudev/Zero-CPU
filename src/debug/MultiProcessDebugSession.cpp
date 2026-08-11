@@ -814,6 +814,24 @@ MultiProcessDebugSession::step() {
 
     runtime_state_ = result.state;
 
+    if (
+        cpu_.hasSoftwareInterruptObservation()
+    ) {
+        ProcessSoftwareInterruptDebugRecord
+            record;
+
+        record.lifecycle_step = total_steps_;
+        record.pid = before;
+        record.observation =
+            cpu_.softwareInterruptObservation();
+
+        software_interrupts_.push_back(
+            std::move(record)
+        );
+
+        cpu_.clearSoftwareInterruptObservation();
+    }
+
     const kernel::ProcessId after =
         table_.hasRunningProcess()
             ? table_.runningProcessId()
@@ -1231,6 +1249,39 @@ schedulerContextSwitchCount() const {
     requireStarted();
 
     return preemptive_.contextSwitchCount();
+}
+
+const std::vector<
+    ProcessSoftwareInterruptDebugRecord
+>&
+MultiProcessDebugSession::softwareInterrupts()
+const {
+    requireStarted();
+    return software_interrupts_;
+}
+
+std::vector<ProcessSoftwareInterruptDebugRecord>
+MultiProcessDebugSession::softwareInterrupts(
+    kernel::ProcessId pid
+) const {
+    requireStarted();
+    (void)requireProcess(pid);
+
+    std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    > result;
+
+    for (
+        const ProcessSoftwareInterruptDebugRecord&
+            record :
+                software_interrupts_
+    ) {
+        if (record.pid == pid) {
+            result.push_back(record);
+        }
+    }
+
+    return result;
 }
 
 const std::vector<ContextSwitchRecord>&
@@ -1899,3 +1950,5 @@ void MultiProcessDebugSession::recordContextSwitch(
 // Patch: v1.4-protected-debug-runtime-r1
 
 } // namespace zero_cpu::debug
+
+// Patch: v1.5-debugger-syscall-observability-r1

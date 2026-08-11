@@ -170,6 +170,13 @@ struct ProcessDebugSnapshot {
     bool faulted() const;
 };
 
+struct ProcessSoftwareInterruptDebugRecord {
+    std::size_t lifecycle_step = 0;
+    kernel::ProcessId pid = 0;
+
+    SoftwareInterruptObservation observation;
+};
+
 struct ContextSwitchRecord {
     std::size_t lifecycle_step = 0;
 
@@ -327,6 +334,16 @@ public:
     std::uint64_t preemptionCount() const;
     std::uint64_t schedulerContextSwitchCount() const;
 
+    const std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    >&
+    softwareInterrupts() const;
+
+    std::vector<ProcessSoftwareInterruptDebugRecord>
+    softwareInterrupts(
+        kernel::ProcessId pid
+    ) const;
+
     const std::vector<ContextSwitchRecord>&
     contextSwitches() const;
 
@@ -381,6 +398,10 @@ private:
     bool resume_skip_active_ = false;
     kernel::ProcessId resume_skip_pid_ = 0;
     std::size_t resume_skip_address_ = 0;
+
+    std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    > software_interrupts_;
 
     std::vector<ContextSwitchRecord>
         context_switches_;
@@ -483,3 +504,5 @@ private:
 // Patch: v1.4-protected-debug-runtime-r1
 
 } // namespace zero_cpu::debug
+
+// Patch: v1.5-debugger-syscall-observability-r1

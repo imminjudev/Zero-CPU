@@ -142,6 +142,113 @@ start:
         return false;
     }
 
+    const std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    >& softwareInterrupts =
+        session.softwareInterrupts();
+
+    if (softwareInterrupts.size() != 3) {
+        detail =
+            "debugger did not retain exactly three "
+            "protected syscall observations";
+        return false;
+    }
+
+    const ProcessSoftwareInterruptDebugRecord&
+        write = softwareInterrupts[0];
+
+    const ProcessSoftwareInterruptDebugRecord&
+        read = softwareInterrupts[1];
+
+    const ProcessSoftwareInterruptDebugRecord&
+        exit = softwareInterrupts[2];
+
+    if (
+        write.pid != 1
+        || write.lifecycle_step == 0
+        || write.observation.vector != 80
+        || !write.observation.result.has_service_number
+        || write.observation.result.service_number != 20
+        || !write.observation.result.has_argument0
+        || write.observation.result.argument0 != 0
+        || !write.observation.result.has_argument1
+        || write.observation.result.argument1 != 42
+        || !write.observation.result.has_status
+        || write.observation.result.status != 0
+        || write.observation.result.has_result
+        || write.observation.result.disposition
+            != SoftwareInterruptDisposition::
+                ReturnToCaller
+    ) {
+        detail =
+            "debugger hardware-write syscall "
+            "observation mismatch";
+        return false;
+    }
+
+    if (
+        read.pid != 1
+        || read.lifecycle_step <= write.lifecycle_step
+        || read.observation.vector != 80
+        || !read.observation.result.has_service_number
+        || read.observation.result.service_number != 21
+        || !read.observation.result.has_argument0
+        || read.observation.result.argument0 != 0
+        || read.observation.result.has_argument1
+        || !read.observation.result.has_status
+        || read.observation.result.status != 0
+        || !read.observation.result.has_result
+        || read.observation.result.result_value != 42
+        || read.observation.result.disposition
+            != SoftwareInterruptDisposition::
+                ReturnToCaller
+    ) {
+        detail =
+            "debugger hardware-read syscall "
+            "observation mismatch";
+        return false;
+    }
+
+    if (
+        exit.pid != 1
+        || exit.lifecycle_step <= read.lifecycle_step
+        || exit.observation.vector != 80
+        || !exit.observation.result.has_service_number
+        || exit.observation.result.service_number != 3
+        || !exit.observation.result.has_argument0
+        || exit.observation.result.argument0 != 7
+        || !exit.observation.result.has_status
+        || exit.observation.result.status != 0
+        || exit.observation.result.disposition
+            != SoftwareInterruptDisposition::
+                TerminateProcess
+        || exit.observation.result.exit_code != 7
+    ) {
+        detail =
+            "debugger process-exit syscall "
+            "observation mismatch";
+        return false;
+    }
+
+    const std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    > pid1SoftwareInterrupts =
+        session.softwareInterrupts(1);
+
+    const std::vector<
+        ProcessSoftwareInterruptDebugRecord
+    > pid2SoftwareInterrupts =
+        session.softwareInterrupts(2);
+
+    if (
+        pid1SoftwareInterrupts.size() != 3
+        || !pid2SoftwareInterrupts.empty()
+    ) {
+        detail =
+            "debugger syscall PID filtering mismatch";
+        return false;
+    }
+
     const ProcessDebugSnapshot first =
         session.processSnapshot(1);
 
@@ -192,6 +299,15 @@ start:
         detail =
             "PID 2 did not terminate after "
             "scheduler handoff";
+        return false;
+    }
+
+    if (
+        session.softwareInterrupts().size() != 3
+    ) {
+        detail =
+            "debugger duplicated syscall observations "
+            "while running PID 2";
         return false;
     }
 
@@ -278,3 +394,5 @@ int main() {
 
     return 0;
 }
+
+// Patch: v1.5-debugger-syscall-observability-r1
