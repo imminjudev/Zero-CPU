@@ -28,6 +28,7 @@ process model, hardware path, debugger, and verification layers.
 
 ```text
 docs/project-overview.md
+docs/architecture-roadmap.md
 docs/semantics.md
 docs/syscall-convention.md
 ```
@@ -159,3 +160,5 @@ future direction
 ```
 
 <!-- Patch: v1.6-docs-current-platform-r1 -->
+
+<!-- Patch: v1.6-current-roadmap-semantics-r1 -->

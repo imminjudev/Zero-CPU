@@ -1,737 +1,384 @@
 # Zero-CPU Architecture Roadmap
 
-Zero-CPU is not intended to be a pretty CPU simulator.
+Zero-CPU is a **verifiable and observable protected virtual computer platform**.
 
-Zero-CPU is a small computer platform with its own ISA, assembler, executable format, loader, virtual CPU, debugger-oriented tooling, and system-level extensions.
+This roadmap describes the current path from the completed protected runtime
+toward the first finished platform milestone.
 
-The project direction is:
-
-```text
-Core
-→ Toolchain
-→ Test Infrastructure
-→ MMIO / Interrupts
-→ Mini Kernel
-```
-
-This document fixes the architecture direction so future work does not drift into UI-only features.
-
----
-
-## 1. Project Definition
-
-Zero-CPU is a C++17 virtual computer platform.
-
-Its goal is to implement and explain core computer architecture concepts through code:
-
-```text
-source assembly
-→ assembler
-→ virtual binary format
-→ binary loader
-→ virtual memory
-→ fetch/decode/execute CPU
-→ devices
-→ interrupts
-→ mini kernel
-```
-
-The final form should include:
-
-```text
-- Custom ISA
-- .zasm assembly language
-- Assembler
-- Instruction encoder / decoder
-- .zbin virtual executable format
-- Binary reader / writer
-- Binary loader
-- Virtual memory
-- Virtual CPU
-- ALU
-- Register file
-- Flags
-- Stack
-- CALL / RET
-- INT / IRET
-- EI / DI
-- MMIO bus
-- Timer device
-- Debug output device
-- Interrupt controller
-- CLI test infrastructure
-- Studio debugger / visualizer
-- Mini kernel demo
-```
-
-Studio is useful, but it is not the core project.
-
-```text
-Zero-CPU Core   = the actual computer platform
-Zero-CPU Studio = debugger / visualizer / learning tool
-```
-
----
-
-## 2. Current Architecture Overview
-
-Current execution pipeline:
-
-```text
-.zasm source file
-    ↓
-Assembler
-    ↓
-Instruction IR
-    ↓
-InstructionEncoder
-    ↓
-.zbin virtual binary
-    ↓
-BinaryReader
-    ↓
-BinaryLoader
-    ↓
-Virtual Memory
-    ↓
-CPU Fetch-Decode-Execute
-```
-
-Current system-level pipeline:
-
-```text
-CPU instruction execution
-    ↓
-Memory access
-    ↓
-MMIOBus
-    ↓
-Mapped device
-    ↓
-InterruptController
-    ↓
-CPU interrupt delivery
-    ↓
-Interrupt handler
-    ↓
-IRET
-```
-
-Current mini-kernel style pipeline:
-
-```text
-User program
-    ↓
-INT 80
-    ↓
-Syscall handler
-    ↓
-MMIO output
-    ↓
-IRET
-    ↓
-User program resumes
-```
-
----
-
-## 3. Core Layer
-
-The Core layer is the most important layer of the project.
-
-It contains the virtual hardware model.
-
-Current components:
-
-```text
-include/zero_cpu/core/
-├─ CPU.hpp
-├─ CPUState.hpp
-├─ RegisterFile.hpp
-├─ Flags.hpp
-├─ Memory.hpp
-├─ ALU.hpp
-├─ MMIOBus.hpp
-├─ MMIODevice.hpp
-├─ DebugOutputDevice.hpp
-├─ InterruptController.hpp
-├─ TimerDevice.hpp
-└─ ClockedDevice.hpp
-```
-
-### 3.1 CPU
-
-The CPU is responsible for:
-
-```text
-- Maintaining PC
-- Maintaining SP
-- Fetching instructions from memory
-- Decoding instructions
-- Executing instructions
-- Updating registers
-- Updating flags
-- Reading/writing memory
-- Handling stack operations
-- Handling CALL / RET
-- Handling INT / IRET
-- Routing memory access through MMIO
-- Delivering pending interrupts
-- Ticking clocked devices after instruction execution
-```
-
-The CPU should remain focused on execution semantics.
-
-It should not become responsible for:
-
-```text
-- Parsing source files
-- Writing binary files
-- Formatting UI output
-- Managing Studio layout
-```
-
----
-
-## 4. ISA Layer
-
-The ISA defines the language that Zero-CPU understands.
-
-Current instruction categories:
-
-```text
-Control:
-- NOP
-- HALT
-
-Data movement:
-- MOV
-- LOAD
-- STORE
-
-Arithmetic:
-- ADD
-- SUB
-- MUL
-- DIV
-
-Comparison:
-- CMP
-- TEST
-
-Branching:
-- JMP
-- JE
-- JNE
-- JG
-- JL
-
-Stack / function:
-- PUSH
-- POP
-- CALL
-- RET
-
-Interrupt / system:
-- INT
-- IRET
-- EI
-- DI
-
-Bitwise:
-- AND
-- OR
-- XOR
-- NOT
-```
-
-Important design rule:
-
-```text
-CALL returns with RET.
-Interrupts and software interrupts return with IRET.
-```
-
-This keeps normal function calls and interrupt control flow separate.
-
----
-
-## 5. Toolchain Layer
-
-The toolchain turns human-readable source into executable virtual binary.
-
-Current toolchain:
+The architecture direction is:
 
 ```text
 .zasm
-    ↓
-Assembler
-    ↓
-Instruction IR
-    ↓
-InstructionEncoder
-    ↓
-.zbin
+  → Assembler
+  → .zbin + .zsym
+  → Loader
+  → Protected CPU
+  → Processes / Address Spaces
+  → Timer Preemption / Scheduler
+  → Syscalls / MMIO / Hardware
+  → Debugger / Trace Verification
+  → Zero Studio
 ```
 
-Related files:
+The core rule remains:
 
 ```text
-include/zero_cpu/assembler/
-include/zero_cpu/isa/
-include/zero_cpu/binary/
-src/assembler/
-src/isa/
-src/binary/
+core behavior
+  → automated verification
+  → CLI / API
+  → Studio consumption
 ```
 
-### 5.1 .zasm
-
-`.zasm` is the human-readable assembly format.
-
-Example:
-
-```asm
-MOV R1, 65
-INT 80
-HALT
-```
-
-### 5.2 .zbin
-
-`.zbin` is the Zero-CPU virtual binary format.
-
-It contains:
-
-```text
-- Magic
-- Version
-- Endianness
-- Entry point
-- Code size
-- Encoded instruction bytes
-```
-
-Each instruction is currently encoded as a fixed-size instruction.
-
-This makes early decoding and debugging simple.
+Studio serves the platform. It does not define execution semantics.
 
 ---
 
-## 6. Memory Model
+## 1. Current Platform Baseline
 
-Zero-CPU memory is byte-addressable.
+The following layers are already implemented and verified.
 
-Important regions currently used by convention:
+### CPU / ISA
 
 ```text
-0x0000..      data / low memory
-0x0200..      binary code load area
-0x0800..      stack start around 2048
-0xF000..      DebugOutputDevice MMIO
-0xF100..      TimerDevice MMIO
+registers, PC, SP, FLAGS
+fetch / decode / execute
+ALU and signed branch behavior
+direct and register-indirect memory
+stack operations
+CALL / RET
+INT / IRET / EI / DI
 ```
 
-The CPU should access memory through helper functions, not directly everywhere.
-
-This allows MMIO routing:
+### Executable Toolchain
 
 ```text
-STORE [0xF000], R1
-    ↓
-MMIOBus
-    ↓
-DebugOutputDevice
+.zasm assembler
+.data / .text
+labels and explicit entry points
+.zbin format 0.3
+legacy .zbin 0.2 compatibility
+.zsym debug symbols
+binary loader
+process image loader
 ```
 
----
-
-## 7. MMIO Layer
-
-MMIO means memory-mapped I/O.
-
-Instead of adding special `OUT` instructions first, Zero-CPU maps devices into memory address space.
-
-Current MMIO components:
+### Protection
 
 ```text
-MMIODevice
-MMIOBus
+Kernel / User privilege
+User execution-range protection
+User data-range protection
+User MMIO blocking
+separate User and Kernel stacks
+protected interrupt frames
+privileged-instruction checks
+fault isolation
+```
+
+### Processes and Scheduling
+
+```text
+process table / PCB
+independent address spaces
+context capture / restore
+round-robin scheduling
+timer-driven preemption
+process lifecycle
+fault recovery
+exit-code handling
+```
+
+### Runtime Services
+
+```text
+guest Mini-Kernel / BIO-OS syscall ABI 1..7
+protected host syscall ABI 3 / 20 / 21
+MMIO bus
 DebugOutputDevice
 TimerDevice
+hardware bridge MMIO
+mock and serial hardware backends
 ```
 
-Current debug output mapping:
+### Debugging and Verification
 
 ```text
-0xF000..0xF00F
-```
-
-Current timer mapping:
-
-```text
-0xF100..0xF12F
-```
-
-Example:
-
-```asm
-MOV R1, 65
-STORE [61440], R1
-```
-
-`61440` is `0xF000`.
-
-This does not write to RAM. It writes to the mapped debug output device.
-
----
-
-## 8. Interrupt Layer
-
-The interrupt system currently includes:
-
-```text
-InterruptController
-InterruptRequest
-Vector table
-Pending interrupt queue
-Global enable / disable
-Vector mask / unmask
-CPU interrupt delivery
-IRET
-EI
-DI
-```
-
-Basic interrupt delivery flow:
-
-```text
-1. Device requests interrupt.
-2. InterruptController queues request.
-3. CPU checks pending interrupts before executing an instruction.
-4. CPU pushes interrupt return address.
-5. CPU writes vector to R0.
-6. CPU writes payload to R1.
-7. CPU jumps to handler address.
-8. Handler runs.
-9. Handler returns with IRET.
-```
-
-Important distinction:
-
-```text
-RET  = return from CALL
-IRET = return from interrupt
+single-process debugger
+multi-process debugger
+PID-aware controls
+source stepping
+breakpoints / conditional breakpoints
+watchpoints
+snapshot JSON
+semantic protected-syscall history
+multi-process trace
+invariant verification
+trace diff
+golden regression
+Zero Studio debugger frontend
 ```
 
 ---
 
-## 9. Timer Device
+## 2. Current Milestone: v1.6 — Consistency and Platform Cleanup
 
-TimerDevice is a clocked MMIO device.
+v1.6 does not add another major execution subsystem.
 
-It counts CPU steps and requests interrupts at a configured interval.
+Its purpose is to make the already-implemented platform internally consistent
+and understandable.
 
-Current behavior:
-
-```text
-CPU executes one instruction
-    ↓
-CPU ticks clocked devices
-    ↓
-TimerDevice tick count increments
-    ↓
-TimerDevice reaches interval
-    ↓
-InterruptController receives request
-    ↓
-CPU enters handler on next step
-```
-
-TimerDevice registers:
+Completed:
 
 ```text
-offset 0  = tick count
-offset 8  = interval
-offset 16 = enabled
-offset 24 = vector
-offset 32 = payload
-offset 40 = interrupt count
+v1.6-A
+  README and current architecture documentation aligned with v1.5
+
+v1.6-B
+  zero_cli syscall-table split into:
+    Guest Mini-Kernel / BIO-OS ABI
+    Protected Host Runtime ABI
+
+  protected service/status numbers sourced from
+  ProtectedSyscallDispatcher constants
+
+  syscall-table regression assertions added
 ```
 
-The timer can be disabled from an interrupt handler using MMIO.
+Current work:
+
+```text
+v1.6-C
+  current architecture roadmap cleanup
+  execution-semantics documentation cleanup
+  hardware roadmap cleanup
+```
+
+v1.6 is complete when non-historical documentation no longer presents already
+implemented protection, scheduling, hardware, or verification work as future
+features.
 
 ---
 
-## 10. Software Interrupts and Mini Kernel Direction
+## 3. v1.7 — Hardware Demonstration Completion
 
-`INT` introduces software interrupt support.
+The hardware abstraction and serial bridge already exist.
 
-This allows user code to request services from a handler.
+v1.7 focuses on making the physical path a strong, reproducible demonstration.
 
-Current syscall convention:
-
-```text
-R1 = syscall number
-R2 = syscall argument
-INT 80
-```
-
-Example:
-
-```asm
-MOV R1, 1
-MOV R2, 72
-INT 80
-```
-
-Current mini-kernel style behavior:
+Target path:
 
 ```text
-INT 80
-    ↓
-syscall handler
-    ↓
-check R1 syscall number
-    ↓
-use R2 as argument
-    ↓
-write to MMIO device
-    ↓
-IRET
+User Process
+  → INT 80
+  → protected Kernel dispatcher
+  → hardware MMIO
+  → SerialHardwareBus
+  → Windows serial transport
+  → ESP32
+  → physical GPIO / sensor
 ```
 
-This is the starting point for BIO-OS / mini kernel demos.
+Primary goals:
+
+```text
+reproducible ESP32 setup
+real GPIO output demonstration
+real GPIO or ADC input demonstration
+clear timeout/error behavior
+mock-vs-physical comparison
+trace/debug visibility for physical transactions
+```
+
+Studio physical-device controls may be added when they expose this stable core
+path. They are not a prerequisite for the core hardware path itself.
 
 ---
 
-## 11. Test Infrastructure
+## 4. v1.8 — BIO-OS and Protected Runtime Integration
 
-Testing is a first-class part of Zero-CPU.
+BIO-OS currently remains a useful guest-kernel integration demo, but it predates
+the protected multi-process runtime.
 
-Current CLI tests include:
+v1.8 should connect the concepts without deleting the historical guest ABI.
 
-```text
-zero_cli alu-test
-zero_cli mmio-test
-zero_cli interrupt-test
-zero_cli cpu-interrupt-test
-zero_cli timer-test
-zero_cli cpu-timer-test
-zero_cli cpu-ei-di-test
-zero_cli software-interrupt-test
-zero_cli mini-kernel-syscall-test
-zero_cli binary-test
-```
-
-Current test runner:
+Goals:
 
 ```text
-scripts/test_all.bat
+preserve BIO-OS guest syscall demo
+clarify guest Kernel vs protected host Kernel responsibilities
+run BIO-OS concepts through protected process/address-space boundaries
+demonstrate User→Kernel service transitions
+reuse current scheduler/lifecycle infrastructure where appropriate
+avoid duplicate execution semantics
 ```
 
-Every major architecture feature should have:
-
-```text
-1. a focused CLI test command
-2. a .zasm example when applicable
-3. an entry in scripts/test_all.bat
-```
-
-This prevents regressions while the CPU grows.
+BIO-OS should become a consumer/demo of the platform rather than the center of
+the architecture.
 
 ---
 
-## 12. Studio Scope
+## 5. v1.9 — End-to-End Platform Demo and Polish
 
-Zero-CPU Studio should remain a debugger and visualizer.
+v1.9 assembles existing pieces into one strong demonstration.
 
-Allowed Studio features:
+Target demonstration:
 
 ```text
-- Load .zasm
-- Edit .zasm
-- Assemble
-- Load .zbin
-- Step
-- Run
-- View registers
-- View flags
-- View memory
-- View stack
-- View trace
-- View MMIO mappings
-- View interrupt state
+Process A (.zbin)
+Process B (.zbin)
+  ↓
+independent address spaces
+  ↓
+timer-driven round-robin preemption
+  ↓
+User / Kernel protection
+  ↓
+protected syscall
+  ↓
+hardware access
+  ↓
+process exit or isolated fault
+  ↓
+scheduler handoff
+  ↓
+debugger / Studio observation
+  ↓
+trace export
+  ↓
+invariant + golden verification
 ```
 
-Avoid making Studio the main project.
-
-Do not prioritize visual polish before the core platform is stable.
-
----
-
-## 13. Roadmap
-
-### Phase 1: Core CPU
-
-Status: mostly complete.
+Polish goals:
 
 ```text
-- RegisterFile
-- Flags
-- Memory
-- ALU
-- CPUState
-- CPU execution
-- Stack
-- CALL / RET
-```
-
-### Phase 2: Toolchain
-
-Status: mostly complete.
-
-```text
-- .zasm
-- Assembler
-- InstructionEncoder
-- InstructionDecoder
-- .zbin
-- BinaryReader
-- BinaryWriter
-- BinaryLoader
-```
-
-### Phase 3: Test Infrastructure
-
-Status: active and strong.
-
-```text
-- test_all.bat
-- alu-test
-- binary-test
-- memory expectations
-- MMIO tests
-- interrupt tests
-- timer tests
-- syscall tests
-```
-
-### Phase 4: MMIO / Interrupts
-
-Status: implemented MVP.
-
-```text
-- MMIOBus
-- DebugOutputDevice
-- TimerDevice
-- InterruptController
-- INT
-- IRET
-- EI
-- DI
-```
-
-### Phase 5: Mini Kernel
-
-Status: beginning.
-
-Next targets:
-
-```text
-- syscall 1: debug output
-- syscall 2: memory write
-- syscall 3: exit
-- syscall error handling
-- user program / kernel handler separation
-- boot.zasm
-- kernel.zasm
-- syscall convention document
-```
-
-### Phase 6: Advanced Architecture
-
-Future targets:
-
-```text
-- Bus abstraction beyond MMIO
-- Device table
-- Interrupt priority
-- Nested interrupt policy
-- IRET frame with FLAGS restore
-- Privilege mode
-- User mode / kernel mode
-- Simple virtual memory
-- Page table experiment
-- Cache simulator
-- Pipeline simulator
+stable demo fixtures
+clear CLI commands
+source symbols included
+repeatable expected results
+portfolio screenshots / short demo guide
+remove misleading legacy wording from current docs
 ```
 
 ---
 
-## 14. Near-Term Priorities
+## 6. v2.0 — First Complete Zero-CPU Platform
 
-The next practical steps should be:
+v2.0 is the first planned completion boundary.
+
+A v2.0 Zero-CPU release should demonstrate:
 
 ```text
-1. README update
-2. docs/syscall-convention.md
-3. syscall 2 and syscall 3 examples
-4. kernel/user program separation
-5. better interrupt frame with FLAGS save/restore
-6. Studio interrupt/MMIO view later
+custom ISA + assembler
+versioned executable format
+protected virtual CPU
+processes + address spaces
+preemptive scheduler
+fault isolation
+guest and protected syscall models
+virtual and physical hardware paths
+source-aware debugger
+multi-process debugger
+Zero Studio frontend
+trace/invariant/golden verification
+end-to-end reproducible demo
 ```
 
-Immediate rule:
+At v2.0 the project is complete enough to stand as a systems-software portfolio
+project without requiring CPU microarchitecture simulation.
+
+---
+
+## 7. Deferred Work
+
+The following are intentionally **not required for v2.0**:
 
 ```text
-Core and system behavior first.
-Studio polish later.
+cache simulation
+5-stage pipeline simulation
+hazard handling
+branch prediction
+page-table/MMU experiments
+network stack
+filesystem
+ESP32-hosted full Zero-CPU interpreter
+```
+
+They can become later v2.x research or extension work.
+
+Adding them before the protected platform is integrated would broaden the
+project without strengthening its main architecture.
+
+---
+
+## 8. Module Boundary Direction
+
+Possible future library boundaries:
+
+```text
+zero_cpu_arch
+zero_cpu_toolchain
+zero_cpu_kernel
+zero_cpu_debug
+zero_cpu_hardware
+zero_cpu_host_windows
+```
+
+Executables:
+
+```text
+zero_cli
+zero_studio
+```
+
+These boundaries are a direction for gradual cleanup, not a reason for an
+immediate large refactor.
+
+---
+
+## 9. Design Rules
+
+Zero-CPU should continue to follow these rules:
+
+```text
+1. Core semantics are authoritative.
+2. Stable behavior receives automated tests before frontend polish.
+3. The canonical executable path is .zasm → .zbin → loader → CPU.
+4. CLI and Studio consume core behavior rather than reproduce it.
+5. User mode must not bypass protection to access Kernel memory or MMIO.
+6. Process lifecycle and scheduler behavior must remain deterministic enough
+   for trace verification.
+7. Semantic events should be recorded once in the core and reused by tools.
+8. Historical milestone documents may remain, but current docs must identify
+   implemented behavior accurately.
+9. Avoid speculative microarchitecture work until the v2.0 platform is done.
 ```
 
 ---
 
-## 15. Design Principles
+## 10. Completion Perspective
 
-Zero-CPU should follow these principles:
-
-```text
-1. Prefer small, testable architecture steps.
-2. Every new CPU/system feature needs a CLI test.
-3. Every new instruction must be registered in:
-   - Opcode.hpp
-   - Opcode.cpp
-   - InstructionEncoder.cpp
-   - InstructionDecoder.cpp
-   - CPU.cpp
-4. Every new system behavior should have a .zasm example.
-5. UI should not drive architecture decisions.
-6. The project should remain understandable as a learning system.
-```
-
----
-
-## 16. Final Direction
-
-Zero-CPU is suitable preparation for systems software development because it connects:
+The difficult core subsystems are already present:
 
 ```text
-- computer architecture
-- assembly
-- binary formats
-- loaders
-- CPU execution
-- memory
-- stack
-- interrupts
-- MMIO
-- devices
-- syscall conventions
-- mini kernel design
+protection
+processes
+preemption
+syscalls
+hardware abstraction
+debugger
+verification
+Studio consumption
 ```
 
-The final target is:
+The remaining path to v2.0 is primarily:
 
 ```text
-A small virtual computer platform with its own ISA, assembler, executable format, loader, virtual CPU, debugger tooling, device model, interrupt system, and mini kernel.
+consistency
+physical demonstration
+integration
+end-to-end presentation
 ```
+
+That is the current architectural roadmap.
+
+<!-- Patch: v1.6-current-roadmap-semantics-r1 -->

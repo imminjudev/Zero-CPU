@@ -40,6 +40,7 @@ State = {
   flags,
   pc,
   sp,
+  privilege,
   memory,
   halted,
   error
@@ -72,11 +73,11 @@ Examples:
 
 ```text
 R0 = interrupt vector during interrupt entry
-R1 = syscall number in the current INT 80 convention
+R1 = syscall / service number in INT 80 conventions
 R2 = syscall arg0 / return value
 R3 = syscall arg1
-R4 = syscall arg2
-R7 = process exit code
+R4 = guest arg2 or protected-host status
+R7 = exit / status value
 ```
 
 ### 2.2 Program Counter
@@ -109,10 +110,17 @@ The default binary code base is:
 
 ### 2.3 Stack Pointer
 
-The default stack base is:
+The normal default stack base is:
 
 ```text
 0x0800 = 2048
+```
+
+Protected execution uses explicit stack regions:
+
+```text
+User stack    = 0x0800..0x0F9F
+Kernel stack  = 0x0FA0..0x0FFF
 ```
 
 The stack grows upward in memory.
@@ -137,9 +145,13 @@ value = Memory[SP .. SP+7]
 
 `RET` uses the same pop operation to restore its return address.
 
-BIO-OS may configure SP near decimal 4000 to avoid overlap between a large
-combined code image and the old default stack region. SP must not be initialized
-to 4096 because the default memory range ends before that address.
+User-mode stack operations are checked against the User stack region.
+
+A User→Kernel interrupt transition switches to the separate Kernel interrupt
+stack and preserves the interrupted User SP in the protected interrupt frame.
+
+Legacy BIO-OS integration may still use a high stack convention, but protected
+process execution uses the explicit User/Kernel stack boundaries above.
 
 ### 2.4 Flags
 
@@ -204,11 +216,21 @@ Instruction fetch does not use the data MMIO routing path.
 Current important MMIO regions include:
 
 ```text
-0xF000 = DebugOutputDevice
-0xF100 = TimerDevice
+0xF000..0xF00F = DebugOutputDevice
+0xF100..0xF12F = TimerDevice
+0xF200..0xF22F = Hardware bridge
 ```
 
 These addresses are outside default RAM and are handled by mapped devices.
+
+In User mode, normal 64-bit data LOAD/STORE access is restricted to:
+
+```text
+0x0000..0x01FF
+```
+
+Therefore User code cannot directly access MMIO. Protected hardware access uses
+the Kernel-side software interrupt path.
 
 ## 4. Operand Semantics
 
@@ -434,10 +456,10 @@ else:
 
 #### JG target
 
-Current Zero-CPU behavior:
+Current signed-comparison behavior:
 
 ```text
-if not Z and not S:
+if not Z and S == O:
     PC <- target
 else:
     PC <- next
@@ -445,19 +467,17 @@ else:
 
 #### JL target
 
-Current Zero-CPU behavior:
+Current signed-comparison behavior:
 
 ```text
-if S:
+if S != O:
     PC <- target
 else:
     PC <- next
 ```
 
-Important: `JG` and `JL` currently use only Z and S. They do not use the common
-signed-comparison relationship between S and O. Golden traces must preserve the
-current behavior unless the ISA semantics are intentionally versioned and
-changed.
+`JG` and `JL` therefore use the signed overflow flag together with the sign flag,
+matching the signed comparison result produced by `CMP`.
 
 ### 5.6 Stack and Calls
 
@@ -508,9 +528,21 @@ A negative popped return address is a runtime error.
 
 ### 5.7 Interrupt Control
 
+The following instructions are Kernel-only when the CPU is in User mode:
+
+```text
+HALT
+IRET
+EI
+DI
+```
+
+Attempting one of them in User mode produces a privilege violation.
+
 #### EI
 
 ```text
+require Kernel mode when currently User
 require interrupt controller
 global_interrupt_enable <- true
 PC <- next
@@ -519,6 +551,7 @@ PC <- next
 #### DI
 
 ```text
+require Kernel mode when currently User
 require interrupt controller
 global_interrupt_enable <- false
 PC <- next
@@ -540,24 +573,47 @@ Binary mode return address:
 PC + 24
 ```
 
-Software interrupt entry:
+Software interrupt entry uses the protected interrupt-frame mechanism.
+
+For a User→Kernel transition, the frame is written to the Kernel interrupt
+stack and contains four 64-bit slots:
 
 ```text
-push(return_address)
-push(pack(flags))
-R0 <- vector
-PC <- vector_handler(vector)
+return address
+packed FLAGS
+saved privilege
+saved SP
 ```
 
-The current software `INT` path does not assign an interrupt payload to R1.
+The CPU then enters Kernel mode and writes:
+
+```text
+R0 <- vector
+```
+
+If a registered host `SoftwareInterruptHandler` handles the vector, it runs
+while the protected Kernel frame is active. Otherwise the CPU transfers to the
+guest vector-table handler.
+
+The software `INT` path does not assign a hardware-interrupt payload to R1.
 
 #### Hardware Interrupt Entry
 
-A pending interrupt is serviced before normal instruction execution.
+A pending hardware interrupt is serviced before normal instruction execution.
+
+It uses the same protected four-slot interrupt frame:
 
 ```text
-push(current_PC)
-push(pack(flags))
+return address = current PC
+packed FLAGS
+saved privilege
+saved SP
+```
+
+After frame creation:
+
+```text
+privilege <- Kernel
 R0 <- vector
 R1 <- payload
 PC <- vector_handler(vector)
@@ -568,13 +624,24 @@ executed yet.
 
 #### IRET
 
+`IRET` is Kernel-only.
+
+It restores the protected frame:
+
 ```text
-flags <- unpack(pop())
-PC <- pop()
+FLAGS <- saved FLAGS
+privilege <- saved privilege
+PC <- saved return address
+SP <- saved SP
 ```
 
-The order is correct for an interrupt frame pushed as return address followed by
-packed flags.
+Returning to User mode also leaves the Kernel interrupt stack and restores the
+saved User stack pointer.
+
+A protected host syscall with `TerminateProcess` disposition may restore a User
+PC exactly equal to the executable's one-past-end address as a final
+non-executable snapshot. The process is halted immediately, so that address is
+never fetched.
 
 ### 5.8 Control Instructions
 
@@ -622,12 +689,16 @@ A trace event is still recorded for the failed step.
 Common runtime errors include:
 
 - PC outside the loaded program or binary code section
+- User execution outside the configured User code range
+- User data access outside the protected low-memory range
+- User execution of Kernel-only instructions
 - malformed binary operands
 - invalid register payload
 - invalid memory range
 - negative register-indirect address
 - invalid branch target
-- stack underflow
+- stack underflow / overflow
+- invalid User or Kernel stack pointer
 - division by zero
 - signed division overflow
 - missing interrupt controller
@@ -674,6 +745,10 @@ The first invariant checker should enforce at least:
 register count == 8
 memory size == 4096 unless explicitly configured otherwise
 binary PC is inside and aligned to the loaded code section
+User PC remains inside the configured User execution range
+User data access remains inside 0x0000..0x01FF
+User stack remains inside 0x0800..0x0F9F
+Kernel interrupt stack remains inside 0x0FA0..0x0FFF
 stack operations move SP by exactly 8
 HALT leaves halted == true
 runtime error implies halted == true
@@ -684,8 +759,10 @@ Further invariants can be added as the verification layer grows.
 
 ## 9. Compatibility and Versioning
 
-This document describes the current v0.5 development baseline built on the v0.4
-implementation.
+This document describes the current protected-platform architectural baseline.
+
+The canonical binary format is currently `0.3`, with legacy `0.2` binary
+compatibility retained. Binary instructions remain fixed-width 24-byte records.
 
 Changing any of the following should be treated as an ISA or architectural
 semantic change:
@@ -702,3 +779,5 @@ semantic change:
 
 Such changes should update this document, tests, golden traces, and release notes
 together.
+
+<!-- Patch: v1.6-current-roadmap-semantics-r1 -->
