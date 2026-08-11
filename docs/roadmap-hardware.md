@@ -186,6 +186,29 @@ show useful failure messages for unplugged/wrong-port cases
 capture expected CLI/debugger output
 ```
 
+### v1.7-A — Protected GPIO Output Demo
+
+Prepared:
+
+```text
+examples/protected_hardware_gpio_live.zasm
+scripts/run_esp32_protected_gpio_demo.bat
+docs/esp32-protected-gpio-demo.md
+```
+
+The exact User program is also executed with `--hardware-mock` in the normal
+regression suite.
+
+Current verification state:
+
+```text
+protected User→INT 80→hardware path: automated mock verification
+physical ESP32 GPIO 2 observation: pending physical run
+```
+
+The physical claim is not complete until the serial demo succeeds on an actual
+ESP32 and GPIO 2 is observed HIGH.
+
 ---
 
 ## 7. Studio Hardware Scope
@@ -238,3 +261,5 @@ That is stronger and more relevant to the current architecture than adding new
 device abstractions before the existing path is demonstrated end to end.
 
 <!-- Patch: v1.6-current-roadmap-semantics-r1 -->
+
+<!-- Patch: v1.7-protected-esp32-gpio-demo-r1 -->

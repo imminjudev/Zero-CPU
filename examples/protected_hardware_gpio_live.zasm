@@ -1,0 +1,64 @@
+; Zero-CPU v1.7 protected ESP32 GPIO live demo
+;
+; This exact program is used with both:
+;   --hardware-mock
+;   --hardware-serial COMx
+;
+; Protected ABI:
+;   service 20 = hardware write
+;   service 21 = hardware read
+;   service 3  = process exit
+;   R4 = status
+;
+; Hardware offset 0 = GPIO output.
+;
+; Exit codes:
+;   0  success
+;   10 hardware write failed
+;   11 hardware read failed
+;   12 GPIO readback mismatch
+
+.entry start
+.text
+
+start:
+    MOV R1, 20
+    MOV R2, 0
+    MOV R3, 1
+    INT 80
+
+    CMP R4, 0
+    JNE write_failed
+
+    MOV R1, 21
+    MOV R2, 0
+    INT 80
+
+    CMP R4, 0
+    JNE read_failed
+
+    STORE [100], R2
+
+    CMP R2, 1
+    JNE readback_failed
+
+    MOV R1, 3
+    MOV R2, 0
+    INT 80
+
+write_failed:
+    MOV R1, 3
+    MOV R2, 10
+    INT 80
+
+read_failed:
+    MOV R1, 3
+    MOV R2, 11
+    INT 80
+
+readback_failed:
+    MOV R1, 3
+    MOV R2, 12
+    INT 80
+
+; Patch: v1.7-protected-esp32-gpio-demo-r1

@@ -909,6 +909,14 @@ if errorlevel 1 goto fail
 "%ZERO_CLI%" run-processes --quantum 100 --max-steps 100 --protected-syscalls --hardware-mock --expect-exit 1=7 --expect-hardware 0=42 "build\protected_runtime_cli.zbin"
 if errorlevel 1 goto fail
 
+echo.
+echo [55/70] Verifying protected ESP32 GPIO demo with mock hardware...
+"%ZERO_CLI%" assemble "examples\protected_hardware_gpio_live.zasm" "build\protected_hardware_gpio_live_mock.zbin"
+if errorlevel 1 goto fail
+
+"%ZERO_CLI%" run-processes --quantum 100 --max-steps 200 --protected-syscalls --hardware-mock --expect-exit 1=0 --expect-hardware 0=1 "build\protected_hardware_gpio_live_mock.zbin"
+if errorlevel 1 goto fail
+
 del "build\protected_runtime_cli.zbin" 2>nul
 del "build\protected_runtime_cli.zbin.zsym" 2>nul
 
@@ -1127,3 +1135,5 @@ echo.
 exit /b 1
 
 rem Patch: v1.6-cli-syscall-abi-split-r1
+
+rem Patch: v1.7-protected-esp32-gpio-demo-r1

@@ -53,10 +53,11 @@ introduced.
 ## Hardware
 
 ```text
+docs/esp32-protected-gpio-demo.md
+docs/roadmap-hardware.md
 docs/hardware-abstraction-v0.6.md
 docs/serial-hardware-v0.6.md
 docs/windows-serial-hardware-v0.7.md
-docs/roadmap-hardware.md
 ```
 
 Current hardware architecture supports:
@@ -134,7 +135,7 @@ Current direction is summarized in the root README and project overview.
 Current milestone:
 
 ```text
-v1.5 protected runtime observability
+v1.7 hardware demonstration completion
 ```
 
 Current regression suite:
@@ -162,3 +163,5 @@ future direction
 <!-- Patch: v1.6-docs-current-platform-r1 -->
 
 <!-- Patch: v1.6-current-roadmap-semantics-r1 -->
+
+<!-- Patch: v1.7-protected-esp32-gpio-demo-r1 -->
