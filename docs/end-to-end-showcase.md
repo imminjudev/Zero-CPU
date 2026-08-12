@@ -39,6 +39,8 @@ multi-process invariants
 trace JSON export
 ```
 
-Golden-trace locking and debugger/Studio presentation are the next v1.9 steps.
+The deterministic trace is locked against `tests/golden/end_to_end_showcase.json` and the showcase is part of the full regression suite. Debugger/Studio presentation is the next v1.9 step.
 
 <!-- Patch: v1.9-end-to-end-showcase-r1 -->
+
+<!-- Patch: v1.9-showcase-golden-regression-r1 -->

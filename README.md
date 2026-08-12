@@ -243,7 +243,7 @@ Run the complete regression suite:
 scripts\test_all.bat
 ```
 
-The current suite contains **72 test stages** and finishes with:
+The current suite contains **73 test stages** and finishes with:
 
 ```text
 All Zero-CPU tests passed.

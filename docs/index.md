@@ -58,7 +58,7 @@ docs/zero-fs.md
 
 ZeroFS is the small deterministic virtual filesystem backing the protected
 platform. It is separate from the 4 KiB guest memory image and is intended for
-later protected filesystem syscalls and Zero Web assets.
+protected filesystem syscalls and end-to-end showcase assets.
 
 ## Hardware
 
@@ -145,13 +145,13 @@ Current direction is summarized in the root README and project overview.
 Current milestone:
 
 ```text
-v1.8 protected platform runtime
+v1.9 end-to-end protected showcase
 ```
 
 Current regression suite:
 
 ```text
-72 stages
+73 stages
 All Zero-CPU tests passed.
 ```
 

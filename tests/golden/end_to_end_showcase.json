@@ -1,0 +1,2506 @@
+{
+  "schema": "zero_cpu_multiprocess_trace",
+  "schema_version": 1,
+  "producer": "zero_cpu",
+  "producer_version": "v1.9-showcase",
+  "mode": "ProtectedMultiProcess",
+  "runtime_state": "Completed",
+  "step_limit_reached": false,
+  "lifecycle_steps": 24,
+  "process_count": 2,
+  "termination_count": 2,
+  "fault_count": 1,
+  "preemption_count": 22,
+  "context_switch_count": 13,
+  "invariants": {
+    "passed": true,
+    "violation_count": 0,
+    "violations": [
+    ]
+  },
+  "execution_event_count": 24,
+  "execution_trace": [
+    {
+      "lifecycle_step": 1,
+      "pid": 1,
+      "event": {
+        "index": 0,
+        "pc_before": 512,
+        "pc_after": 536,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R1, 31",
+        "state_before": {
+          "pc": 512,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 31,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R1",
+            "before": 0,
+            "after": 31
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0512 | MOV R1, 31 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R1:0->31 | NextPC=0536",
+        "full": "[PC=0512] MOV R1, 31\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 512\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=31 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R1: 0 -> 31\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0536\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 2,
+      "pid": 2,
+      "event": {
+        "index": 1,
+        "pc_before": 512,
+        "pc_after": 536,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R1, 20",
+        "state_before": {
+          "pc": 512,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 0,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R1",
+            "before": 0,
+            "after": 20
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0512 | MOV R1, 20 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R1:0->20 | NextPC=0536",
+        "full": "[PC=0512] MOV R1, 20\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 512\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=0 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R1: 0 -> 20\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0536\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 3,
+      "pid": 1,
+      "event": {
+        "index": 2,
+        "pc_before": 536,
+        "pc_after": 560,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R2, 24",
+        "state_before": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 31,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 31,
+            "R2": 24,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R2",
+            "before": 0,
+            "after": 24
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0536 | MOV R2, 24 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R2:0->24 | NextPC=0560",
+        "full": "[PC=0536] MOV R2, 24\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=31 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=31 R2=24 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R2: 0 -> 24\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0560\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 4,
+      "pid": 2,
+      "event": {
+        "index": 3,
+        "pc_before": 536,
+        "pc_after": 560,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R2, 0",
+        "state_before": {
+          "pc": 536,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": false,
+            "after": true
+          }
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0536 | MOV R2, 0 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | ZF:0->1 | NextPC=0560",
+        "full": "[PC=0536] MOV R2, 0\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 536\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 0 -> 1\n\nChanged Memory:\n  None\n\nNextPC:\n  0560\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 5,
+      "pid": 1,
+      "event": {
+        "index": 4,
+        "pc_before": 560,
+        "pc_after": 584,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "INT 80",
+        "state_before": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 31,
+            "R2": 24,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 584,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 0,
+            "after": 80
+          },
+          {
+            "name": "R2",
+            "before": 24,
+            "after": 5
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 80,
+            "before": 0,
+            "after": 72
+          },
+          {
+            "address": 81,
+            "before": 0,
+            "after": 69
+          },
+          {
+            "address": 82,
+            "before": 0,
+            "after": 76
+          },
+          {
+            "address": 83,
+            "before": 0,
+            "after": 76
+          },
+          {
+            "address": 84,
+            "before": 0,
+            "after": 79
+          },
+          {
+            "address": 4000,
+            "before": 0,
+            "after": 72
+          },
+          {
+            "address": 4001,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "address": 4016,
+            "before": 0,
+            "after": 1
+          },
+          {
+            "address": 4025,
+            "before": 0,
+            "after": 8
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "SOFTWARE_INTERRUPT",
+        "datapath": "PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "SOFTWARE_INTERRUPT | from=560 | to=584 | taken=true | target=584 | vector=80 | note=interrupt return address was not found in changed memory",
+        "compact": "PC=0560 | INT 80 | stage=EXECUTE | action=SOFTWARE_INTERRUPT | path=PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory | SOFTWARE_INTERRUPT | from=560 | to=584 | taken=true | target=584 | vector=80 | note=interrupt return address was not found in changed memory | R0:0->80 | R2:24->5 | NextPC=0584",
+        "full": "[PC=0560] INT 80\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: SOFTWARE_INTERRUPT\n  Datapath: PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  Operation: SOFTWARE_INTERRUPT\n  Operand: 80\n  From PC: 560\n  To PC: 584\n  Taken: true\n  Target: 584\n  Vector: 80\n  Note: interrupt return address was not found in changed memory\n\nBefore:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=31 R2=24 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 584\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 0 -> 80\n  R2: 24 -> 5\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[80]: 0 -> 72\n  Memory[81]: 0 -> 69\n  Memory[82]: 0 -> 76\n  Memory[83]: 0 -> 76\n  Memory[84]: 0 -> 79\n  Memory[4000]: 0 -> 72\n  Memory[4001]: 0 -> 2\n  Memory[4016]: 0 -> 1\n  Memory[4025]: 0 -> 8\n\nNextPC:\n  0584\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 6,
+      "pid": 2,
+      "event": {
+        "index": 5,
+        "pc_before": 560,
+        "pc_after": 584,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R3, 42",
+        "state_before": {
+          "pc": 560,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "state_after": {
+          "pc": 584,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R3",
+            "before": 0,
+            "after": 42
+          }
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": true,
+            "after": false
+          }
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0560 | MOV R3, 42 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R3:0->42 | ZF:1->0 | NextPC=0584",
+        "full": "[PC=0560] MOV R3, 42\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 560\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nAfter:\nPC = 584\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R3: 0 -> 42\n\nChanged Flags:\n  ZF: 1 -> 0\n\nChanged Memory:\n  None\n\nNextPC:\n  0584\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 7,
+      "pid": 1,
+      "event": {
+        "index": 6,
+        "pc_before": 584,
+        "pc_after": 608,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [88], R4",
+        "state_before": {
+          "pc": 584,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 608,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": false,
+            "after": true
+          }
+        ],
+        "memory_changes": [
+          {
+            "address": 88,
+            "before": 157,
+            "after": 0
+          },
+          {
+            "address": 89,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 90,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 91,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 92,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 93,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 94,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 95,
+            "before": 255,
+            "after": 0
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([88])=88 | route=RAM | value(R4)=0",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0584 | STORE [88], R4 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([88])=88 | route=RAM | value(R4)=0 | ZF:0->1 | NextPC=0608",
+        "full": "[PC=0584] STORE [88], R4\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [88] = 88\n  Route: RAM\n  Value R4 = 0\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 584\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 608\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 0 -> 1\n\nChanged Memory:\n  Memory[88]: 157 -> 0\n  Memory[89]: 255 -> 0\n  Memory[90]: 255 -> 0\n  Memory[91]: 255 -> 0\n  Memory[92]: 255 -> 0\n  Memory[93]: 255 -> 0\n  Memory[94]: 255 -> 0\n  Memory[95]: 255 -> 0\n\nNextPC:\n  0608\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 8,
+      "pid": 2,
+      "event": {
+        "index": 7,
+        "pc_before": 584,
+        "pc_after": 608,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "INT 80",
+        "state_before": {
+          "pc": 584,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 0,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 608,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R0",
+            "before": 0,
+            "after": 80
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 4000,
+            "before": 0,
+            "after": 96
+          },
+          {
+            "address": 4001,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "address": 4016,
+            "before": 0,
+            "after": 1
+          },
+          {
+            "address": 4025,
+            "before": 0,
+            "after": 8
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "SOFTWARE_INTERRUPT",
+        "datapath": "PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "SOFTWARE_INTERRUPT | from=584 | to=608 | taken=true | target=608 | vector=80 | note=interrupt return address was not found in changed memory",
+        "compact": "PC=0584 | INT 80 | stage=EXECUTE | action=SOFTWARE_INTERRUPT | path=PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory | SOFTWARE_INTERRUPT | from=584 | to=608 | taken=true | target=608 | vector=80 | note=interrupt return address was not found in changed memory | R0:0->80 | NextPC=0608",
+        "full": "[PC=0584] INT 80\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: SOFTWARE_INTERRUPT\n  Datapath: PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  Operation: SOFTWARE_INTERRUPT\n  Operand: 80\n  From PC: 584\n  To PC: 608\n  Taken: true\n  Target: 608\n  Vector: 80\n  Note: interrupt return address was not found in changed memory\n\nBefore:\nPC = 584\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=0 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 608\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R0: 0 -> 80\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[4000]: 0 -> 96\n  Memory[4001]: 0 -> 2\n  Memory[4016]: 0 -> 1\n  Memory[4025]: 0 -> 8\n\nNextPC:\n  0608\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 9,
+      "pid": 1,
+      "event": {
+        "index": 8,
+        "pc_before": 608,
+        "pc_after": 632,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [96], R2",
+        "state_before": {
+          "pc": 608,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "state_after": {
+          "pc": 632,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": true,
+            "after": false
+          }
+        ],
+        "memory_changes": [
+          {
+            "address": 96,
+            "before": 157,
+            "after": 5
+          },
+          {
+            "address": 97,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 98,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 99,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 100,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 101,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 102,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 103,
+            "before": 255,
+            "after": 0
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([96])=96 | route=RAM | value(R2)=5",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0608 | STORE [96], R2 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([96])=96 | route=RAM | value(R2)=5 | ZF:1->0 | NextPC=0632",
+        "full": "[PC=0608] STORE [96], R2\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [96] = 96\n  Route: RAM\n  Value R2 = 5\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 608\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nAfter:\nPC = 632\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 1 -> 0\n\nChanged Memory:\n  Memory[96]: 157 -> 5\n  Memory[97]: 255 -> 0\n  Memory[98]: 255 -> 0\n  Memory[99]: 255 -> 0\n  Memory[100]: 255 -> 0\n  Memory[101]: 255 -> 0\n  Memory[102]: 255 -> 0\n  Memory[103]: 255 -> 0\n\nNextPC:\n  0632\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 10,
+      "pid": 2,
+      "event": {
+        "index": 9,
+        "pc_before": 608,
+        "pc_after": 632,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R5, R4",
+        "state_before": {
+          "pc": 608,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 632,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": false,
+            "after": true
+          }
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0608 | MOV R5, R4 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | ZF:0->1 | NextPC=0632",
+        "full": "[PC=0608] MOV R5, R4\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 608\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 632\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 0 -> 1\n\nChanged Memory:\n  None\n\nNextPC:\n  0632\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 11,
+      "pid": 1,
+      "event": {
+        "index": 10,
+        "pc_before": 632,
+        "pc_after": 656,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R5, 5",
+        "state_before": {
+          "pc": 632,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 656,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R5",
+            "before": 0,
+            "after": 5
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0632 | MOV R5, 5 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R5:0->5 | NextPC=0656",
+        "full": "[PC=0632] MOV R5, 5\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 632\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 656\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R5: 0 -> 5\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0656\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 12,
+      "pid": 2,
+      "event": {
+        "index": 11,
+        "pc_before": 632,
+        "pc_after": 656,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R6, 1",
+        "state_before": {
+          "pc": 632,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "state_after": {
+          "pc": 656,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 1,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R6",
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": true,
+            "after": false
+          }
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0632 | MOV R6, 1 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R6:0->1 | ZF:1->0 | NextPC=0656",
+        "full": "[PC=0632] MOV R6, 1\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 632\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nAfter:\nPC = 656\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=1 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R6: 0 -> 1\n\nChanged Flags:\n  ZF: 1 -> 0\n\nChanged Memory:\n  None\n\nNextPC:\n  0656\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 13,
+      "pid": 1,
+      "event": {
+        "index": 12,
+        "pc_before": 656,
+        "pc_after": 680,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [40], R5",
+        "state_before": {
+          "pc": 656,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 680,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 40,
+            "before": 0,
+            "after": 5
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([40])=40 | route=RAM | value(R5)=5",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0656 | STORE [40], R5 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([40])=40 | route=RAM | value(R5)=5 | NextPC=0680",
+        "full": "[PC=0656] STORE [40], R5\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [40] = 40\n  Route: RAM\n  Value R5 = 5\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 656\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 680\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[40]: 0 -> 5\n\nNextPC:\n  0680\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 14,
+      "pid": 2,
+      "event": {
+        "index": 13,
+        "pc_before": 656,
+        "pc_after": 656,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [61952], R6",
+        "state_before": {
+          "pc": 656,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 1,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 656,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": true,
+          "has_error": true,
+          "error_message": "Memory protection violation: User mode cannot write address 61952",
+          "registers": {
+            "R0": 80,
+            "R1": 20,
+            "R2": 0,
+            "R3": 42,
+            "R4": 0,
+            "R5": 0,
+            "R6": 1,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([61952])=61952 | route=Hardware Bridge MMIO | value(R6)=1 | note=MMIO write is visible through the device, not normal RAM snapshot",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0656 | STORE [61952], R6 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags | MEMORY_WRITE | address([61952])=61952 | route=Hardware Bridge MMIO | value(R6)=1 | note=MMIO write is visible through the device, not normal RAM snapshot | halted:false->true | ERROR: Memory protection violation: User mode cannot write address 61952 | NextPC=0656",
+        "full": "[PC=0656] STORE [61952], R6\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [61952] = 61952\n  Route: Hardware Bridge MMIO\n  Value R6 = 1\n  Note: MMIO write is visible through the device, not normal RAM snapshot\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 656\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=1 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 656\nSP = 2048\nPrivilege = User\nHalted = true\nError = Memory protection violation: User mode cannot write address 61952\nRegisters: R0=80 R1=20 R2=0 R3=42 R4=0 R5=0 R6=1 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0656\n\nError:\n  Memory protection violation: User mode cannot write address 61952\n",
+        "has_error": true,
+        "error": "Memory protection violation: User mode cannot write address 61952"
+      }
+    },
+    {
+      "lifecycle_step": 15,
+      "pid": 1,
+      "event": {
+        "index": 14,
+        "pc_before": 680,
+        "pc_after": 704,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R1, 32",
+        "state_before": {
+          "pc": 680,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 31,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 704,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R1",
+            "before": 31,
+            "after": 32
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0680 | MOV R1, 32 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R1:31->32 | NextPC=0704",
+        "full": "[PC=0680] MOV R1, 32\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 680\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=31 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 704\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R1: 31 -> 32\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0704\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 16,
+      "pid": 1,
+      "event": {
+        "index": 15,
+        "pc_before": 704,
+        "pc_after": 728,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R2, 24",
+        "state_before": {
+          "pc": 704,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 728,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 24,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R2",
+            "before": 5,
+            "after": 24
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0704 | MOV R2, 24 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R2:5->24 | NextPC=0728",
+        "full": "[PC=0704] MOV R2, 24\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 704\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 728\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=24 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R2: 5 -> 24\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0728\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 17,
+      "pid": 1,
+      "event": {
+        "index": 16,
+        "pc_before": 728,
+        "pc_after": 752,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "INT 80",
+        "state_before": {
+          "pc": 728,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 24,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 752,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R2",
+            "before": 24,
+            "after": 5
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 4000,
+            "before": 72,
+            "after": 240
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "SOFTWARE_INTERRUPT",
+        "datapath": "PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "SOFTWARE_INTERRUPT | from=728 | to=752 | taken=true | target=752 | vector=80 | note=interrupt return address was not found in changed memory",
+        "compact": "PC=0728 | INT 80 | stage=EXECUTE | action=SOFTWARE_INTERRUPT | path=PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory | SOFTWARE_INTERRUPT | from=728 | to=752 | taken=true | target=752 | vector=80 | note=interrupt return address was not found in changed memory | R2:24->5 | NextPC=0752",
+        "full": "[PC=0728] INT 80\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: SOFTWARE_INTERRUPT\n  Datapath: PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> RegisterFile -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  Operation: SOFTWARE_INTERRUPT\n  Operand: 80\n  From PC: 728\n  To PC: 752\n  Taken: true\n  Target: 752\n  Vector: 80\n  Note: interrupt return address was not found in changed memory\n\nBefore:\nPC = 728\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=24 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 752\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R2: 24 -> 5\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[4000]: 72 -> 240\n\nNextPC:\n  0752\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 18,
+      "pid": 1,
+      "event": {
+        "index": 17,
+        "pc_before": 752,
+        "pc_after": 776,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [104], R4",
+        "state_before": {
+          "pc": 752,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 776,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": false,
+            "after": true
+          }
+        ],
+        "memory_changes": [
+          {
+            "address": 104,
+            "before": 157,
+            "after": 0
+          },
+          {
+            "address": 105,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 106,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 107,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 108,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 109,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 110,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 111,
+            "before": 255,
+            "after": 0
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([104])=104 | route=RAM | value(R4)=0",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0752 | STORE [104], R4 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([104])=104 | route=RAM | value(R4)=0 | ZF:0->1 | NextPC=0776",
+        "full": "[PC=0752] STORE [104], R4\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [104] = 104\n  Route: RAM\n  Value R4 = 0\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 752\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 776\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 0 -> 1\n\nChanged Memory:\n  Memory[104]: 157 -> 0\n  Memory[105]: 255 -> 0\n  Memory[106]: 255 -> 0\n  Memory[107]: 255 -> 0\n  Memory[108]: 255 -> 0\n  Memory[109]: 255 -> 0\n  Memory[110]: 255 -> 0\n  Memory[111]: 255 -> 0\n\nNextPC:\n  0776\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 19,
+      "pid": 1,
+      "event": {
+        "index": 18,
+        "pc_before": 776,
+        "pc_after": 800,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [112], R2",
+        "state_before": {
+          "pc": 776,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "state_after": {
+          "pc": 800,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": true,
+            "after": false
+          }
+        ],
+        "memory_changes": [
+          {
+            "address": 112,
+            "before": 157,
+            "after": 5
+          },
+          {
+            "address": 113,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 114,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 115,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 116,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 117,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 118,
+            "before": 255,
+            "after": 0
+          },
+          {
+            "address": 119,
+            "before": 255,
+            "after": 0
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([112])=112 | route=RAM | value(R2)=5",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0776 | STORE [112], R2 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([112])=112 | route=RAM | value(R2)=5 | ZF:1->0 | NextPC=0800",
+        "full": "[PC=0776] STORE [112], R2\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [112] = 112\n  Route: RAM\n  Value R2 = 5\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 776\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nAfter:\nPC = 800\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  ZF: 1 -> 0\n\nChanged Memory:\n  Memory[112]: 157 -> 5\n  Memory[113]: 255 -> 0\n  Memory[114]: 255 -> 0\n  Memory[115]: 255 -> 0\n  Memory[116]: 255 -> 0\n  Memory[117]: 255 -> 0\n  Memory[118]: 255 -> 0\n  Memory[119]: 255 -> 0\n\nNextPC:\n  0800\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 20,
+      "pid": 1,
+      "event": {
+        "index": 19,
+        "pc_before": 800,
+        "pc_after": 824,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R5, 99",
+        "state_before": {
+          "pc": 800,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 5,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 824,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R5",
+            "before": 5,
+            "after": 99
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0800 | MOV R5, 99 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R5:5->99 | NextPC=0824",
+        "full": "[PC=0800] MOV R5, 99\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 800\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=5 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 824\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R5: 5 -> 99\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0824\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 21,
+      "pid": 1,
+      "event": {
+        "index": 20,
+        "pc_before": 824,
+        "pc_after": 848,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "STORE [120], R5",
+        "state_before": {
+          "pc": 824,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 848,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 120,
+            "before": 0,
+            "after": 99
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "MEMORY_WRITE",
+        "datapath": "PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "MEMORY_WRITE | address([120])=120 | route=RAM | value(R5)=99",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0824 | STORE [120], R5 | stage=EXECUTE | action=MEMORY_WRITE | path=PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory | MEMORY_WRITE | address([120])=120 | route=RAM | value(R5)=99 | NextPC=0848",
+        "full": "[PC=0824] STORE [120], R5\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: MEMORY_WRITE\n  Datapath: PC -> InstructionMemory -> Decoder -> AddressUnit -> RegisterFile -> Memory/MMIO -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  Operation: MEMORY_WRITE\n  Address [120] = 120\n  Route: RAM\n  Value R5 = 99\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 824\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 848\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[120]: 0 -> 99\n\nNextPC:\n  0848\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 22,
+      "pid": 1,
+      "event": {
+        "index": 21,
+        "pc_before": 848,
+        "pc_after": 872,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R1, 3",
+        "state_before": {
+          "pc": 848,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 32,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 872,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 3,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R1",
+            "before": 32,
+            "after": 3
+          }
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0848 | MOV R1, 3 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R1:32->3 | NextPC=0872",
+        "full": "[PC=0848] MOV R1, 3\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 848\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=32 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 872\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=3 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R1: 32 -> 3\n\nChanged Flags:\n  None\n\nChanged Memory:\n  None\n\nNextPC:\n  0872\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 23,
+      "pid": 1,
+      "event": {
+        "index": 22,
+        "pc_before": 872,
+        "pc_after": 896,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "MOV R2, 0",
+        "state_before": {
+          "pc": 872,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 3,
+            "R2": 5,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": false,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 0
+          }
+        },
+        "state_after": {
+          "pc": 896,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 3,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+          {
+            "name": "R2",
+            "before": 5,
+            "after": 0
+          }
+        ],
+        "flag_changes": [
+          {
+            "name": "ZF",
+            "before": false,
+            "after": true
+          }
+        ],
+        "memory_changes": [
+        ],
+        "stage": "EXECUTE",
+        "action": "REGISTER_TRANSFER",
+        "datapath": "PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "Control Flow Detail = inactive",
+        "compact": "PC=0872 | MOV R2, 0 | stage=EXECUTE | action=REGISTER_TRANSFER | path=PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback | R2:5->0 | ZF:0->1 | NextPC=0896",
+        "full": "[PC=0872] MOV R2, 0\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: REGISTER_TRANSFER\n  Datapath: PC -> InstructionMemory -> Decoder -> RegisterFile -> Flags -> Writeback\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  None\n\nBefore:\nPC = 872\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=3 R2=5 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=0 SF=0 OF=0 CF=0\n\nAfter:\nPC = 896\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=3 R2=0 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  R2: 5 -> 0\n\nChanged Flags:\n  ZF: 0 -> 1\n\nChanged Memory:\n  None\n\nNextPC:\n  0896\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    },
+    {
+      "lifecycle_step": 24,
+      "pid": 1,
+      "event": {
+        "index": 23,
+        "pc_before": 896,
+        "pc_after": 920,
+        "sp_before": 2048,
+        "sp_after": 2048,
+        "instruction": "INT 80",
+        "state_before": {
+          "pc": 896,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": false,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 3,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "state_after": {
+          "pc": 920,
+          "sp": 2048,
+          "privilege": "User",
+          "halted": true,
+          "has_error": false,
+          "error_message": "",
+          "registers": {
+            "R0": 80,
+            "R1": 3,
+            "R2": 0,
+            "R3": 0,
+            "R4": 0,
+            "R5": 99,
+            "R6": 0,
+            "R7": 0
+          },
+          "flags": {
+            "zero": true,
+            "sign": false,
+            "carry": false,
+            "overflow": false,
+            "raw": 64
+          }
+        },
+        "register_changes": [
+        ],
+        "flag_changes": [
+        ],
+        "memory_changes": [
+          {
+            "address": 4000,
+            "before": 240,
+            "after": 152
+          },
+          {
+            "address": 4001,
+            "before": 2,
+            "after": 3
+          },
+          {
+            "address": 4008,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "stage": "EXECUTE",
+        "action": "SOFTWARE_INTERRUPT",
+        "datapath": "PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> Memory",
+        "alu_detail": "ALU Detail = inactive",
+        "memory_detail": "Memory Detail = inactive",
+        "stack_detail": "Stack Detail = inactive",
+        "control_flow_detail": "SOFTWARE_INTERRUPT | from=896 | to=920 | taken=true | target=920 | vector=80 | note=interrupt return address was not found in changed memory",
+        "compact": "PC=0896 | INT 80 | stage=EXECUTE | action=SOFTWARE_INTERRUPT | path=PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> Memory | SOFTWARE_INTERRUPT | from=896 | to=920 | taken=true | target=920 | vector=80 | note=interrupt return address was not found in changed memory | halted:false->true | NextPC=0920",
+        "full": "[PC=0896] INT 80\n\nVisual Metadata:\n  Stage: EXECUTE\n  Action: SOFTWARE_INTERRUPT\n  Datapath: PC -> InstructionMemory -> Decoder -> InterruptController -> Stack -> Flags -> Memory\n\nALU Trace Detail:\n  None\n\nMemory Trace Detail:\n  None\n\nStack Trace Detail:\n  None\n\nControl Flow Trace Detail:\n  Operation: SOFTWARE_INTERRUPT\n  Operand: 80\n  From PC: 896\n  To PC: 920\n  Taken: true\n  Target: 920\n  Vector: 80\n  Note: interrupt return address was not found in changed memory\n\nBefore:\nPC = 896\nSP = 2048\nPrivilege = User\nHalted = false\nRegisters: R0=80 R1=3 R2=0 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nAfter:\nPC = 920\nSP = 2048\nPrivilege = User\nHalted = true\nRegisters: R0=80 R1=3 R2=0 R3=0 R4=0 R5=99 R6=0 R7=0\nFlags: ZF=1 SF=0 OF=0 CF=0\n\nChanged Registers:\n  None\n\nChanged Flags:\n  None\n\nChanged Memory:\n  Memory[4000]: 240 -> 152\n  Memory[4001]: 2 -> 3\n  Memory[4008]: 0 -> 1\n\nNextPC:\n  0920\n\nError:\n  None\n",
+        "has_error": false,
+        "error": ""
+      }
+    }
+  ],
+  "software_interrupt_event_count": 4,
+  "software_interrupts": [
+    {
+      "lifecycle_step": 5,
+      "pid": 1,
+      "vector": 80,
+      "has_service_number": true,
+      "service_number": 31,
+      "has_argument0": true,
+      "argument0": 24,
+      "has_argument1": false,
+      "argument1": 0,
+      "has_status": true,
+      "status": 0,
+      "has_result": true,
+      "result_value": 5,
+      "disposition": "ReturnToCaller",
+      "exit_code": 0
+    },
+    {
+      "lifecycle_step": 8,
+      "pid": 2,
+      "vector": 80,
+      "has_service_number": true,
+      "service_number": 20,
+      "has_argument0": true,
+      "argument0": 0,
+      "has_argument1": true,
+      "argument1": 42,
+      "has_status": true,
+      "status": 0,
+      "has_result": false,
+      "result_value": 0,
+      "disposition": "ReturnToCaller",
+      "exit_code": 0
+    },
+    {
+      "lifecycle_step": 17,
+      "pid": 1,
+      "vector": 80,
+      "has_service_number": true,
+      "service_number": 32,
+      "has_argument0": true,
+      "argument0": 24,
+      "has_argument1": false,
+      "argument1": 0,
+      "has_status": true,
+      "status": 0,
+      "has_result": true,
+      "result_value": 5,
+      "disposition": "ReturnToCaller",
+      "exit_code": 0
+    },
+    {
+      "lifecycle_step": 24,
+      "pid": 1,
+      "vector": 80,
+      "has_service_number": true,
+      "service_number": 3,
+      "has_argument0": true,
+      "argument0": 0,
+      "has_argument1": false,
+      "argument1": 0,
+      "has_status": true,
+      "status": 0,
+      "has_result": false,
+      "result_value": 0,
+      "disposition": "TerminateProcess",
+      "exit_code": 0
+    }
+  ],
+  "context_switch_event_count": 15,
+  "context_switches": [
+    {
+      "lifecycle_step": 1,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 2,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 3,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 4,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 5,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 6,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 7,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 8,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 9,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 10,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 11,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 12,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 13,
+      "from_pid": 1,
+      "to_pid": 2,
+      "preempted": true,
+      "caused_by_termination": false
+    },
+    {
+      "lifecycle_step": 14,
+      "from_pid": 2,
+      "to_pid": 1,
+      "preempted": false,
+      "caused_by_termination": true
+    },
+    {
+      "lifecycle_step": 24,
+      "from_pid": 1,
+      "to_pid": 0,
+      "preempted": false,
+      "caused_by_termination": true
+    }
+  ],
+  "processes": [
+    {
+      "pid": 1,
+      "source_name": "build/showcase/showcase_fs_worker.zbin",
+      "state": "Terminated",
+      "has_exit_code": true,
+      "exit_code": 0,
+      "termination_kind": "NormalExit",
+      "termination_message": "",
+      "pc": 920,
+      "sp": 2048,
+      "has_executable_image": true,
+      "code_end_exclusive": 920,
+      "data_base": 0,
+      "data_size": 128
+    },
+    {
+      "pid": 2,
+      "source_name": "build/showcase/showcase_hardware_fault.zbin",
+      "state": "Terminated",
+      "has_exit_code": true,
+      "exit_code": -1,
+      "termination_kind": "CpuFault",
+      "termination_message": "Memory protection violation: User mode cannot write address 61952",
+      "pc": 656,
+      "sp": 2048,
+      "has_executable_image": true,
+      "code_end_exclusive": 680,
+      "data_base": 0,
+      "data_size": 0
+    }
+  ]
+}

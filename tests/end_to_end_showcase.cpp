@@ -10,6 +10,7 @@
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/system/MultiProcessTraceJsonWriter.hpp"
 #include "zero_cpu/system/ZeroFS.hpp"
+#include "zero_cpu/trace/TraceJsonDiff.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +33,9 @@ constexpr std::size_t kReadCount = 96;
 constexpr std::size_t kWriteStatus = 104;
 constexpr std::size_t kWriteCount = 112;
 constexpr std::size_t kSurvivalMarker = 120;
+
+constexpr const char* kGoldenTrace =
+    "tests/golden/end_to_end_showcase.json";
 
 zero_cpu::system::ZeroFS::Bytes bytes(const std::string& text) {
     return {text.begin(), text.end()};
@@ -71,7 +75,10 @@ const ProcessSoftwareInterruptTraceRecord* findInterrupt(
     return nullptr;
 }
 
-bool runShowcase(std::string& detail) {
+bool runShowcase(
+    std::string& detail,
+    bool writeGolden
+) {
     using namespace zero_cpu;
     using namespace zero_cpu::system;
 
@@ -304,6 +311,60 @@ bool runShowcase(std::string& detail) {
         metadata
     );
 
+    if (writeGolden) {
+        const std::filesystem::path goldenPath(
+            kGoldenTrace
+        );
+
+        if (
+            goldenPath.has_parent_path()
+            && !goldenPath.parent_path().empty()
+        ) {
+            std::filesystem::create_directories(
+                goldenPath.parent_path()
+            );
+        }
+
+        MultiProcessTraceJsonWriter::writeFile(
+            kGoldenTrace,
+            result,
+            metadata
+        );
+
+        std::cout
+            << "Golden trace written:\n"
+            << "  "
+            << kGoldenTrace
+            << "\n";
+    } else {
+        if (!std::filesystem::exists(kGoldenTrace)) {
+            detail =
+                "showcase golden trace is missing; run "
+                "zero_end_to_end_showcase_test "
+                "--write-golden once";
+            return false;
+        }
+
+        const TraceJsonDiffResult diff =
+            TraceJsonDiff::compareFiles(
+                kGoldenTrace,
+                traceJson
+            );
+
+        if (!diff.equal) {
+            detail =
+                "showcase golden trace mismatch: "
+                + diff.message
+                + "; path="
+                + diff.first_path
+                + "; expected="
+                + diff.expected_value
+                + "; actual="
+                + diff.actual_value;
+            return false;
+        }
+    }
+
     std::cout
         << "Artifacts:\n"
         << "  " << fsBin << "\n"
@@ -315,12 +376,38 @@ bool runShowcase(std::string& detail) {
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    bool writeGolden = false;
+
+    if (argc == 2) {
+        const std::string option = argv[1];
+
+        if (option != "--write-golden") {
+            std::cerr
+                << "Unknown option: "
+                << option
+                << "\n";
+            return 2;
+        }
+
+        writeGolden = true;
+    } else if (argc != 1) {
+        std::cerr
+            << "Usage: "
+            << argv[0]
+            << " [--write-golden]\n";
+        return 2;
+    }
+
     std::cout
         << "=== Zero-CPU End-to-End Showcase Test ===\n\n";
 
     std::string detail;
-    const bool passed = runShowcase(detail);
+    const bool passed =
+        runShowcase(
+            detail,
+            writeGolden
+        );
 
     std::cout
         << (passed ? "[PASS] " : "[FAIL] ")
@@ -338,3 +425,4 @@ int main() {
 }
 
 // Patch: v1.9-end-to-end-showcase-r1
+// Patch: v1.9-showcase-golden-regression-r1
