@@ -7,6 +7,7 @@
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
+#include "zero_cpu/kernel/ProtectedRuntimeService.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallABI.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
@@ -113,11 +114,77 @@ public:
         return all_kernel_mode_;
     }
 
+    void addService(
+        std::shared_ptr<zero_cpu::kernel::ProtectedRuntimeService> service
+    ) {
+        dispatcher_.addService(service);
+    }
+
+    std::size_t serviceCount() const {
+        return dispatcher_.serviceCount();
+    }
+
 private:
     zero_cpu::kernel::ProtectedSyscallDispatcher
         dispatcher_;
 
     std::size_t handle_count_ = 0;
+    bool all_kernel_mode_ = true;
+};
+
+class SumRuntimeService final
+    : public zero_cpu::kernel::ProtectedRuntimeService {
+public:
+    bool handles(std::int64_t serviceNumber) const override {
+        return serviceNumber == ProtectedABI::kFilesystemServiceBase;
+    }
+
+    zero_cpu::SoftwareInterruptResult handle(
+        std::int64_t serviceNumber,
+        zero_cpu::CPUState& state,
+        zero_cpu::MMIOBus*
+    ) override {
+        ++call_count_;
+        if (state.privilegeLevel() != zero_cpu::PrivilegeLevel::Kernel) {
+            all_kernel_mode_ = false;
+        }
+
+        zero_cpu::SoftwareInterruptResult result;
+        if (!handles(serviceNumber)) {
+            result.has_status = true;
+            result.status = ProtectedABI::kStatusUnsupported;
+            return result;
+        }
+
+        const std::int64_t left = state.registers().get(
+            ProtectedABI::kArgument0ResultRegister
+        );
+        const std::int64_t right = state.registers().get(
+            ProtectedABI::kArgument1Register
+        );
+        const std::int64_t sum = left + right;
+
+        state.registers().set(
+            ProtectedABI::kArgument0ResultRegister,
+            sum
+        );
+
+        result.has_argument0 = true;
+        result.argument0 = left;
+        result.has_argument1 = true;
+        result.argument1 = right;
+        result.has_status = true;
+        result.status = ProtectedABI::kStatusOk;
+        result.has_result = true;
+        result.result_value = sum;
+        return result;
+    }
+
+    std::size_t callCount() const { return call_count_; }
+    bool allKernelMode() const { return all_kernel_mode_; }
+
+private:
+    std::size_t call_count_ = 0;
     bool all_kernel_mode_ = true;
 };
 
@@ -317,6 +384,103 @@ start:
     return true;
 }
 
+bool extensibleRuntimeServiceDispatch(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::system;
+
+    auto handler = std::make_shared<ObservingSyscallHandler>();
+    if (handler->serviceCount() != 2) {
+        detail = "default runtime services were not registered";
+        return false;
+    }
+
+    auto service = std::make_shared<SumRuntimeService>();
+    handler->addService(service);
+    if (handler->serviceCount() != 3) {
+        detail = "custom runtime service was not registered";
+        return false;
+    }
+
+    const char* source = R"ASM(
+.entry start
+.text
+start:
+    MOV R1, 30
+    MOV R2, 7
+    MOV R3, 5
+    INT 80
+    STORE [100], R2
+    MOV R5, R4
+
+    MOV R1, 3
+    MOV R2, 0
+    INT 80
+)ASM";
+
+    MultiProcessRunOptions options;
+    options.quantum = 1;
+    options.max_lifecycle_steps = 100;
+    options.software_interrupt_handler = handler;
+
+    MultiProcessRunner runner;
+    const MultiProcessRunResult result = runner.runImages(
+        {makeImage(source, "runtime-service-extension.zbin")},
+        options
+    );
+
+    if (!result.success() || result.fault_count != 0) {
+        detail = "custom runtime service workload failed";
+        return false;
+    }
+
+    if (service->callCount() != 1 || !service->allKernelMode()
+        || handler->handleCount() != 2 || !handler->allKernelMode()) {
+        detail = "custom service did not execute once in Kernel mode";
+        return false;
+    }
+
+    const ProcessRunSummary& process = result.process(1);
+    if (process.final_memory.read(100) != 12
+        || process.final_context.registers[
+            static_cast<std::size_t>(RegisterName::R5)
+        ] != ProtectedABI::kStatusOk
+        || !process.has_exit_code || process.exit_code != 0) {
+        detail = "custom result/status or built-in exit was not preserved";
+        return false;
+    }
+
+    if (result.software_interrupts.size() != 2) {
+        detail = "runtime services were not observed as two INT 80 events";
+        return false;
+    }
+
+    const SoftwareInterruptResult& custom =
+        result.software_interrupts[0].observation.result;
+    const SoftwareInterruptResult& exit =
+        result.software_interrupts[1].observation.result;
+
+    if (!custom.has_service_number
+        || custom.service_number != ProtectedABI::kFilesystemServiceBase
+        || !custom.has_argument0 || custom.argument0 != 7
+        || !custom.has_argument1 || custom.argument1 != 5
+        || !custom.has_result || custom.result_value != 12
+        || !custom.has_status || custom.status != ProtectedABI::kStatusOk) {
+        detail = "custom runtime service observation lost ABI semantics";
+        return false;
+    }
+
+    if (!exit.has_service_number
+        || exit.service_number != ProtectedABI::kExitSyscall
+        || exit.disposition != SoftwareInterruptDisposition::TerminateProcess) {
+        detail = "built-in exit did not survive service-registry dispatch";
+        return false;
+    }
+
+    return true;
+}
+
 bool directUserMmioIsBlocked(
     std::string& detail
 ) {
@@ -420,6 +584,16 @@ int main() {
         report(
             "Protected syscall hardware bridge",
             protectedHardwareSyscalls(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+
+        report(
+            "Protected runtime service extension",
+            extensibleRuntimeServiceDispatch(detail),
             detail
         );
     }
