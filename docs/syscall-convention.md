@@ -499,7 +499,7 @@ scripts\test_all.bat
 Current suite result:
 
 ```text
-70 stages
+72 stages
 All Zero-CPU tests passed.
 ```
 

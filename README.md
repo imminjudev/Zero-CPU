@@ -243,7 +243,7 @@ Run the complete regression suite:
 scripts\test_all.bat
 ```
 
-The current suite contains **70 test stages** and finishes with:
+The current suite contains **72 test stages** and finishes with:
 
 ```text
 All Zero-CPU tests passed.
@@ -373,7 +373,7 @@ protected syscall semantics
 → Zero Studio
 ```
 
-A full 70-stage regression run passes on the current main branch.
+A full 72-stage regression run passes on the current main branch.
 
 ---
 

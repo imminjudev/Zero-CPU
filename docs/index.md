@@ -50,6 +50,16 @@ verification, architectural/strict diffing, and protected-syscall semantic
 events. Some filenames retain the milestone version in which they were first
 introduced.
 
+## Storage
+
+```text
+docs/zero-fs.md
+```
+
+ZeroFS is the small deterministic virtual filesystem backing the protected
+platform. It is separate from the 4 KiB guest memory image and is intended for
+later protected filesystem syscalls and Zero Web assets.
+
 ## Hardware
 
 ```text
@@ -135,13 +145,13 @@ Current direction is summarized in the root README and project overview.
 Current milestone:
 
 ```text
-v1.7 hardware demonstration completion
+v1.8 protected platform runtime
 ```
 
 Current regression suite:
 
 ```text
-70 stages
+72 stages
 All Zero-CPU tests passed.
 ```
 
@@ -165,3 +175,5 @@ future direction
 <!-- Patch: v1.6-current-roadmap-semantics-r1 -->
 
 <!-- Patch: v1.7-protected-esp32-gpio-demo-r1 -->
+
+<!-- Patch: v1.8-zero-fs-core-r1 -->

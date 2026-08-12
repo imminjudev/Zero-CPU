@@ -591,7 +591,7 @@ Protected multi-process runtime flags include:
 
 The project uses focused tests for each layer plus CLI integration tests.
 
-The current `scripts\test_all.bat` suite contains 70 stages.
+The current `scripts\test_all.bat` suite contains 72 stages.
 
 Coverage includes:
 

@@ -177,6 +177,7 @@ add_library(zero_cpu_core
     src/system/MultiProcessInvariantVerifier.cpp
     src/system/MultiProcessTraceJsonWriter.cpp
     src/system/BioOSRunner.cpp
+    src/system/ZeroFS.cpp
 )
 
 target_include_directories(zero_cpu_core
@@ -534,6 +535,25 @@ zero_cpu_enable_sanitizers(
 
 zero_cpu_enable_coverage(
     zero_multi_process_runner_test
+)
+
+
+add_executable(zero_fs_test
+    tests/zero_fs.cpp
+)
+
+target_link_libraries(
+    zero_fs_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_fs_test
+)
+
+zero_cpu_enable_coverage(
+    zero_fs_test
 )
 
 
