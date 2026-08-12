@@ -50,7 +50,13 @@ services of the protected host runtime.
 
 ## Protected Host Runtime Syscalls
 
-This ABI is implemented by:
+The canonical protected ABI is defined by:
+
+```text
+include/zero_cpu/kernel/ProtectedSyscallABI.hpp
+```
+
+Runtime behavior is implemented by:
 
 ```text
 zero_cpu::kernel::ProtectedSyscallDispatcher
@@ -70,7 +76,17 @@ R7 = exit/status value
 | 21 | hardware read | `R2 = hardware offset` | `R2 = value`, `R4 = status` | protected hardware MMIO read |
 
 The CLI obtains protected service numbers from
-`ProtectedSyscallDispatcher` constants instead of duplicating numeric values.
+`ProtectedSyscallABI` instead of duplicating numeric values.
+
+Reserved protected service families:
+
+```text
+30..39  storage / filesystem
+40..49  network / web
+```
+
+These ranges are ABI reservations only. A reserved number is not an implemented
+service until core behavior and focused verification are added.
 
 ## Protected Status Codes
 
@@ -138,13 +154,15 @@ scripts\test_all.bat
 When adding a protected host service:
 
 ```text
-1. define its number in ProtectedSyscallDispatcher
-2. implement core semantics there
+1. define its stable number/register contract in ProtectedSyscallABI
+2. implement core semantics in the runtime/dispatcher service layer
 3. add focused tests
-4. expose the core constant in CLI/documentation
+4. consume ABI constants from CLI/Studio/documentation
 5. do not duplicate protected numeric values in consumer logic
 ```
 
 Guest mini-kernel and protected host services remain separate ABIs.
 
 <!-- Patch: v1.6-cli-syscall-abi-split-r1 -->
+
+<!-- Patch: v1.8-protected-platform-abi-r1 -->

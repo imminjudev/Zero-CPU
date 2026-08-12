@@ -7,6 +7,7 @@
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallABI.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 
@@ -15,6 +16,47 @@
 #include <iostream>
 #include <memory>
 #include <string>
+
+using ProtectedABI =
+    zero_cpu::kernel::ProtectedSyscallABI;
+
+static_assert(ProtectedABI::kSyscallVector == 80);
+static_assert(
+    ProtectedABI::kVectorRegister
+        == zero_cpu::RegisterName::R0
+);
+static_assert(
+    ProtectedABI::kServiceRegister
+        == zero_cpu::RegisterName::R1
+);
+static_assert(
+    ProtectedABI::kArgument0ResultRegister
+        == zero_cpu::RegisterName::R2
+);
+static_assert(
+    ProtectedABI::kArgument1Register
+        == zero_cpu::RegisterName::R3
+);
+static_assert(
+    ProtectedABI::kStatusRegister
+        == zero_cpu::RegisterName::R4
+);
+static_assert(
+    ProtectedABI::kExitValueRegister
+        == zero_cpu::RegisterName::R7
+);
+static_assert(ProtectedABI::kExitSyscall == 3);
+static_assert(ProtectedABI::kHardwareWriteSyscall == 20);
+static_assert(ProtectedABI::kHardwareReadSyscall == 21);
+static_assert(ProtectedABI::kFilesystemServiceBase == 30);
+static_assert(ProtectedABI::kFilesystemServiceEndExclusive == 40);
+static_assert(ProtectedABI::kNetworkServiceBase == 40);
+static_assert(ProtectedABI::kNetworkServiceEndExclusive == 50);
+static_assert(ProtectedABI::kStatusOk == 0);
+static_assert(ProtectedABI::kStatusUnsupported == -1);
+static_assert(ProtectedABI::kStatusInvalidHardwareOffset == -2);
+static_assert(ProtectedABI::kStatusHardwareUnavailable == -3);
+static_assert(ProtectedABI::kStatusHardwareError == -4);
 
 namespace {
 

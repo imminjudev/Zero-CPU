@@ -31,6 +31,7 @@
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
+#include "zero_cpu/kernel/ProtectedSyscallABI.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
@@ -7662,26 +7663,26 @@ const std::vector<SyscallInfo>& guestSyscallTable() {
 }
 
 const std::vector<SyscallInfo>& protectedSyscallTable() {
-    using Dispatcher =
-        zero_cpu::kernel::ProtectedSyscallDispatcher;
+    using ABI =
+        zero_cpu::kernel::ProtectedSyscallABI;
 
     static const std::vector<SyscallInfo> table = {
         {
-            Dispatcher::kExitSyscall,
+            ABI::kExitSyscall,
             "process exit",
             "R2 = exit code",
             "R7 = exit code, R4 = status",
             "terminate current process"
         },
         {
-            Dispatcher::kHardwareWriteSyscall,
+            ABI::kHardwareWriteSyscall,
             "hardware write",
             "R2 = hardware offset, R3 = value",
             "R4 = status",
             "write through protected hardware MMIO"
         },
         {
-            Dispatcher::kHardwareReadSyscall,
+            ABI::kHardwareReadSyscall,
             "hardware read",
             "R2 = hardware offset",
             "R2 = value, R4 = status",
@@ -7710,36 +7711,36 @@ void printSyscallEntries(
 }
 
 void printProtectedStatusCodes() {
-    using Dispatcher =
-        zero_cpu::kernel::ProtectedSyscallDispatcher;
+    using ABI =
+        zero_cpu::kernel::ProtectedSyscallABI;
 
     std::cout << "Protected status codes:\n";
-    std::cout << "  status " << Dispatcher::kStatusOk
+    std::cout << "  status " << ABI::kStatusOk
               << " = OK\n";
-    std::cout << "  status " << Dispatcher::kStatusUnsupported
+    std::cout << "  status " << ABI::kStatusUnsupported
               << " = unsupported service\n";
-    std::cout << "  status " << Dispatcher::kStatusInvalidHardwareOffset
+    std::cout << "  status " << ABI::kStatusInvalidHardwareOffset
               << " = invalid hardware offset\n";
-    std::cout << "  status " << Dispatcher::kStatusHardwareUnavailable
+    std::cout << "  status " << ABI::kStatusHardwareUnavailable
               << " = hardware unavailable\n";
-    std::cout << "  status " << Dispatcher::kStatusHardwareError
+    std::cout << "  status " << ABI::kStatusHardwareError
               << " = hardware error\n";
 }
 
 void printSyscallTable() {
-    using Dispatcher =
-        zero_cpu::kernel::ProtectedSyscallDispatcher;
+    using ABI =
+        zero_cpu::kernel::ProtectedSyscallABI;
 
     std::cout << "=== Zero-CPU Syscall Table ===\n\n";
     std::cout << "Common INT "
-              << static_cast<int>(Dispatcher::kSyscallVector)
+              << static_cast<int>(ABI::kSyscallVector)
               << " convention:\n";
     std::cout << "  R0 = interrupt vector (set by CPU)\n";
     std::cout << "  R1 = syscall / service number\n";
     std::cout << "  R2 = argument 0 / return value\n";
     std::cout << "  R3 = argument 1\n";
     std::cout << "  INT "
-              << static_cast<int>(Dispatcher::kSyscallVector)
+              << static_cast<int>(ABI::kSyscallVector)
               << "\n\n";
 
     std::cout

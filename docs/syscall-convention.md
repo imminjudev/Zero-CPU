@@ -122,11 +122,20 @@ not the protected host ABI described below.
 
 ## 4. Layer B: Protected Host Dispatcher
 
-The protected multiprocess runtime uses:
+The protected multiprocess runtime has a canonical ABI definition:
+
+```text
+include/zero_cpu/kernel/ProtectedSyscallABI.hpp
+```
+
+Runtime dispatch currently uses:
 
 ```text
 zero_cpu::kernel::ProtectedSyscallDispatcher
 ```
+
+The ABI owns the interrupt vector, register roles, stable service numbers, status
+codes, and reserved service-family ranges. The dispatcher owns runtime behavior.
 
 It handles only:
 
@@ -143,6 +152,16 @@ Current protected services:
 | `21` | hardware read | `R2 = hardware offset` | value in `R2`, status in `R4` |
 
 Unknown services return an unsupported status.
+
+Reserved future protected service families:
+
+```text
+30..39  storage / filesystem
+40..49  network / web
+```
+
+Reservation does not imply implementation. New services become part of the
+runtime only after behavior and verification are added.
 
 ---
 
@@ -491,13 +510,14 @@ All Zero-CPU tests passed.
 For the protected host ABI:
 
 ```text
-1. core semantics live in the dispatcher/CPU, not UI code
-2. User mode never bypasses protection to reach MMIO
-3. semantic observations are recorded once in the core
-4. CLI and Studio consume core observations
-5. syscalls remain observable without changing continue semantics
-6. process-exit semantics belong to lifecycle/scheduler integration
-7. new protected services require focused and regression tests
+1. stable syscall numbers/register roles live in ProtectedSyscallABI
+2. core semantics live in runtime/dispatcher code, not UI code
+3. User mode never bypasses protection to reach MMIO
+4. semantic observations are recorded once in the core
+5. CLI and Studio consume core ABI/observations
+6. syscalls remain observable without changing continue semantics
+7. process-exit semantics belong to lifecycle/scheduler integration
+8. new protected services require focused and regression tests
 ```
 
 For the guest mini-kernel ABI:
@@ -533,3 +553,5 @@ The protected syscall path is therefore no longer only a mini-kernel demo. It is
 part of the current protected multi-process virtual-computer runtime.
 
 <!-- Patch: v1.6-docs-current-platform-r1 -->
+
+<!-- Patch: v1.8-protected-platform-abi-r1 -->

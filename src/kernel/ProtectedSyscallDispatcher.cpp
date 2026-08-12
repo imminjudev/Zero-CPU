@@ -11,10 +11,12 @@
 
 namespace zero_cpu::kernel {
 
+using ABI = ProtectedSyscallABI;
+
 bool ProtectedSyscallDispatcher::handles(
     std::uint8_t vector
 ) const {
-    return vector == kSyscallVector;
+    return vector == ABI::kSyscallVector;
 }
 
 SoftwareInterruptResult
@@ -36,22 +38,22 @@ ProtectedSyscallDispatcher::handle(
 
     if (!handles(vector)) {
         return finish(
-            kStatusUnsupported
+            ABI::kStatusUnsupported
         );
     }
 
     const std::int64_t syscallNumber =
         state.registers().get(
-            RegisterName::R1
+            ABI::kServiceRegister
         );
 
     result.has_service_number = true;
     result.service_number = syscallNumber;
 
-    if (syscallNumber == kExitSyscall) {
+    if (syscallNumber == ABI::kExitSyscall) {
         const std::int64_t exitCode =
             state.registers().get(
-                RegisterName::R2
+                ABI::kArgument0ResultRegister
             );
 
         result.has_argument0 = true;
@@ -64,25 +66,25 @@ ProtectedSyscallDispatcher::handle(
         result.exit_code = exitCode;
 
         state.registers().set(
-            RegisterName::R7,
+            ABI::kExitValueRegister,
             exitCode
         );
 
-        return finish(kStatusOk);
+        return finish(ABI::kStatusOk);
     }
 
     if (
-        syscallNumber != kHardwareWriteSyscall
-        && syscallNumber != kHardwareReadSyscall
+        syscallNumber != ABI::kHardwareWriteSyscall
+        && syscallNumber != ABI::kHardwareReadSyscall
     ) {
         return finish(
-            kStatusUnsupported
+            ABI::kStatusUnsupported
         );
     }
 
     const std::int64_t offsetValue =
         state.registers().get(
-            RegisterName::R2
+            ABI::kArgument0ResultRegister
         );
 
     result.has_argument0 = true;
@@ -90,13 +92,13 @@ ProtectedSyscallDispatcher::handle(
 
     if (!validHardwareOffset(offsetValue)) {
         return finish(
-            kStatusInvalidHardwareOffset
+            ABI::kStatusInvalidHardwareOffset
         );
     }
 
     if (mmioBus == nullptr) {
         return finish(
-            kStatusHardwareUnavailable
+            ABI::kStatusHardwareUnavailable
         );
     }
 
@@ -110,42 +112,42 @@ ProtectedSyscallDispatcher::handle(
 
     if (!mmioBus->hasDeviceAt(address)) {
         return finish(
-            kStatusHardwareUnavailable
+            ABI::kStatusHardwareUnavailable
         );
     }
 
     try {
         if (
             syscallNumber
-            == kHardwareWriteSyscall
+            == ABI::kHardwareWriteSyscall
         ) {
             const std::int64_t value =
                 state.registers().get(
-                    RegisterName::R3
+                    ABI::kArgument1Register
                 );
 
             result.has_argument1 = true;
             result.argument1 = value;
 
             mmioBus->write(address, value);
-            return finish(kStatusOk);
+            return finish(ABI::kStatusOk);
         }
 
         const std::int64_t value =
             mmioBus->read(address);
 
         state.registers().set(
-            RegisterName::R2,
+            ABI::kArgument0ResultRegister,
             value
         );
 
         result.has_result = true;
         result.result_value = value;
 
-        return finish(kStatusOk);
+        return finish(ABI::kStatusOk);
     } catch (const std::exception&) {
         return finish(
-            kStatusHardwareError
+            ABI::kStatusHardwareError
         );
     }
 }
@@ -172,7 +174,7 @@ void ProtectedSyscallDispatcher::setStatus(
     std::int64_t status
 ) {
     state.registers().set(
-        RegisterName::R4,
+        ABI::kStatusRegister,
         status
     );
 }
