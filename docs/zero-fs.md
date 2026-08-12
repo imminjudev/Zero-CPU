@@ -23,9 +23,9 @@ Current layering:
 ```text
 ZeroFS core                    implemented in v1.8-C
         ↓
-Protected filesystem service   next: v1.8-D
+Protected filesystem service   implemented in v1.8-D
         ↓
-INT 80 ABI                     reserved range 30..39
+INT 80 ABI                     services 30..32
         ↓
 User process / Zero Web
 ```
@@ -119,7 +119,7 @@ Not implemented yet:
 
 ```text
 file descriptors / open handles
-protected FS syscalls
+guest create/mkdir syscalls
 permissions/users
 symlinks
 rename/delete
@@ -154,3 +154,26 @@ typed error behavior
 The full regression suite also includes this test.
 
 <!-- Patch: v1.8-zero-fs-core-r1 -->
+
+## Protected Filesystem Syscalls
+
+```text
+30  FS_STAT
+31  FS_READ
+32  FS_WRITE
+```
+
+`R2` points to a qword request block in User data memory. Common fields are
+`+0 path pointer` and `+8 path length`. Read/write additionally use `+16 file
+offset`, `+24 guest buffer pointer`, and `+32 transfer count`. `FS_STAT` writes
+node type to `+16` and size to `+24`.
+
+The Kernel validates the request block, path bytes, and transfer buffer against
+the User data window before accessing them. ZeroFS core failures are translated
+to stable protected ABI status values.
+
+The ABI is intentionally minimal and path-based. Guest create/mkdir syscalls and
+file descriptors are not part of v1.8-D; showcase files are preloaded through
+the host-side ZeroFS core API.
+
+<!-- Patch: v1.8-protected-filesystem-syscalls-r2 -->

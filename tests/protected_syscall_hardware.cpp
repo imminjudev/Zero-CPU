@@ -136,7 +136,7 @@ class SumRuntimeService final
     : public zero_cpu::kernel::ProtectedRuntimeService {
 public:
     bool handles(std::int64_t serviceNumber) const override {
-        return serviceNumber == ProtectedABI::kFilesystemServiceBase;
+        return serviceNumber == 99;
     }
 
     zero_cpu::SoftwareInterruptResult handle(
@@ -391,14 +391,14 @@ bool extensibleRuntimeServiceDispatch(
     using namespace zero_cpu::system;
 
     auto handler = std::make_shared<ObservingSyscallHandler>();
-    if (handler->serviceCount() != 2) {
+    if (handler->serviceCount() != 3) {
         detail = "default runtime services were not registered";
         return false;
     }
 
     auto service = std::make_shared<SumRuntimeService>();
     handler->addService(service);
-    if (handler->serviceCount() != 3) {
+    if (handler->serviceCount() != 4) {
         detail = "custom runtime service was not registered";
         return false;
     }
@@ -407,7 +407,7 @@ bool extensibleRuntimeServiceDispatch(
 .entry start
 .text
 start:
-    MOV R1, 30
+    MOV R1, 99
     MOV R2, 7
     MOV R3, 5
     INT 80
@@ -462,7 +462,7 @@ start:
         result.software_interrupts[1].observation.result;
 
     if (!custom.has_service_number
-        || custom.service_number != ProtectedABI::kFilesystemServiceBase
+        || custom.service_number != 99
         || !custom.has_argument0 || custom.argument0 != 7
         || !custom.has_argument1 || custom.argument1 != 5
         || !custom.has_result || custom.result_value != 12

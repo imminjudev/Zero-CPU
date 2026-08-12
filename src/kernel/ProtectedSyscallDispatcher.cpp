@@ -4,6 +4,8 @@
 #include "zero_cpu/core/MMIOBus.hpp"
 #include "zero_cpu/core/MemoryMap.hpp"
 #include "zero_cpu/core/RegisterFile.hpp"
+#include "zero_cpu/kernel/ProtectedFilesystemService.hpp"
+#include "zero_cpu/system/ZeroFS.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -145,9 +147,28 @@ private:
 
 } // namespace
 
-ProtectedSyscallDispatcher::ProtectedSyscallDispatcher() {
+ProtectedSyscallDispatcher::ProtectedSyscallDispatcher()
+    : ProtectedSyscallDispatcher(
+        std::make_shared<system::ZeroFS>()
+    ) {
+}
+
+ProtectedSyscallDispatcher::ProtectedSyscallDispatcher(
+    std::shared_ptr<system::ZeroFS> filesystem
+) {
+    if (!filesystem) {
+        throw std::invalid_argument(
+            "ProtectedSyscallDispatcher requires ZeroFS"
+        );
+    }
+
     addService(std::make_shared<ProcessExitRuntimeService>());
     addService(std::make_shared<HardwareRuntimeService>());
+    addService(
+        std::make_shared<ProtectedFilesystemService>(
+            std::move(filesystem)
+        )
+    );
 }
 
 bool ProtectedSyscallDispatcher::handles(

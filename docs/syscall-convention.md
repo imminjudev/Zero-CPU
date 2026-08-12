@@ -150,18 +150,19 @@ Current protected services:
 | `3` | process exit | `R2 = exit code` | `R7 = exit code`, `R4 = 0`, terminate process |
 | `20` | hardware write | `R2 = hardware offset`, `R3 = value` | status in `R4` |
 | `21` | hardware read | `R2 = hardware offset` | value in `R2`, status in `R4` |
+| `30` | filesystem stat | `R2 = request pointer` | size in `R2`, type in `R3`, status in `R4` |
+| `31` | filesystem read | `R2 = request pointer` | bytes read in `R2`, status in `R4` |
+| `32` | filesystem write | `R2 = request pointer` | bytes written in `R2`, status in `R4` |
 
 Unknown services return an unsupported status.
 
-Reserved future protected service families:
+Protected service families:
 
 ```text
-30..39  storage / filesystem
-40..49  network / web
+30..32  implemented storage / filesystem
+33..39  reserved filesystem expansion
+40..49  reserved network / web
 ```
-
-Reservation does not imply implementation. New services become part of the
-runtime only after behavior and verification are added.
 
 ---
 
@@ -175,6 +176,12 @@ Protected host services use `R4` as a status register.
 -2  invalid hardware offset
 -3  hardware unavailable
 -4  hardware error
+-5  invalid guest request/buffer memory
+-6  invalid filesystem path
+-7  filesystem path not found
+-8  filesystem node type error
+-9  filesystem invalid offset
+-10 filesystem runtime error
 ```
 
 For hardware services, callers should check:
@@ -555,3 +562,26 @@ part of the current protected multi-process virtual-computer runtime.
 <!-- Patch: v1.6-docs-current-platform-r1 -->
 
 <!-- Patch: v1.8-protected-platform-abi-r1 -->
+
+## Protected Filesystem Request ABI
+
+Filesystem services use `R2` as a pointer to an 8-byte-field request block in
+the User data window (`0x0000..0x01FF`).
+
+```text
++0   path pointer
++8   path length
++16  file offset        (read/write)
++24  guest buffer       (read/write)
++32  transfer count     (read/write)
+```
+
+For `FS_STAT`, `+16` becomes node type (`0=file`, `1=directory`) and `+24`
+becomes file size. Path length is limited to 255 bytes.
+
+The Kernel validates request fields, path bytes, and transfer buffers before the
+filesystem operation. `FS_READ` copies ZeroFS bytes into guest memory;
+`FS_WRITE` copies guest bytes into an existing ZeroFS file. Semantic syscall
+observations keep the service number, status, and result for trace/debugger use.
+
+<!-- Patch: v1.8-protected-filesystem-syscalls-r2 -->

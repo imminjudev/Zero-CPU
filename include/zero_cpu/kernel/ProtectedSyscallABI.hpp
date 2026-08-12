@@ -43,12 +43,47 @@ struct ProtectedSyscallABI final {
     inline static constexpr std::int64_t
         kHardwareReadSyscall = 21;
 
-    // Reserved for the v1.8 storage/filesystem service family.
+    // v1.8 protected storage/filesystem service family.
     inline static constexpr std::int64_t
         kFilesystemServiceBase = 30;
 
     inline static constexpr std::int64_t
+        kFilesystemStatSyscall = 30;
+
+    inline static constexpr std::int64_t
+        kFilesystemReadSyscall = 31;
+
+    inline static constexpr std::int64_t
+        kFilesystemWriteSyscall = 32;
+
+    inline static constexpr std::int64_t
         kFilesystemServiceEndExclusive = 40;
+
+    // Guest-memory qword request layout.
+    inline static constexpr std::int64_t
+        kFilesystemPathPointerOffset = 0;
+    inline static constexpr std::int64_t
+        kFilesystemPathLengthOffset = 8;
+    inline static constexpr std::int64_t
+        kFilesystemFileOffsetOffset = 16;
+    inline static constexpr std::int64_t
+        kFilesystemBufferPointerOffset = 24;
+    inline static constexpr std::int64_t
+        kFilesystemTransferCountOffset = 32;
+
+    // FS_STAT output fields reuse the request block.
+    inline static constexpr std::int64_t
+        kFilesystemStatTypeOffset = 16;
+    inline static constexpr std::int64_t
+        kFilesystemStatSizeOffset = 24;
+
+    inline static constexpr std::int64_t
+        kFilesystemNodeFile = 0;
+    inline static constexpr std::int64_t
+        kFilesystemNodeDirectory = 1;
+
+    inline static constexpr std::int64_t
+        kFilesystemMaxPathLength = 255;
 
     // Reserved for the v1.9 network/web service family.
     inline static constexpr std::int64_t
@@ -71,7 +106,28 @@ struct ProtectedSyscallABI final {
 
     inline static constexpr std::int64_t
         kStatusHardwareError = -4;
+
+    inline static constexpr std::int64_t
+        kStatusInvalidGuestMemory = -5;
+    inline static constexpr std::int64_t
+        kStatusFilesystemInvalidPath = -6;
+    inline static constexpr std::int64_t
+        kStatusFilesystemNotFound = -7;
+    inline static constexpr std::int64_t
+        kStatusFilesystemTypeError = -8;
+    inline static constexpr std::int64_t
+        kStatusFilesystemInvalidOffset = -9;
+    inline static constexpr std::int64_t
+        kStatusFilesystemError = -10;
 };
+
+static_assert(
+    ProtectedSyscallABI::kFilesystemStatSyscall
+        >= ProtectedSyscallABI::kFilesystemServiceBase
+    && ProtectedSyscallABI::kFilesystemWriteSyscall
+        < ProtectedSyscallABI::kFilesystemServiceEndExclusive,
+    "filesystem syscalls must stay inside 30..39"
+);
 
 static_assert(
     ProtectedSyscallABI::kFilesystemServiceEndExclusive

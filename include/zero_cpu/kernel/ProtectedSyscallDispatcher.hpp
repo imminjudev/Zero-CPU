@@ -9,12 +9,20 @@
 #include <memory>
 #include <vector>
 
+namespace zero_cpu::system {
+class ZeroFS;
+}
+
 namespace zero_cpu::kernel {
 
 class ProtectedSyscallDispatcher final
     : public SoftwareInterruptHandler {
 public:
     ProtectedSyscallDispatcher();
+
+    explicit ProtectedSyscallDispatcher(
+        std::shared_ptr<system::ZeroFS> filesystem
+    );
 
     bool handles(
         std::uint8_t vector

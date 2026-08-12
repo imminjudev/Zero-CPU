@@ -74,19 +74,20 @@ R7 = exit/status value
 | 3 | process exit | `R2 = exit code` | `R7 = exit code`, `R4 = status` | terminates current process |
 | 20 | hardware write | `R2 = hardware offset`, `R3 = value` | `R4 = status` | protected hardware MMIO write |
 | 21 | hardware read | `R2 = hardware offset` | `R2 = value`, `R4 = status` | protected hardware MMIO read |
+| 30 | filesystem stat | `R2 = request pointer` | size/type outputs, `R4 = status` | inspect ZeroFS node |
+| 31 | filesystem read | `R2 = request pointer` | `R2 = bytes read`, `R4 = status` | copy ZeroFS bytes into guest buffer |
+| 32 | filesystem write | `R2 = request pointer` | `R2 = bytes written`, `R4 = status` | copy guest buffer into ZeroFS |
 
 The CLI obtains protected service numbers from
 `ProtectedSyscallABI` instead of duplicating numeric values.
 
-Reserved protected service families:
+Protected service families:
 
 ```text
-30..39  storage / filesystem
-40..49  network / web
+30..32  implemented storage / filesystem
+33..39  reserved filesystem expansion
+40..49  reserved network / web
 ```
-
-These ranges are ABI reservations only. A reserved number is not an implemented
-service until core behavior and focused verification are added.
 
 ## Protected Status Codes
 
@@ -97,6 +98,12 @@ service until core behavior and focused verification are added.
 | `-2` | invalid hardware offset |
 | `-3` | hardware unavailable |
 | `-4` | hardware error |
+| `-5` | invalid guest request/buffer memory |
+| `-6` | invalid filesystem path |
+| `-7` | filesystem path not found |
+| `-8` | filesystem node type error |
+| `-9` | filesystem invalid offset |
+| `-10` | filesystem runtime error |
 
 ## Protected Hardware Offsets
 
@@ -166,3 +173,5 @@ Guest mini-kernel and protected host services remain separate ABIs.
 <!-- Patch: v1.6-cli-syscall-abi-split-r1 -->
 
 <!-- Patch: v1.8-protected-platform-abi-r1 -->
+
+<!-- Patch: v1.8-protected-filesystem-syscalls-r2 -->
