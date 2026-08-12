@@ -1,0 +1,45 @@
+.entry start
+
+.data
+path: .string "/data/showcase.txt"
+path_pad: .byte 0, 0, 0, 0, 0, 0
+
+request_path: .qword 0
+request_length: .qword 18
+request_offset: .qword 0
+request_buffer: .qword 80
+request_count: .qword 5
+
+pad_a: .byte 0, 0, 0, 0, 0, 0, 0, 0
+pad_b: .byte 0, 0, 0, 0, 0, 0, 0, 0
+buffer: .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+read_status: .qword -99
+read_count: .qword -99
+write_status: .qword -99
+write_count: .qword -99
+survival_marker: .qword 0
+
+.text
+start:
+    MOV R1, 31
+    MOV R2, 24
+    INT 80
+    STORE [read_status], R4
+    STORE [read_count], R2
+
+    MOV R5, 5
+    STORE [request_offset], R5
+
+    MOV R1, 32
+    MOV R2, 24
+    INT 80
+    STORE [write_status], R4
+    STORE [write_count], R2
+
+    MOV R5, 99
+    STORE [survival_marker], R5
+
+    MOV R1, 3
+    MOV R2, 0
+    INT 80

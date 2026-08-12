@@ -558,6 +558,25 @@ zero_cpu_enable_coverage(
 )
 
 
+add_executable(zero_end_to_end_showcase_test
+    tests/end_to_end_showcase.cpp
+)
+
+target_link_libraries(
+    zero_end_to_end_showcase_test
+    PRIVATE
+        zero_cpu_core
+)
+
+zero_cpu_enable_sanitizers(
+    zero_end_to_end_showcase_test
+)
+
+zero_cpu_enable_coverage(
+    zero_end_to_end_showcase_test
+)
+
+
 add_executable(zero_protected_syscall_hardware_test
     tests/protected_syscall_hardware.cpp
 )
