@@ -18,6 +18,7 @@
 #include "zero_cpu/hardware/HardwareMMIODevice.hpp"
 #include "zero_cpu/hardware/MockHardwareBus.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
+#include "zero_cpu/system/ZeroFS.hpp"
 #include "zero_cpu/isa/EncodedInstruction.hpp"
 #include "zero_cpu/isa/InstructionDecoder.hpp"
 #include "zero_cpu/isa/InstructionEncoder.hpp"
@@ -29,6 +30,7 @@
 #include <cstdint>
 #include <cctype>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -79,6 +81,7 @@ constexpr int kIdLoadMultiProcessButton = 1029;
 constexpr int kIdPidEdit = 1030;
 constexpr int kIdSelectPidButton = 1031;
 constexpr int kIdStepSourceButton = 1032;
+constexpr int kIdLoadShowcaseButton = 1033;
 
 constexpr std::size_t kDataViewStart = 96;
 constexpr std::size_t kDataViewCount = 16;
@@ -94,6 +97,17 @@ constexpr const char* kDefaultBinaryPath = "examples\\debugger_protected_showcas
 constexpr const char* kDefaultMultiProcessPaths =
     "examples\\debugger_protected_showcase.zbin;"
     "examples\\debugger_protected_showcase.zbin";
+
+constexpr const char* kShowcaseFsSourcePath =
+    "examples\\showcase_fs_worker.zasm";
+constexpr const char* kShowcaseFaultSourcePath =
+    "examples\\showcase_hardware_fault.zasm";
+constexpr const char* kShowcaseFsBinaryPath =
+    "build\\showcase\\showcase_fs_worker.zbin";
+constexpr const char* kShowcaseFaultBinaryPath =
+    "build\\showcase\\showcase_hardware_fault.zbin";
+constexpr const char* kShowcaseZeroFSPath =
+    "/data/showcase.txt";
 
 enum class StudioMode {
     None,
@@ -133,6 +147,7 @@ HWND g_multiProcessPathsEdit = nullptr;
 HWND g_loadMultiProcessButton = nullptr;
 HWND g_pidEdit = nullptr;
 HWND g_selectPidButton = nullptr;
+HWND g_loadShowcaseButton = nullptr;
 
 zero_cpu::CPU g_cpu;
 
@@ -155,6 +170,12 @@ bool g_breakpointHit = false;
 std::size_t g_lastBreakpointPc = 0;
 std::string g_traceFilter;
 int g_scrollY = 0;
+
+bool g_showcaseSession = false;
+std::shared_ptr<zero_cpu::system::ZeroFS>
+    g_showcaseFilesystem;
+std::shared_ptr<zero_cpu::hardware::MockHardwareBus>
+    g_showcaseHardware;
 
 
 bool g_sourceEditorProgrammaticUpdate = false;
@@ -2786,6 +2807,58 @@ bool registerDatapathCanvasClass(HINSTANCE instance) {
 }
 
 
+std::string makeShowcaseOutcomeView() {
+    if (
+        !g_showcaseSession
+        || !g_showcaseFilesystem
+        || !g_showcaseHardware
+    ) {
+        return {};
+    }
+
+    std::ostringstream out;
+
+    out
+        << "End-to-End Showcase\n"
+        << "Scenario = PID 1 ZeroFS / PID 2 hardware+fault\n";
+
+    try {
+        const auto data =
+            g_showcaseFilesystem->readFile(
+                kShowcaseZeroFSPath
+            );
+
+        out
+            << "ZeroFS "
+            << kShowcaseZeroFSPath
+            << " = "
+            << std::string(
+                data.begin(),
+                data.end()
+            )
+            << "\n";
+    } catch (const std::exception& ex) {
+        out
+            << "ZeroFS "
+            << kShowcaseZeroFSPath
+            << " = <error: "
+            << ex.what()
+            << ">\n";
+    }
+
+    out
+        << "Mock GPIO[0] = "
+        << g_showcaseHardware->registerValue(
+            zero_cpu::memory_map::
+                kHardwareGpioOutputOffset
+        )
+        << "\n"
+        << "Demo flow = Run -> PID 2 fault, "
+           "Run again -> PID 1 completes\n";
+
+    return out.str();
+}
+
 std::string makeStateView() {
     std::ostringstream oss;
 
@@ -2813,6 +2886,11 @@ std::string makeStateView() {
     if (multiProcessDebugActive()) {
         oss << g_multiProcessDebugger->statusText();
         oss << "\n";
+
+        if (g_showcaseSession) {
+            oss << makeShowcaseOutcomeView();
+            oss << "\n";
+        }
     } else if (binaryDebugActive()) {
         oss << g_binaryDebugger->statusText();
         oss << "\n";
@@ -3519,9 +3597,228 @@ parseMultiProcessBinaryPaths(
     return paths;
 }
 
+void clearShowcaseRuntime() {
+    g_showcaseSession = false;
+    g_showcaseFilesystem.reset();
+    g_showcaseHardware.reset();
+}
+
+void assembleShowcaseBinary(
+    const std::string& sourcePath,
+    const std::string& binaryPath
+) {
+    using namespace zero_cpu;
+
+    const std::filesystem::path outputPath(
+        binaryPath
+    );
+
+    if (
+        outputPath.has_parent_path()
+        && !outputPath.parent_path().empty()
+    ) {
+        std::filesystem::create_directories(
+            outputPath.parent_path()
+        );
+    }
+
+    Assembler assembler;
+    const AssembledProgram assembled =
+        assembler.assembleFile(sourcePath);
+
+    binary::BinaryWriter writer;
+    writer.writeFile(
+        binaryPath,
+        assembled.toBinaryProgram()
+    );
+
+    debug::DebugSymbols::fromAssembledProgram(
+        assembled,
+        memory_map::kBinaryCodeBase,
+        sourcePath
+    ).writeFile(
+        debug::debugSymbolsPathForExecutable(
+            binaryPath
+        )
+    );
+}
+
+void onLoadShowcaseClicked() {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::studio;
+
+    try {
+        clearShowcaseRuntime();
+
+        assembleShowcaseBinary(
+            kShowcaseFsSourcePath,
+            kShowcaseFsBinaryPath
+        );
+
+        assembleShowcaseBinary(
+            kShowcaseFaultSourcePath,
+            kShowcaseFaultBinaryPath
+        );
+
+        const std::vector<std::string> paths = {
+            kShowcaseFsBinaryPath,
+            kShowcaseFaultBinaryPath
+        };
+
+        auto filesystem =
+            std::make_shared<
+                system::ZeroFS
+            >();
+
+        const std::string initialFile =
+            "HELLO";
+
+        filesystem->putFile(
+            kShowcaseZeroFSPath,
+            system::ZeroFS::Bytes(
+                initialFile.begin(),
+                initialFile.end()
+            )
+        );
+
+        auto hardware =
+            std::make_shared<
+                hardware::MockHardwareBus
+            >(
+                "studio-v1.9-showcase-hardware"
+            );
+
+        hardware->connect();
+
+        auto hardwareDevice =
+            std::make_shared<
+                hardware::HardwareMMIODevice
+            >(hardware);
+
+        auto mmio =
+            std::make_shared<MMIOBus>();
+
+        mmio->mapDevice(
+            memory_map::kHardwareBase,
+            memory_map::kHardwareSize,
+            hardwareDevice
+        );
+
+        MultiProcessDebugOptions options;
+        options.quantum = 1;
+        options.default_continue_steps = 1000;
+        options.mmio_bus = mmio;
+        options.software_interrupt_handler =
+            std::make_shared<
+                kernel::ProtectedSyscallDispatcher
+            >(filesystem);
+
+        auto debugger =
+            std::make_unique<
+                StudioMultiProcessDebugBackend
+            >();
+
+        debugger->loadBinaries(
+            paths,
+            options
+        );
+
+        g_binaryDebugger.reset();
+
+        g_interruptController.reset();
+        g_mmioBus.reset();
+        g_debugOutputDevice.reset();
+        g_timerDevice.reset();
+
+        g_multiProcessDebugger =
+            std::move(debugger);
+
+        g_showcaseFilesystem =
+            std::move(filesystem);
+
+        g_showcaseHardware =
+            std::move(hardware);
+
+        g_showcaseSession = true;
+
+        g_mode = StudioMode::MultiProcess;
+        g_programLoaded = true;
+        g_loadedPath =
+            "v1.9 end-to-end showcase";
+
+        SetWindowTextA(
+            g_multiProcessPathsEdit,
+            (
+                std::string(kShowcaseFsBinaryPath)
+                + ";"
+                + kShowcaseFaultBinaryPath
+            ).c_str()
+        );
+
+        SetWindowTextA(g_pidEdit, "1");
+
+        std::ostringstream output;
+
+        output
+            << "Loaded v1.9 end-to-end showcase.\n"
+            << "PID 1 = "
+            << kShowcaseFsBinaryPath
+            << "\n"
+            << "PID 2 = "
+            << kShowcaseFaultBinaryPath
+            << "\n"
+            << "Quantum = 1\n"
+            << "Protected Syscalls = enabled\n"
+            << "ZeroFS Initial File = HELLO\n"
+            << "Hardware Backend = mock\n"
+            << "\n"
+            << "Presentation Flow\n"
+            << "1. Click Run: PID 2 reaches the "
+               "intentional protection fault.\n"
+            << "2. Inspect Processes / Software Interrupts / "
+               "Context Switches.\n"
+            << "3. Click Run again: PID 1 survives, "
+               "FS_WRITE completes, then exits.\n"
+            << "4. Final ZeroFS file should be HELLOHELLO "
+               "and Mock GPIO[0] should be 42.\n";
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
+        refreshStateView();
+    } catch (const std::exception& ex) {
+        clearShowcaseRuntime();
+        g_multiProcessDebugger.reset();
+
+        g_mode = StudioMode::None;
+        g_programLoaded = false;
+        g_loadedPath.clear();
+
+        std::ostringstream output;
+
+        output
+            << "Showcase load failed.\n"
+            << "Error = "
+            << ex.what()
+            << "\n";
+
+        setEditText(
+            g_traceEdit,
+            output.str()
+        );
+
+        refreshStateView();
+    }
+}
+
 void onLoadMultiProcessClicked() {
     using namespace zero_cpu::debug;
     using namespace zero_cpu::studio;
+
+    clearShowcaseRuntime();
 
     try {
         const auto paths =
@@ -4912,6 +5209,7 @@ void onResetClicked() {
     g_sourceEditorDirty = false;
     g_binaryDebugger.reset();
     g_multiProcessDebugger.reset();
+    clearShowcaseRuntime();
     g_cpu.reset();
     configureSystemDevices(g_cpu);
     g_mode = StudioMode::None;
@@ -5544,17 +5842,17 @@ LRESULT CALLBACK windowProc(
             nullptr
         );
 
-        CreateWindowExA(
+        g_loadShowcaseButton = CreateWindowExA(
             0,
-            "STATIC",
-            "BP/Cond/Watch use selected PID",
-            WS_CHILD | WS_VISIBLE,
+            "BUTTON",
+            "Load Showcase",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             1225,
-            164,
-            235,
-            24,
+            160,
+            160,
+            30,
             hwnd,
-            nullptr,
+            controlId(kIdLoadShowcaseButton),
             nullptr,
             nullptr
         );
@@ -5743,6 +6041,7 @@ LRESULT CALLBACK windowProc(
         applyFont(g_loadMultiProcessButton, font);
         applyFont(g_pidEdit, font);
         applyFont(g_selectPidButton, font);
+        applyFont(g_loadShowcaseButton, font);
         applyFont(g_traceFilterEdit, font);
         applyFont(g_applyTraceFilterButton, font);
         applyFont(g_sourceEdit, font);
@@ -5927,6 +6226,11 @@ LRESULT CALLBACK windowProc(
             return 0;
         }
 
+        if (controlIdValue == kIdLoadShowcaseButton) {
+            onLoadShowcaseClicked();
+            return 0;
+        }
+
         if (controlIdValue == kIdSelectPidButton) {
             onSelectPidClicked();
             return 0;
@@ -6053,3 +6357,4 @@ int WINAPI WinMain(
 }
 
 // Patch: v1.5-studio-syscall-observability-r1
+// Patch: v1.9-studio-showcase-presentation-r1

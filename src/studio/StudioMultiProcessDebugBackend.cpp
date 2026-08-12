@@ -429,9 +429,12 @@ StudioMultiProcessDebugBackend::statusText() const {
             << "\n";
 
         try {
+            const std::size_t sourceLine =
+                currentSourceLine();
+
             out
                 << "Current Source Line = "
-                << currentSourceLine()
+                << sourceLine
                 << "\n";
         } catch (const std::exception&) {
             out

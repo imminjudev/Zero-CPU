@@ -9,6 +9,7 @@
 #include "zero_cpu/debug/DebugSymbols.hpp"
 #include "zero_cpu/kernel/ProcessImageLoader.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
+#include "zero_cpu/system/ZeroFS.hpp"
 #include "zero_cpu/studio/StudioDebugBackend.hpp"
 #include "zero_cpu/studio/StudioMultiProcessDebugBackend.hpp"
 
@@ -535,6 +536,225 @@ start:
 }
 
 
+bool endToEndShowcaseStudioStatus(
+    std::string& detail
+) {
+    using namespace zero_cpu;
+    using namespace zero_cpu::debug;
+    using namespace zero_cpu::hardware;
+    using namespace zero_cpu::kernel;
+    using namespace zero_cpu::studio;
+    using namespace zero_cpu::system;
+
+    Assembler assembler;
+    ProcessImageLoader loader;
+
+    const ProcessImage fsImage =
+        loader.loadProgram(
+            assembler
+                .assembleFile(
+                    "examples/showcase_fs_worker.zasm"
+                )
+                .toBinaryProgram(),
+            "studio-showcase-fs.zbin"
+        );
+
+    const ProcessImage faultImage =
+        loader.loadProgram(
+            assembler
+                .assembleFile(
+                    "examples/showcase_hardware_fault.zasm"
+                )
+                .toBinaryProgram(),
+            "studio-showcase-fault.zbin"
+        );
+
+    auto filesystem =
+        std::make_shared<ZeroFS>();
+
+    const std::string initial = "HELLO";
+
+    filesystem->putFile(
+        "/data/showcase.txt",
+        ZeroFS::Bytes(
+            initial.begin(),
+            initial.end()
+        )
+    );
+
+    auto hardware =
+        std::make_shared<MockHardwareBus>(
+            "studio-showcase-test-hardware"
+        );
+
+    hardware->connect();
+
+    auto device =
+        std::make_shared<HardwareMMIODevice>(
+            hardware
+        );
+
+    auto mmio =
+        std::make_shared<MMIOBus>();
+
+    mmio->mapDevice(
+        memory_map::kHardwareBase,
+        memory_map::kHardwareSize,
+        device
+    );
+
+    MultiProcessDebugOptions options;
+    options.quantum = 1;
+    options.default_continue_steps = 200;
+    options.mmio_bus = mmio;
+    options.software_interrupt_handler =
+        std::make_shared<
+            ProtectedSyscallDispatcher
+        >(filesystem);
+
+    StudioMultiProcessDebugBackend backend;
+
+    backend.loadImages(
+        {
+            fsImage,
+            faultImage
+        },
+        options
+    );
+
+    const MultiProcessDebugStop faultStop =
+        backend.run(200);
+
+    if (
+        faultStop.reason
+            != MultiProcessDebugStopReason::
+                ProcessFaulted
+        || !faultStop.process_faulted
+        || faultStop.terminated_pid != 2
+    ) {
+        detail =
+            "Studio showcase did not stop on PID 2 fault";
+        return false;
+    }
+
+    const ProcessDebugSnapshot survivorAtFault =
+        backend.session().processSnapshot(1);
+
+    const ProcessDebugSnapshot faulted =
+        backend.session().processSnapshot(2);
+
+    if (
+        survivorAtFault.terminated()
+        || !faulted.faulted()
+    ) {
+        detail =
+            "Studio showcase fault isolation snapshot mismatch";
+        return false;
+    }
+
+    const std::string faultStatus =
+        backend.statusText();
+
+    if (
+        faultStatus.find(
+            "Last Stop = ProcessFaulted"
+        ) == std::string::npos
+        || faultStatus.find(
+            "PID 2 | studio-showcase-fault.zbin"
+        ) == std::string::npos
+        || faultStatus.find("<faulted>")
+            == std::string::npos
+        || faultStatus.find(
+            "PID 1 INT 80 svc=31"
+        ) == std::string::npos
+        || faultStatus.find(
+            "PID 2 INT 80 svc=20"
+        ) == std::string::npos
+        || faultStatus.find(
+            "Recent Context Switches"
+        ) == std::string::npos
+        || hardware->registerValue(
+            memory_map::kHardwareGpioOutputOffset
+        ) != 42
+    ) {
+        detail =
+            "Studio showcase fault-phase observability mismatch";
+        return false;
+    }
+
+    const MultiProcessDebugStop completionStop =
+        backend.run(200);
+
+    if (
+        completionStop.reason
+            != MultiProcessDebugStopReason::
+                ProcessTerminated
+        || completionStop.terminated_pid != 1
+        || completionStop.runtime_state
+            != ProcessRuntimeState::Completed
+    ) {
+        detail =
+            "Studio showcase survivor completion mismatch";
+        return false;
+    }
+
+    const ProcessDebugSnapshot survivor =
+        backend.session().processSnapshot(1);
+
+    if (
+        !survivor.terminated()
+        || survivor.faulted()
+        || !survivor.has_exit_code
+        || survivor.exit_code != 0
+    ) {
+        detail =
+            "Studio showcase survivor final state mismatch";
+        return false;
+    }
+
+    const ZeroFS::Bytes finalFile =
+        filesystem->readFile(
+            "/data/showcase.txt"
+        );
+
+    if (
+        std::string(
+            finalFile.begin(),
+            finalFile.end()
+        ) != "HELLOHELLO"
+    ) {
+        detail =
+            "Studio showcase ZeroFS final content mismatch";
+        return false;
+    }
+
+    const std::string finalStatus =
+        backend.statusText();
+
+    if (
+        finalStatus.find(
+            "PID 1 INT 80 svc=32"
+        ) == std::string::npos
+        || finalStatus.find(
+            "PID 1 INT 80 svc=3"
+        ) == std::string::npos
+        || finalStatus.find(
+            "Runtime State = Completed"
+        ) == std::string::npos
+        || backend.session()
+            .contextSwitches()
+            .empty()
+    ) {
+        detail =
+            "Studio showcase completion observability mismatch";
+        return false;
+    }
+
+    return true;
+}
+
+// Patch: v1.9-studio-showcase-presentation-r1
+
 bool sourceStepBackendDelegation(
     std::string& detail
 ) {
@@ -871,6 +1091,15 @@ int main() {
     {
         std::string detail;
         report(
+            "Studio end-to-end showcase presentation",
+            endToEndShowcaseStudioStatus(detail),
+            detail
+        );
+    }
+
+    {
+        std::string detail;
+        report(
             "Studio source-step backend delegation",
             sourceStepBackendDelegation(detail),
             detail
@@ -915,4 +1144,5 @@ int main() {
 }
 
 // Patch: v1.5-studio-syscall-observability-r1
+// Patch: v1.9-studio-showcase-presentation-r1
 
