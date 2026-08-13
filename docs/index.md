@@ -10,6 +10,7 @@ This index separates current platform documentation from older milestone notes.
 README.md
 docs/project-overview.md
 docs/architecture.md
+docs/v2.0-demo-guide.md
 docs/syscall-convention.md
 ```
 
@@ -19,6 +20,9 @@ docs/syscall-convention.md
 process model, hardware path, debugger, and verification layers.
 
 `docs/architecture.md` is the current rendered platform diagram and boundary map.
+
+`docs/v2.0-demo-guide.md` contains the timed 2–3 minute showcase presentation
+and the committed portfolio screenshots.
 
 `docs/syscall-convention.md` defines both syscall layers that currently coexist:
 
@@ -192,3 +196,5 @@ future direction
 <!-- Patch: v2.0-productization-docs-r1 -->
 
 <!-- Patch: v2.0-current-architecture-diagram-r1 -->
+
+<!-- Patch: v2.0-demo-guide-r1 -->

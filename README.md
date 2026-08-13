@@ -112,6 +112,25 @@ See [`docs/end-to-end-showcase.md`](docs/end-to-end-showcase.md).
 
 ---
 
+## Showcase Screenshots
+
+### One-command verified run
+
+![Zero-CPU one-command showcase](docs/assets/v2.0/showcase-cli.png)
+
+### Isolated protection fault
+
+![Zero Studio fault phase](docs/assets/v2.0/showcase-fault-phase.png)
+
+### Survivor completion
+
+![Zero Studio completion phase](docs/assets/v2.0/showcase-complete-phase.png)
+
+The timed 2–3 minute presentation sequence is documented in
+[`docs/v2.0-demo-guide.md`](docs/v2.0-demo-guide.md).
+
+---
+
 ## Current Capabilities
 
 ### CPU / ISA
@@ -367,6 +386,7 @@ docs/architecture.md
 docs/architecture-roadmap.md
 docs/syscall-convention.md
 docs/end-to-end-showcase.md
+docs/v2.0-demo-guide.md
 docs/zero-fs.md
 ```
 
@@ -386,13 +406,13 @@ The **v2.0 feature scope is frozen**. Productization completed so far:
 documentation consistency
 current architecture diagram
 single-command showcase entry point
+2–3 minute demo script
+portfolio screenshots
 ```
 
 Remaining release work:
 
 ```text
-2–3 minute demo script
-portfolio screenshots
 design decisions and limitations
 final regression pass
 v2.0.0 tag and release
@@ -424,3 +444,5 @@ MIT License. See [`LICENSE`](LICENSE).
 <!-- Patch: v2.0-current-architecture-diagram-r1 -->
 
 <!-- Patch: v2.0-single-command-showcase-r1 -->
+
+<!-- Patch: v2.0-demo-guide-r1 -->

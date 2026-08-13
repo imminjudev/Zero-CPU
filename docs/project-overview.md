@@ -679,13 +679,13 @@ Completed v2.0 productization work:
 documentation consistency
 current architecture diagram
 single-command showcase entry point
+2–3 minute demo script
+portfolio screenshots
 ```
 
 The remaining v2.0 work is presentation and release engineering:
 
 ```text
-2–3 minute demo script
-portfolio screenshots
 design decisions and limitations
 final regression pass
 v2.0.0 tag and release
@@ -716,3 +716,5 @@ v2.0 scope.
 <!-- Patch: v2.0-productization-docs-r1 -->
 
 <!-- Patch: v2.0-single-command-showcase-r1 -->
+
+<!-- Patch: v2.0-demo-guide-r1 -->
