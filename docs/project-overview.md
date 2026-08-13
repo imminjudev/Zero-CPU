@@ -579,6 +579,7 @@ Important command families include:
 assemble
 run-binary
 run-os
+showcase
 run-processes
 debug
 debug-processes
@@ -672,12 +673,17 @@ No new execution subsystem is required for v2.0.
 
 ## 19. Direction
 
-The remaining v2.0 work is presentation and release engineering:
+Completed v2.0 productization work:
 
 ```text
 documentation consistency
 current architecture diagram
 single-command showcase entry point
+```
+
+The remaining v2.0 work is presentation and release engineering:
+
+```text
 2–3 minute demo script
 portfolio screenshots
 design decisions and limitations
@@ -708,3 +714,5 @@ v2.0 scope.
 
 <!-- Patch: v1.6-docs-current-platform-r1 -->
 <!-- Patch: v2.0-productization-docs-r1 -->
+
+<!-- Patch: v2.0-single-command-showcase-r1 -->

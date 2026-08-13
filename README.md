@@ -58,6 +58,12 @@ See the rendered current architecture map in
 
 The v1.9 showcase is the shortest way to understand the complete platform.
 
+After building, run the complete verified scenario with one command:
+
+```bat
+.\build\Debug\zero_cli.exe showcase
+```
+
 Two real assembly programs are assembled and loaded as independent processes:
 
 ```text
@@ -379,12 +385,12 @@ The **v2.0 feature scope is frozen**. Productization completed so far:
 ```text
 documentation consistency
 current architecture diagram
+single-command showcase entry point
 ```
 
 Remaining release work:
 
 ```text
-single-command showcase entry point
 2–3 minute demo script
 portfolio screenshots
 design decisions and limitations
@@ -416,3 +422,5 @@ MIT License. See [`LICENSE`](LICENSE).
 <!-- Patch: v2.0-productization-docs-r1 -->
 
 <!-- Patch: v2.0-current-architecture-diagram-r1 -->
+
+<!-- Patch: v2.0-single-command-showcase-r1 -->

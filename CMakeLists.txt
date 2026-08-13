@@ -178,6 +178,7 @@ add_library(zero_cpu_core
     src/system/MultiProcessTraceJsonWriter.cpp
     src/system/BioOSRunner.cpp
     src/system/ZeroFS.cpp
+    src/system/EndToEndShowcase.cpp
     src/kernel/ProtectedFilesystemService.cpp
 )
 

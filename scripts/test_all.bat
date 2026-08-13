@@ -1141,6 +1141,9 @@ if not exist "%ZERO_END_TO_END_SHOWCASE_TEST%" (
 "%ZERO_END_TO_END_SHOWCASE_TEST%"
 if errorlevel 1 goto fail
 
+"%ZERO_CLI%" showcase
+if errorlevel 1 goto fail
+
 echo.
 echo All Zero-CPU tests passed.
 echo ========================================
@@ -1162,3 +1165,5 @@ rem Patch: v1.6-cli-syscall-abi-split-r1
 rem Patch: v1.7-protected-esp32-gpio-demo-r1
 
 rem Patch: v1.9-showcase-golden-regression-r1
+
+rem Patch: v2.0-single-command-showcase-r1

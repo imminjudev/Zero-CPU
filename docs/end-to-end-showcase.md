@@ -43,6 +43,38 @@ The deterministic trace is locked against
 `tests/golden/end_to_end_showcase.json` and the showcase is part of the full
 regression suite.
 
+## One-Command CLI Presentation
+
+After building, the complete protected showcase is available through:
+
+```bat
+.\build\Debug\zero_cli.exe showcase
+```
+
+The command uses the reusable core `EndToEndShowcaseRunner`; it does not launch
+a test executable or implement a second execution path. It assembles the real
+showcase sources, configures ZeroFS and deterministic mock hardware, runs the
+protected multi-process runtime, checks the same integration expectations,
+writes `build/showcase/showcase_trace.json`, verifies invariants, and compares
+the trace with the committed golden regression.
+
+Successful output highlights:
+
+```text
+.zasm -> .zbin
+exactly one isolated process fault
+PID 1 survivor exit 0
+ZeroFS HELLO -> HELLOHELLO
+Mock GPIO[0] = 42
+timer preemption / context switches
+FS_READ / HW_WRITE / FS_WRITE / EXIT observations
+invariant verification
+golden trace match
+```
+
+The same runner is consumed by `zero_end_to_end_showcase_test`, so the public
+CLI command and focused regression share the scenario orchestration.
+
 ## Studio Presentation
 
 Build and launch Studio:
@@ -97,3 +129,5 @@ checks the fault-phase and completion-phase presentation state.
 <!-- Patch: v1.9-showcase-golden-regression-r1 -->
 
 <!-- Patch: v1.9-studio-showcase-presentation-r1 -->
+
+<!-- Patch: v2.0-single-command-showcase-r1 -->

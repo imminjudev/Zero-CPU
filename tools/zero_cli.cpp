@@ -33,6 +33,7 @@
 #include "zero_cpu/kernel/ProtectedSyscallDispatcher.hpp"
 #include "zero_cpu/kernel/ProtectedSyscallABI.hpp"
 #include "zero_cpu/system/BioOSRunner.hpp"
+#include "zero_cpu/system/EndToEndShowcase.hpp"
 #include "zero_cpu/system/MultiProcessRunner.hpp"
 #include "zero_cpu/trace/TraceJsonWriter.hpp"
 #include "zero_cpu/trace/TraceJsonDiff.hpp"
@@ -8438,6 +8439,98 @@ int runGoldenTraceRegressionTest() {
     return 1;
 }
 
+int runShowcaseCommand() {
+    using namespace zero_cpu::system;
+
+    std::cout
+        << "=== Zero-CPU End-to-End Showcase ===\n\n";
+
+    EndToEndShowcaseRunner runner;
+
+    const EndToEndShowcaseResult result =
+        runner.run();
+
+    if (!result.success()) {
+        std::cout
+            << "[FAIL] Showcase verification\n"
+            << "       "
+            << result.detail
+            << "\n";
+        return 1;
+    }
+
+    const auto& faulted =
+        result.runtime.process(2);
+
+    std::cout
+        << "[PASS] .zasm -> .zbin: 2 protected programs\n";
+
+    std::cout
+        << "[PASS] Runtime completed: processes="
+        << result.runtime.process_count
+        << ", faults="
+        << result.runtime.fault_count
+        << "\n";
+
+    std::cout
+        << "[PASS] Fault isolation: PID 2 faulted, "
+        << "PID 1 survived and exited "
+        << result.survivor_exit_code
+        << "\n";
+
+    std::cout
+        << "[PASS] ZeroFS: "
+        << result.filesystem_before
+        << " -> "
+        << result.filesystem_after
+        << "\n";
+
+    std::cout
+        << "[PASS] Mock GPIO[0] = "
+        << result.gpio_output
+        << "\n";
+
+    std::cout
+        << "[PASS] Scheduling: preemptions="
+        << result.runtime.preemption_count
+        << ", context-switches="
+        << result.runtime.context_switch_count
+        << "\n";
+
+    std::cout
+        << "[PASS] Protected syscalls: "
+        << "FS_READ, HW_WRITE, FS_WRITE, EXIT\n";
+
+    std::cout
+        << "[PASS] Multi-process invariants\n";
+
+    std::cout
+        << "[PASS] Golden trace regression\n\n";
+
+    std::cout
+        << "Fault evidence:\n"
+        << "  "
+        << faulted.termination_message
+        << "\n\n";
+
+    std::cout
+        << "Artifacts:\n"
+        << "  "
+        << result.filesystem_binary_path
+        << "\n"
+        << "  "
+        << result.hardware_binary_path
+        << "\n"
+        << "  "
+        << result.trace_json_path
+        << "\n\n";
+
+    std::cout
+        << "Showcase completed successfully.\n";
+
+    return 0;
+}
+
 void printUsage() {
     std::cout << "Zero-CPU CLI\n\n";
     std::cout << "Usage:\n";
@@ -8474,6 +8567,7 @@ void printUsage() {
     std::cout << "  zero_cli mini-kernel-timer-lifecycle-test\n";
     std::cout << "  zero_cli bio-os-combined-boot-test\n";
     std::cout << "  zero_cli run-os <bio_os_directory>\n";
+    std::cout << "  zero_cli showcase\n";
     std::cout << "  zero_cli bio-os-runner-test <bio_os_directory>\n";
     std::cout << "  zero_cli syscall-table\n";
     std::cout << "  zero_cli assemble <input.zasm> <output.zbin>\n";
@@ -8497,6 +8591,17 @@ int main(int argc, char* argv[]) {
             if (command == "help" || command == "--help" || command == "-h") {
                 printUsage();
                 return 0;
+            }
+
+            if (command == "showcase") {
+                if (argc != 2) {
+                    std::cerr
+                        << "Invalid showcase command.\n\n";
+                    printUsage();
+                    return 1;
+                }
+
+                return runShowcaseCommand();
             }
 
             if (command == "binary-test") {
@@ -9018,3 +9123,4 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 }
+// Patch: v2.0-single-command-showcase-r1

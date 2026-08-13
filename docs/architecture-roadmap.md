@@ -127,12 +127,12 @@ Completed productization work:
 ```text
 v2.0-A  README and current-document consistency
 v2.0-B  current architecture diagram
+v2.0-C  single-command showcase entry point
 ```
 
 Remaining release work:
 
 ```text
-v2.0-C  single-command showcase entry point
 v2.0-D  2–3 minute demo script and portfolio screenshots
 v2.0-E  design decisions / limitations / final release notes
 v2.0-F  final regression, tag v2.0.0, release
@@ -295,3 +295,5 @@ release it
 ```
 
 <!-- Patch: v2.0-productization-docs-r1 -->
+
+<!-- Patch: v2.0-single-command-showcase-r1 -->
