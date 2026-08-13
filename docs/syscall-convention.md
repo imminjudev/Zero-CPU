@@ -506,7 +506,7 @@ scripts\test_all.bat
 Current suite result:
 
 ```text
-72 stages
+73 stages
 All Zero-CPU tests passed.
 ```
 
@@ -549,6 +549,9 @@ process contexts/address spaces        implemented
 protected process exit                 implemented
 protected hardware write (20)          implemented
 protected hardware read (21)           implemented
+protected filesystem stat (30)         implemented
+protected filesystem read (31)         implemented
+protected filesystem write (32)        implemented
 semantic syscall observation           implemented
 trace/invariant integration            implemented
 debugger core integration              implemented
@@ -585,3 +588,5 @@ filesystem operation. `FS_READ` copies ZeroFS bytes into guest memory;
 observations keep the service number, status, and result for trace/debugger use.
 
 <!-- Patch: v1.8-protected-filesystem-syscalls-r2 -->
+
+<!-- Patch: v2.0-productization-docs-r1 -->

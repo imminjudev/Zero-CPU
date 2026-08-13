@@ -331,10 +331,17 @@ Current protected services:
 3   process exit
 20  hardware write
 21  hardware read
+30  filesystem stat
+31  filesystem read
+32  filesystem write
 ```
 
 These services execute through the host-side software interrupt handler while
 the CPU performs a real protected User→Kernel→User interrupt-frame transition.
+
+Filesystem services operate on a deterministic host-side `ZeroFS` instance and
+copy only through validated request/path/buffer ranges in the User data window.
+ZeroFS is separate from the 4 KiB guest RAM image.
 
 See `docs/syscall-convention.md` for the exact ABI.
 
@@ -508,16 +515,21 @@ debug controls
 snapshot / trace export
 ```
 
-For protected multi-process sessions, Studio configures:
+For protected multi-process sessions, Studio can configure:
 
 ```text
 ProtectedSyscallDispatcher
+ZeroFS
 MockHardwareBus
 HardwareMMIODevice
 shared MMIOBus
 ```
 
 and displays recent semantic software-interrupt observations in the State view.
+
+The v1.9 **Load Showcase** path assembles the real showcase `.zasm` sources,
+writes `.zsym` source maps, preloads `/data/showcase.txt = HELLO`, and presents
+the two-stage fault-isolation/survivor flow through the same debugger backend.
 
 Example output:
 
@@ -547,9 +559,9 @@ MMIO debug output
 clean guest exit
 ```
 
-BIO-OS predates the newer protected host dispatcher. Future integration work can
-move more of the demo onto the protected multiprocess runtime without making
-BIO-OS the architectural center of Zero-CPU.
+BIO-OS predates the newer protected host dispatcher and remains a deliberately
+separate guest-kernel demonstration. It is retained for architectural contrast;
+the protected multi-process runtime is the primary platform path.
 
 ---
 
@@ -591,7 +603,7 @@ Protected multi-process runtime flags include:
 
 The project uses focused tests for each layer plus CLI integration tests.
 
-The current `scripts\test_all.bat` suite contains 72 stages.
+The current `scripts\test_all.bat` suite contains 73 stages.
 
 Coverage includes:
 
@@ -606,14 +618,16 @@ process contexts/tables/address spaces
 round-robin and timer preemption
 process lifecycle/fault recovery
 protected hardware syscalls
+protected filesystem syscalls / ZeroFS
 protected process exit
 final-instruction protected exit
 multi-process trace invariants
 trace diff and golden regression
+end-to-end showcase golden trace
 debugger controls
 protected debugger runtime
 protected debugger CLI
-Studio backend
+Studio backend and showcase presentation
 ```
 
 Current expected result:
@@ -624,42 +638,58 @@ All Zero-CPU tests passed.
 
 ---
 
-## 18. Current Milestone
+## 18. Current Release Phase
 
-Current milestone:
-
-```text
-v1.5 protected runtime observability
-```
-
-Completed path:
+Completed platform milestone:
 
 ```text
-v1.5-A protected syscall semantic observation
-v1.5-B trace diff + protected syscall golden regression
-v1.5-C multi-process debugger core consumption
-v1.5-D debug-processes CLI consumption
-v1.5-E Zero Studio consumption
+v1.9 end-to-end protected showcase
 ```
 
-A correctness fix also allows an explicit protected process-exit syscall to be
-the final instruction of an executable.
+The v1.9 path demonstrates, in one reproducible scenario:
+
+```text
+real .zasm → .zbin programs
+independent process address spaces
+timer-driven preemption
+protected filesystem syscall
+protected hardware syscall
+intentional User-mode MMIO protection fault
+fault isolation and survivor completion
+Studio/debugger observation
+trace JSON → invariant verification → golden regression
+```
+
+Current release phase:
+
+```text
+v2.0 productization / feature freeze
+```
+
+No new execution subsystem is required for v2.0.
 
 ---
 
 ## 19. Direction
 
-Near-term work should continue to complete the platform:
+The remaining v2.0 work is presentation and release engineering:
 
 ```text
-keep documentation aligned with source
-strengthen physical ESP32 demonstrations
-integrate BIO-OS with protected runtime concepts
-clarify library/module boundaries
-build strong end-to-end demonstrations
+documentation consistency
+current architecture diagram
+single-command showcase entry point
+2–3 minute demo script
+portfolio screenshots
+design decisions and limitations
+final regression pass
+v2.0.0 tag and release
 ```
 
-Potential future module boundaries:
+The mock hardware path is the reproducible demonstration baseline. Physical
+ESP32 transport remains an optional extension and is not required to prove the
+protected hardware architecture.
+
+Potential future module boundaries remain:
 
 ```text
 zero_cpu_arch
@@ -670,10 +700,11 @@ zero_cpu_hardware
 zero_cpu_host_windows
 ```
 
-These are architectural targets, not a reason for an immediate large refactor.
+These are post-release cleanup directions, not a reason for a v2.0 refactor.
 
-CPU microarchitecture experiments such as cache simulation, pipelines, hazards,
-and branch prediction remain deferred until the protected virtual-computer
-platform is complete.
+Cache simulation, pipelines, branch prediction, a network stack, broad
+filesystem expansion, GPU/3D work, and Linux/x86 compatibility are outside the
+v2.0 scope.
 
 <!-- Patch: v1.6-docs-current-platform-r1 -->
+<!-- Patch: v2.0-productization-docs-r1 -->

@@ -7,53 +7,105 @@
 Zero-CPU is a **verifiable and observable protected virtual computer platform**
 written in C++17.
 
-It combines a custom ISA and toolchain with protected execution, processes and
-address spaces, timer-driven scheduling, MMIO and hardware bridges, source-level
-debugging, semantic runtime traces, and a Win32 Studio frontend.
+It combines a custom ISA and executable toolchain with User/Kernel protection,
+independent processes and address spaces, timer-driven preemption, protected
+syscalls, MMIO devices, deterministic storage, source-aware debugging, and
+trace-based verification.
 
-The project is intentionally compact: the goal is not to emulate a commercial
-processor, but to make the important boundaries of a computer system visible,
-testable, and explainable.
+The project is intentionally compact. Its goal is not to emulate a commercial
+processor; it is to make the important boundaries of a computer system visible,
+testable, and explainable end to end.
+
+> A small virtual computer where protection, multi-process scheduling, syscalls,
+> devices, storage, debugging, and verification can all be observed in one
+> execution flow.
 
 ---
 
-## Architecture
-
-The current execution path is:
+## 30-Second Overview
 
 ```text
 .zasm
-  ↓
-Assembler
-  ↓
-.zbin + .zsym
-  ↓
-Binary Loader
-  ↓
-Protected Zero-CPU Machine
-  ↓
-User / Kernel privilege
-  ↓
-Processes + Address Spaces
-  ↓
-Timer Preemption + Scheduler
-  ↓
-INT 80 Syscalls
-  ↓
-MMIO / Virtual or Physical Hardware
-  ↓
-Debugger + Trace Verification
+  → Assembler
+  → .zbin + .zsym
+  → Binary / Process Loader
+  → Protected Zero-CPU Machine
+  → User / Kernel privilege
+  → Independent Processes + Address Spaces
+  → Timer Preemption + Round-Robin Scheduler
+  → INT 80 Protected Syscalls
+  → MMIO / Hardware / ZeroFS
+  → Multi-Process Debugger + Zero Studio
+  → Trace JSON
+  → Invariant Verification + Golden Regression
 ```
 
-The canonical executable path is `.zasm -> .zbin -> loader -> memory ->
-fetch/decode/execute`. The older in-memory instruction path remains useful for
-tests and compatibility.
+The canonical executable path is:
+
+```text
+.zasm → .zbin → loader → memory → fetch/decode/execute
+```
+
+Studio and CLI tooling consume the same core execution/debugging behavior rather
+than implementing a second machine model.
+
+---
+
+## End-to-End Showcase
+
+The v1.9 showcase is the shortest way to understand the complete platform.
+
+Two real assembly programs are assembled and loaded as independent processes:
+
+```text
+Process 1
+  → protected FS_READ
+  → survives another process's fault
+  → protected FS_WRITE
+  → /data/showcase.txt: HELLO → HELLOHELLO
+  → normal exit 0
+
+Process 2
+  → protected HW_WRITE
+  → Mock GPIO[0] = 42
+  → attempts direct User-mode MMIO write
+  → protection fault
+  → terminated in isolation
+```
+
+With timer quantum `1`, the processes alternate under preemptive scheduling.
+When Process 2 faults, Process 1 remains alive and completes normally.
+
+Zero Studio exposes the same flow with the **Load Showcase** button:
+
+```text
+Run #1
+  → Process 2 faults on illegal direct MMIO
+  → Process 1 is still running
+  → GPIO = 42
+  → ZeroFS file is still HELLO
+
+Run #2
+  → Process 1 performs FS_WRITE
+  → ZeroFS file becomes HELLOHELLO
+  → Process 1 exits with code 0
+  → runtime state becomes Completed
+```
+
+The deterministic execution is also exported to JSON, checked by multi-process
+invariants, and locked against:
+
+```text
+tests/golden/end_to_end_showcase.json
+```
+
+See [`docs/end-to-end-showcase.md`](docs/end-to-end-showcase.md).
 
 ---
 
 ## Current Capabilities
 
-### CPU and ISA
+### CPU / ISA
 
 ```text
 8 general-purpose registers (R0..R7)
@@ -61,33 +113,29 @@ PC, SP, FLAGS
 fetch / decode / execute
 arithmetic and bitwise ALU
 direct and register-indirect memory access
-branches and signed comparisons
+signed comparisons and branches
 PUSH / POP / CALL / RET
 INT / IRET / EI / DI
 ```
 
-### Protected execution
+### Protection / Processes / Scheduling
 
 ```text
 Kernel and User privilege levels
-User code-range enforcement
+User execution-range protection
 User data-memory protection
+User direct-MMIO blocking
 separate User and Kernel stacks
 protected interrupt frames
 privileged-instruction checks
-fault isolation
-```
 
-### Processes and scheduling
-
-```text
 ProcessControlBlock / ProcessTable
 independent process address spaces
 context capture / restore
 round-robin scheduling
 timer-driven preemption
 process lifecycle and exit codes
-fault recovery and scheduler handoff
+fault isolation and scheduler handoff
 ```
 
 ### Toolchain
@@ -95,40 +143,67 @@ fault recovery and scheduler handoff
 ```text
 .zasm assembler
 .data / .text sections
+.qword data
 labels and explicit entry points
 .zbin format 0.3
+legacy .zbin 0.2 compatibility
 .zsym debug-symbol sidecars
 binary loader and process image loader
 ```
 
-### Devices and hardware
+### Runtime Services
+
+The protected host runtime uses `INT 80`.
+
+| Service | Meaning |
+|---:|---|
+| `3` | process exit |
+| `20` | hardware write |
+| `21` | hardware read |
+| `30` | filesystem stat |
+| `31` | filesystem read |
+| `32` | filesystem write |
+
+Protected filesystem operations use bounded request blocks and guest buffers in
+the User data window. ZeroFS remains separate from the 4 KiB guest RAM image.
+
+The older assembly mini-kernel/BIO-OS services `1..7` remain as a distinct guest
+kernel demonstration. They are not the protected host ABI.
+
+See [`docs/syscall-convention.md`](docs/syscall-convention.md).
+
+### Devices / Storage / Hardware
 
 ```text
 MMIO bus
 DebugOutputDevice
 TimerDevice
-mock hardware bridge
-serial hardware protocol
+HardwareMMIODevice
+MockHardwareBus
+SerialHardwareBus
 Windows serial transport
 ESP32-oriented physical bridge path
+ZeroFS deterministic virtual filesystem
 ```
 
-### Debugging and verification
+The mock hardware path is the reproducible default for tests and the final
+showcase. The physical ESP32 path is an optional hardware extension.
+
+### Debugging / Verification
 
 ```text
 single-process debugger
 multi-process debugger
 source-line stepping
-per-PID breakpoints
+PID-aware breakpoints
 conditional breakpoints
 watchpoints
 symbol-aware inspection
 debug snapshots
 semantic protected-syscall history
-multi-process execution timeline
-context-switch timeline
+context-switch history
 trace JSON export
-invariant verification
+multi-process invariant verification
 architectural trace diff
 strict trace diff
 golden trace regression
@@ -136,17 +211,14 @@ golden trace regression
 
 ### Zero Studio
 
-The Win32 Studio frontend consumes the same debugger core rather than
-reimplementing execution semantics.
+Zero Studio is a Win32 frontend over the debugger backends.
 
 It includes:
 
 ```text
 source editor and assembler flow
-single-process debugging
-multi-process debugging
-PID selection
-source highlighting
+single-process and multi-process debugging
+PID selection and source highlighting
 visual datapath
 pipeline-style timeline
 execution detail probe
@@ -155,47 +227,16 @@ recent instruction trace
 breakpoints / conditional breakpoints / watchpoints
 snapshot and trace export
 protected syscall observations
+one-click end-to-end showcase loading
 ```
-
----
-
-## Protected Runtime
-
-The current protected host syscall dispatcher uses `INT 80`.
-
-```text
-R0 = interrupt vector (set by CPU)
-R1 = syscall number
-R2 = argument 0 / return value
-R3 = argument 1
-R4 = status
-R5 = kernel scratch
-R6 = reserved/test marker
-R7 = exit/status value
-```
-
-Protected host services:
-
-| Service | Meaning | Inputs | Result |
-|---:|---|---|---|
-| `3` | process exit | `R2 = exit code` | terminates process, `R7 = exit code`, `R4 = 0` |
-| `20` | hardware write | `R2 = MMIO offset`, `R3 = value` | hardware write, status in `R4` |
-| `21` | hardware read | `R2 = MMIO offset` | value in `R2`, status in `R4` |
-
-The older assembly mini-kernel/BIO-OS syscall table (`1..7`) is still supported
-as a guest-kernel demo. It is separate from the protected host dispatcher.
-
-See [`docs/syscall-convention.md`](docs/syscall-convention.md).
 
 ---
 
 ## Memory Map
 
-Current core conventions:
-
 ```text
 0x0000..0x01FF  User data / low memory
-0x0200..        .zbin code load area
+0x0200..        loaded .zbin code
 0x0800..0x0F9F  User stack
 0x0FA0..0x0FFF  Kernel interrupt stack
 
@@ -204,7 +245,7 @@ Current core conventions:
 0xF200..0xF22F  Hardware bridge MMIO
 ```
 
-Hardware bridge register offsets:
+Hardware bridge offsets:
 
 ```text
 +0   GPIO output
@@ -217,7 +258,7 @@ Hardware bridge register offsets:
 
 ---
 
-## Quick Start
+## Build and Run
 
 Zero-CPU currently targets Windows for the full Studio and physical serial
 experience.
@@ -243,9 +284,10 @@ Run the complete regression suite:
 scripts\test_all.bat
 ```
 
-The current suite contains **73 test stages** and finishes with:
+Current regression baseline:
 
 ```text
+73 stages
 All Zero-CPU tests passed.
 ```
 
@@ -255,6 +297,8 @@ Run Studio:
 .\build\Debug\zero_studio.exe
 ```
 
+Then click **Load Showcase** for the end-to-end protected platform demo.
+
 Run the BIO-OS guest-kernel demo:
 
 ```bat
@@ -263,55 +307,16 @@ Run the BIO-OS guest-kernel demo:
 
 ---
 
-## Protected Runtime Demo
-
-Assemble the protected runtime fixture:
-
-```bat
-.\build\Debug\zero_cli.exe assemble tests\fixtures\protected_runtime_cli.zasm build\protected_runtime_cli.zbin
-```
-
-The protected runtime supports:
-
-```text
---protected-syscalls
---hardware-mock
---hardware-serial PORT
---baud N
---expect-exit PID=CODE
---expect-hardware OFFSET=VALUE
-```
-
-The same protected services can be consumed by the multi-process debugger with
-`debug-processes`.
-
-The protected showcase exercises:
-
-```text
-User INT 80
-  → Kernel host dispatcher
-  → hardware write (service 20)
-  → hardware read (service 21)
-  → process exit (service 3)
-  → scheduler handoff
-  → semantic syscall observation
-```
-
----
-
 ## Verification Model
 
 Zero-CPU treats observability as part of correctness.
 
-A protected syscall is not only executed; its semantic result can also be
-recorded and checked:
-
 ```text
 execution
   ↓
-software-interrupt observation
+instruction / scheduler / syscall observations
   ↓
-multi-process trace
+structured multi-process trace
   ↓
 invariant verifier
   ↓
@@ -322,8 +327,8 @@ architectural diff / strict diff
 golden regression
 ```
 
-The debugger consumes the same semantic observations, and Zero Studio displays
-them directly in the multi-process state view.
+This makes claims such as fault isolation, syscall success, preemption,
+termination handoff, and deterministic execution directly testable.
 
 ---
 
@@ -334,10 +339,10 @@ include/      public headers
 src/          core implementation
 tools/        zero_cli
 studio/       Win32 Zero Studio
-examples/     assembly programs and BIO-OS demo
-tests/        automated regression tests and fixtures
-scripts/      local test scripts
-docs/         design and architecture documentation
+examples/     assembly programs and BIO-OS/showcase sources
+tests/        automated regression tests, fixtures, and golden traces
+scripts/      local build/test helpers
+docs/         current design docs and historical milestone notes
 ```
 
 ---
@@ -349,51 +354,50 @@ Start with:
 ```text
 docs/index.md
 docs/project-overview.md
+docs/architecture-roadmap.md
 docs/syscall-convention.md
+docs/end-to-end-showcase.md
+docs/zero-fs.md
 ```
 
-The repository also keeps older milestone-specific debugger and hardware notes.
-Those documents are useful historical implementation records; the files above
-describe the current platform.
+Older milestone-specific documents are retained as implementation history. When a
+historical note conflicts with the current overview or source, the current
+source and current-state documentation take precedence.
 
 ---
 
-## Current Milestone
+## Current Phase: v2.0 Productization
 
-The current platform milestone is **v1.5: protected runtime observability**.
+The v1.9 end-to-end platform showcase is complete.
 
-The v1.5 path is complete across:
-
-```text
-protected syscall semantics
-→ trace / invariant verification
-→ trace diff / golden regression
-→ multi-process debugger core
-→ debugger CLI
-→ Zero Studio
-```
-
-A full 72-stage regression run passes on the current main branch.
-
----
-
-## Direction
-
-Near-term work focuses on completing the virtual-computer platform rather than
-adding speculative CPU microarchitecture features.
-
-Priority areas:
+The **v2.0 feature scope is frozen**. Remaining work is productization rather
+than adding new execution subsystems:
 
 ```text
-documentation and architecture cleanup
-stronger physical ESP32 / hardware demonstrations
-BIO-OS integration with the protected runtime
-library/module boundary cleanup
-end-to-end platform demos
+documentation consistency
+current architecture diagram
+single-command showcase entry point
+2–3 minute demo script
+portfolio screenshots
+design decisions and limitations
+final regression pass
+v2.0.0 tag and release
 ```
 
-Cache simulation, pipelines, and branch prediction remain intentionally deferred
-until the protected computer platform is complete.
+Not planned for v2.0:
+
+```text
+cache simulator
+5-stage pipeline
+branch predictor
+network stack
+general-purpose filesystem expansion
+GPU / 3D
+Linux or x86 compatibility
+```
+
+The release boundary is intentionally about presenting and verifying the
+existing protected virtual-computer platform well.
 
 ---
 
@@ -401,4 +405,4 @@ until the protected computer platform is complete.
 
 MIT License. See [`LICENSE`](LICENSE).
 
-<!-- Patch: v1.6-docs-current-platform-r1 -->
+<!-- Patch: v2.0-productization-docs-r1 -->

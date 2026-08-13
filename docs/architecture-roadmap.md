@@ -2,11 +2,6 @@
 
 Zero-CPU is a **verifiable and observable protected virtual computer platform**.
 
-This roadmap describes the current path from the completed protected runtime
-toward the first finished platform milestone.
-
-The architecture direction is:
-
 ```text
 .zasm
   → Assembler
@@ -15,18 +10,15 @@ The architecture direction is:
   → Protected CPU
   → Processes / Address Spaces
   → Timer Preemption / Scheduler
-  → Syscalls / MMIO / Hardware
+  → Protected Syscalls / MMIO / ZeroFS / Hardware
   → Debugger / Trace Verification
   → Zero Studio
 ```
 
-The core rule remains:
+Core rule:
 
 ```text
-core behavior
-  → automated verification
-  → CLI / API
-  → Studio consumption
+core behavior → automated verification → CLI / API → Studio consumption
 ```
 
 Studio serves the platform. It does not define execution semantics.
@@ -35,284 +27,204 @@ Studio serves the platform. It does not define execution semantics.
 
 ## 1. Current Platform Baseline
 
-The following layers are already implemented and verified.
-
-### CPU / ISA
+### CPU / Toolchain
 
 ```text
-registers, PC, SP, FLAGS
+custom ISA; R0..R7, PC, SP, FLAGS
 fetch / decode / execute
-ALU and signed branch behavior
-direct and register-indirect memory
-stack operations
-CALL / RET
-INT / IRET / EI / DI
-```
-
-### Executable Toolchain
-
-```text
-.zasm assembler
-.data / .text
-labels and explicit entry points
-.zbin format 0.3
-legacy .zbin 0.2 compatibility
+ALU, branches, stack, functions, interrupts
+.zasm assembler; .data / .text / .qword
+.zbin format 0.3 + legacy 0.2 compatibility
 .zsym debug symbols
-binary loader
-process image loader
+binary and process-image loaders
 ```
 
-### Protection
+### Protection / Processes
 
 ```text
 Kernel / User privilege
-User execution-range protection
-User data-range protection
-User MMIO blocking
+execution and data-range protection
+User direct-MMIO blocking
 separate User and Kernel stacks
 protected interrupt frames
 privileged-instruction checks
-fault isolation
-```
-
-### Processes and Scheduling
-
-```text
-process table / PCB
-independent address spaces
+independent process address spaces
 context capture / restore
-round-robin scheduling
-timer-driven preemption
-process lifecycle
-fault recovery
-exit-code handling
+round-robin + timer-driven preemption
+process lifecycle, exit codes, fault isolation
 ```
 
 ### Runtime Services
 
 ```text
-guest Mini-Kernel / BIO-OS syscall ABI 1..7
-protected host syscall ABI 3 / 20 / 21
+guest Mini-Kernel / BIO-OS ABI 1..7
+
+protected host ABI:
+  3   process exit
+  20  hardware write
+  21  hardware read
+  30  filesystem stat
+  31  filesystem read
+  32  filesystem write
+
 MMIO bus
-DebugOutputDevice
-TimerDevice
+DebugOutputDevice / TimerDevice
 hardware bridge MMIO
-mock and serial hardware backends
+MockHardwareBus / SerialHardwareBus
+ZeroFS deterministic storage
 ```
 
-### Debugging and Verification
+### Debugging / Verification
 
 ```text
-single-process debugger
-multi-process debugger
-PID-aware controls
-source stepping
-breakpoints / conditional breakpoints
-watchpoints
+single-process and multi-process debugger
+PID-aware controls and source stepping
+breakpoints / conditional breakpoints / watchpoints
 snapshot JSON
-semantic protected-syscall history
-multi-process trace
-invariant verification
-trace diff
+semantic syscall and context-switch history
+multi-process trace + invariant verification
+architectural / strict trace diff
 golden regression
-Zero Studio debugger frontend
-```
-
----
-
-## 2. Current Milestone: v1.6 — Consistency and Platform Cleanup
-
-v1.6 does not add another major execution subsystem.
-
-Its purpose is to make the already-implemented platform internally consistent
-and understandable.
-
-Completed:
-
-```text
-v1.6-A
-  README and current architecture documentation aligned with v1.5
-
-v1.6-B
-  zero_cli syscall-table split into:
-    Guest Mini-Kernel / BIO-OS ABI
-    Protected Host Runtime ABI
-
-  protected service/status numbers sourced from
-  ProtectedSyscallDispatcher constants
-
-  syscall-table regression assertions added
-```
-
-Current work:
-
-```text
-v1.6-C
-  current architecture roadmap cleanup
-  execution-semantics documentation cleanup
-  hardware roadmap cleanup
-```
-
-v1.6 is complete when non-historical documentation no longer presents already
-implemented protection, scheduling, hardware, or verification work as future
-features.
-
----
-
-## 3. v1.7 — Hardware Demonstration Completion
-
-The hardware abstraction and serial bridge already exist.
-
-v1.7 focuses on making the physical path a strong, reproducible demonstration.
-
-Target path:
-
-```text
-User Process
-  → INT 80
-  → protected Kernel dispatcher
-  → hardware MMIO
-  → SerialHardwareBus
-  → Windows serial transport
-  → ESP32
-  → physical GPIO / sensor
-```
-
-Primary goals:
-
-```text
-reproducible ESP32 setup
-real GPIO output demonstration
-real GPIO or ADC input demonstration
-clear timeout/error behavior
-mock-vs-physical comparison
-trace/debug visibility for physical transactions
-```
-
-Studio physical-device controls may be added when they expose this stable core
-path. They are not a prerequisite for the core hardware path itself.
-
----
-
-## 4. v1.8 — BIO-OS and Protected Runtime Integration
-
-BIO-OS currently remains a useful guest-kernel integration demo, but it predates
-the protected multi-process runtime.
-
-v1.8 should connect the concepts without deleting the historical guest ABI.
-
-Goals:
-
-```text
-preserve BIO-OS guest syscall demo
-clarify guest Kernel vs protected host Kernel responsibilities
-run BIO-OS concepts through protected process/address-space boundaries
-demonstrate User→Kernel service transitions
-reuse current scheduler/lifecycle infrastructure where appropriate
-avoid duplicate execution semantics
-```
-
-BIO-OS should become a consumer/demo of the platform rather than the center of
-the architecture.
-
----
-
-## 5. v1.9 — End-to-End Platform Demo and Polish
-
-v1.9 assembles existing pieces into one strong demonstration.
-
-Target demonstration:
-
-```text
-Process A (.zbin)
-Process B (.zbin)
-  ↓
-independent address spaces
-  ↓
-timer-driven round-robin preemption
-  ↓
-User / Kernel protection
-  ↓
-protected syscall
-  ↓
-hardware access
-  ↓
-process exit or isolated fault
-  ↓
-scheduler handoff
-  ↓
-debugger / Studio observation
-  ↓
-trace export
-  ↓
-invariant + golden verification
-```
-
-Polish goals:
-
-```text
-stable demo fixtures
-clear CLI commands
-source symbols included
-repeatable expected results
-portfolio screenshots / short demo guide
-remove misleading legacy wording from current docs
-```
-
----
-
-## 6. v2.0 — First Complete Zero-CPU Platform
-
-v2.0 is the first planned completion boundary.
-
-A v2.0 Zero-CPU release should demonstrate:
-
-```text
-custom ISA + assembler
-versioned executable format
-protected virtual CPU
-processes + address spaces
-preemptive scheduler
-fault isolation
-guest and protected syscall models
-virtual and physical hardware paths
-source-aware debugger
-multi-process debugger
 Zero Studio frontend
-trace/invariant/golden verification
-end-to-end reproducible demo
 ```
-
-At v2.0 the project is complete enough to stand as a systems-software portfolio
-project without requiring CPU microarchitecture simulation.
 
 ---
 
-## 7. Deferred Work
-
-The following are intentionally **not required for v2.0**:
+## 2. Completed Milestone Path
 
 ```text
-cache simulation
-5-stage pipeline simulation
-hazard handling
-branch prediction
-page-table/MMU experiments
+v1.5  protected runtime observability
+      syscall semantics → trace → debugger → Studio
+
+v1.6  architecture / ABI consistency cleanup
+
+v1.7  protected hardware path and reproducible mock demonstration
+      optional ESP32 physical transport path retained
+
+v1.8  ZeroFS + protected filesystem services 30 / 31 / 32
+
+v1.9  end-to-end protected showcase
+      real .zasm programs
+      preemptive multi-process execution
+      filesystem + hardware syscalls
+      intentional protection fault
+      survivor process completion
+      Studio presentation
+      invariant + golden trace regression
+```
+
+The v1.9 showcase is the integration boundary proving that the major subsystems
+work together rather than only in isolated unit tests.
+
+---
+
+## 3. Current Phase: v2.0 Productization
+
+The v2.0 feature scope is frozen.
+
+```text
+v2.0-A  README and current-document consistency
+v2.0-B  current architecture diagram
+v2.0-C  single-command showcase entry point
+v2.0-D  2–3 minute demo script and portfolio screenshots
+v2.0-E  design decisions / limitations / final release notes
+v2.0-F  final regression, tag v2.0.0, release
+```
+
+These are packaging/release tasks, not new machine subsystems.
+
+---
+
+## 4. v2.0 Exit Criteria
+
+A short review should make these points clear:
+
+```text
+1. Zero-CPU's identity and canonical execution path.
+2. User/Kernel protection boundaries.
+3. Independent process scheduling and isolation.
+4. Protected syscall access to storage and hardware.
+5. Faulted-process isolation while another process survives.
+6. Debugger/Studio visibility into that flow.
+7. Trace invariants and golden regression for the same run.
+```
+
+Release artifacts:
+
+```text
+concise README
+current architecture diagram
+one showcase command
+2–3 minute demo sequence
+Studio screenshots
+design decisions and limitations
+73-stage regression baseline
+v2.0.0 tag/release
+```
+
+---
+
+## 5. Canonical Showcase
+
+```text
+Process 1 (.zasm → .zbin)
+  → FS_READ("/data/showcase.txt")
+  → survives Process 2 fault
+  → FS_WRITE
+  → HELLOHELLO
+  → exit 0
+
+Process 2 (.zasm → .zbin)
+  → protected HW_WRITE(GPIO=42)
+  → illegal direct User MMIO write
+  → protection fault
+  → isolated termination
+```
+
+Both use timer quantum `1`. The same execution is consumed by the runtime,
+debugger, Studio, trace JSON, invariant verifier, and golden regression.
+
+---
+
+## 6. Hardware Scope
+
+```text
+MockHardwareBus
+  = deterministic, automated, reproducible baseline
+
+SerialHardwareBus / Windows serial / ESP32 path
+  = optional physical extension
+```
+
+Physical hardware is useful evidence but is not required for the protected
+hardware architecture to be reproducible or testable.
+
+---
+
+## 7. Feature Freeze / Deferred Work
+
+```text
+cache simulator
+5-stage pipeline simulator
+hazard / branch-prediction experiments
+page-table/MMU research
 network stack
-filesystem
+general-purpose filesystem expansion
+browser / Web platform
+GPU / 3D
+Linux compatibility
+x86 compatibility
 ESP32-hosted full Zero-CPU interpreter
 ```
 
-They can become later v2.x research or extension work.
-
-Adding them before the protected platform is integrated would broaden the
-project without strengthening its main architecture.
+ZeroFS itself is implemented and part of v2.0. The deferred filesystem item is
+broad general-purpose expansion.
 
 ---
 
 ## 8. Module Boundary Direction
 
-Possible future library boundaries:
+Possible later boundaries:
 
 ```text
 zero_cpu_arch
@@ -323,62 +235,56 @@ zero_cpu_hardware
 zero_cpu_host_windows
 ```
 
-Executables:
-
-```text
-zero_cli
-zero_studio
-```
-
-These boundaries are a direction for gradual cleanup, not a reason for an
-immediate large refactor.
+Executables remain `zero_cli` and `zero_studio`. These are post-v2.0 cleanup
+directions, not a reason for a large pre-release refactor.
 
 ---
 
 ## 9. Design Rules
 
-Zero-CPU should continue to follow these rules:
-
 ```text
 1. Core semantics are authoritative.
-2. Stable behavior receives automated tests before frontend polish.
-3. The canonical executable path is .zasm → .zbin → loader → CPU.
+2. Stable behavior receives automated tests before frontend presentation.
+3. Canonical execution is .zasm → .zbin → loader → CPU.
 4. CLI and Studio consume core behavior rather than reproduce it.
-5. User mode must not bypass protection to access Kernel memory or MMIO.
-6. Process lifecycle and scheduler behavior must remain deterministic enough
-   for trace verification.
-7. Semantic events should be recorded once in the core and reused by tools.
-8. Historical milestone documents may remain, but current docs must identify
-   implemented behavior accurately.
-9. Avoid speculative microarchitecture work until the v2.0 platform is done.
+5. User mode cannot bypass protection to access Kernel memory or MMIO.
+6. Scheduling/lifecycle behavior stays deterministic enough for verification.
+7. Semantic events are recorded once in the core and reused by tools.
+8. Historical notes may remain; current docs describe current behavior.
+9. The mock path must reproduce the showcase without physical hardware.
+10. v2.0 work must improve clarity, reproducibility, or release evidence rather
+    than add unrelated features.
 ```
 
 ---
 
 ## 10. Completion Perspective
 
-The difficult core subsystems are already present:
+The integrated system layers are already present:
 
 ```text
 protection
-processes
+multi-process execution
 preemption
 syscalls
 hardware abstraction
+ZeroFS storage
+fault isolation
 debugger
-verification
-Studio consumption
+Studio
+trace verification
+golden regression
 ```
 
-The remaining path to v2.0 is primarily:
+The remaining path is:
 
 ```text
-consistency
-physical demonstration
-integration
-end-to-end presentation
+explain it clearly
+run it easily
+show it quickly
+verify it completely
+freeze it
+release it
 ```
 
-That is the current architectural roadmap.
-
-<!-- Patch: v1.6-current-roadmap-semantics-r1 -->
+<!-- Patch: v2.0-productization-docs-r1 -->

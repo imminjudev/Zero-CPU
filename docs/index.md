@@ -31,6 +31,7 @@ docs/project-overview.md
 docs/architecture-roadmap.md
 docs/semantics.md
 docs/syscall-convention.md
+docs/end-to-end-showcase.md
 ```
 
 `docs/semantics.md` remains the detailed instruction/state-transition reference.
@@ -142,13 +143,19 @@ Current direction is summarized in the root README and project overview.
   → Zero Studio
 ```
 
-Current milestone:
+Completed platform milestone:
 
 ```text
 v1.9 end-to-end protected showcase
 ```
 
-Current regression suite:
+Current release phase:
+
+```text
+v2.0 productization / feature-freeze preparation
+```
+
+Current regression baseline:
 
 ```text
 73 stages
@@ -177,3 +184,5 @@ future direction
 <!-- Patch: v1.7-protected-esp32-gpio-demo-r1 -->
 
 <!-- Patch: v1.8-zero-fs-core-r1 -->
+
+<!-- Patch: v2.0-productization-docs-r1 -->
