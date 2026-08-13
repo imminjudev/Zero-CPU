@@ -681,12 +681,13 @@ current architecture diagram
 single-command showcase entry point
 2–3 minute demo script
 portfolio screenshots
+design decisions and limitations
+v2.0.0 release notes
 ```
 
-The remaining v2.0 work is presentation and release engineering:
+The remaining v2.0 work is final verification and release engineering:
 
 ```text
-design decisions and limitations
 final regression pass
 v2.0.0 tag and release
 ```
@@ -694,6 +695,11 @@ v2.0.0 tag and release
 The mock hardware path is the reproducible demonstration baseline. Physical
 ESP32 transport remains an optional extension and is not required to prove the
 protected hardware architecture.
+
+The v2.0 architectural tradeoffs and explicit limitations are recorded in
+`docs/v2.0-design-decisions.md`. Prepared release notes are in
+`docs/release-notes-v2.0.0.md`; the actual tag/release remains gated on the final
+v2.0-F regression.
 
 Potential future module boundaries remain:
 
@@ -718,3 +724,5 @@ v2.0 scope.
 <!-- Patch: v2.0-single-command-showcase-r1 -->
 
 <!-- Patch: v2.0-demo-guide-r1 -->
+
+<!-- Patch: v2.0-release-docs-r1 -->

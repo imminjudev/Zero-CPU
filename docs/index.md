@@ -11,6 +11,8 @@ README.md
 docs/project-overview.md
 docs/architecture.md
 docs/v2.0-demo-guide.md
+docs/v2.0-design-decisions.md
+docs/release-notes-v2.0.0.md
 docs/syscall-convention.md
 ```
 
@@ -23,6 +25,12 @@ process model, hardware path, debugger, and verification layers.
 
 `docs/v2.0-demo-guide.md` contains the timed 2–3 minute showcase presentation
 and the committed portfolio screenshots.
+
+`docs/v2.0-design-decisions.md` records the architectural tradeoffs and explicit
+v2.0 limitations.
+
+`docs/release-notes-v2.0.0.md` is the prepared final release-note body. It
+remains release-candidate documentation until the v2.0-F regression and tag.
 
 `docs/syscall-convention.md` defines both syscall layers that currently coexist:
 
@@ -198,3 +206,5 @@ future direction
 <!-- Patch: v2.0-current-architecture-diagram-r1 -->
 
 <!-- Patch: v2.0-demo-guide-r1 -->
+
+<!-- Patch: v2.0-release-docs-r1 -->

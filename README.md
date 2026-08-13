@@ -387,6 +387,8 @@ docs/architecture-roadmap.md
 docs/syscall-convention.md
 docs/end-to-end-showcase.md
 docs/v2.0-demo-guide.md
+docs/v2.0-design-decisions.md
+docs/release-notes-v2.0.0.md
 docs/zero-fs.md
 ```
 
@@ -408,12 +410,13 @@ current architecture diagram
 single-command showcase entry point
 2–3 minute demo script
 portfolio screenshots
+design decisions and limitations
+v2.0.0 release notes
 ```
 
 Remaining release work:
 
 ```text
-design decisions and limitations
 final regression pass
 v2.0.0 tag and release
 ```
@@ -433,6 +436,12 @@ Linux or x86 compatibility
 The release boundary is intentionally about presenting and verifying the
 existing protected virtual-computer platform well.
 
+See [`docs/v2.0-design-decisions.md`](docs/v2.0-design-decisions.md) for the
+architectural tradeoffs and known limitations, and
+[`docs/release-notes-v2.0.0.md`](docs/release-notes-v2.0.0.md) for the prepared
+release notes. The `v2.0.0` tag is created only after the final v2.0-F
+regression pass.
+
 ---
 
 ## License
@@ -446,3 +455,5 @@ MIT License. See [`LICENSE`](LICENSE).
 <!-- Patch: v2.0-single-command-showcase-r1 -->
 
 <!-- Patch: v2.0-demo-guide-r1 -->
+
+<!-- Patch: v2.0-release-docs-r1 -->
