@@ -132,10 +132,18 @@ v2.0-D  2–3 minute demo script and portfolio screenshots
 v2.0-E  design decisions / limitations / final release notes
 ```
 
-Remaining release work:
+v2.0-F verification completed:
 
 ```text
-v2.0-F  final regression, tag v2.0.0, release
+final 73-stage regression  PASS
+public zero_cli showcase   PASS (covered by stage 73)
+```
+
+Remaining publication steps:
+
+```text
+tag the verified release commit as v2.0.0
+publish the GitHub Release
 ```
 
 These are packaging/release tasks, not new machine subsystems.
@@ -301,3 +309,5 @@ release it
 <!-- Patch: v2.0-demo-guide-r1 -->
 
 <!-- Patch: v2.0-release-docs-r1 -->
+
+<!-- Patch: v2.0-final-verification-r1 -->

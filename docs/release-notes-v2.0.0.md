@@ -1,7 +1,9 @@
 # Zero-CPU v2.0.0 Release Notes
 
-Status: **release-candidate notes prepared; tag/release is created only after the
-final v2.0-F regression pass.**
+Verification status: **final v2.0-F regression passed — 73 stages, all
+Zero-CPU tests passed.**
+
+This document is the publication source for the `v2.0.0` tag's GitHub Release.
 
 Zero-CPU v2.0.0 is the productization release of the protected virtual-computer
 platform completed by the v1.9 end-to-end showcase.
@@ -165,19 +167,19 @@ Full local regression:
 scripts\test_all.bat
 ```
 
-v2.0-F will create the release tag only after the final clean regression pass.
+The final clean regression pass was completed before release publication.
 
 ## Regression Baseline
 
-The release candidate baseline is:
+The verified v2.0.0 release baseline is:
 
 ```text
 73 stages
 All Zero-CPU tests passed.
 ```
 
-The final v2.0.0 tag must point to a commit that passes the same full regression
-suite.
+The release tag must point to the verified release commit containing the same
+runtime/code baseline.
 
 ## Known Limitations
 
@@ -211,24 +213,22 @@ v2.0-B  current architecture diagram
 v2.0-C  single-command showcase entry point
 v2.0-D  2–3 minute demo guide and portfolio screenshots
 v2.0-E  design decisions, limitations, and release notes
-v2.0-F  final regression, v2.0.0 tag, GitHub Release
+v2.0-F  final 73-stage regression PASS; publication remains
 ```
 
-At the end of v2.0-E, only v2.0-F remains.
+## Publication
 
-## Release Checklist
-
-Before creating `v2.0.0`:
+The verified release commit should be published by:
 
 ```text
-[ ] working tree clean
-[ ] full 73-stage regression passes
-[ ] public zero_cli showcase passes
-[ ] README/current docs match release state
-[ ] tag points to the final release commit
-[ ] GitHub Release body matches these notes
+1. create annotated tag v2.0.0 on the verified release commit
+2. push v2.0.0 to origin
+3. create the GitHub Release from tag v2.0.0
+4. use this document as the release-note source
 ```
 
-The checklist is intentionally left unchecked until v2.0-F is performed.
+No additional machine subsystem or feature work is part of v2.0.
 
 <!-- Patch: v2.0-release-notes-r1 -->
+
+<!-- Patch: v2.0-final-verification-r1 -->

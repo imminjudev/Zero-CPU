@@ -398,11 +398,18 @@ source and current-state documentation take precedence.
 
 ---
 
-## Current Phase: v2.0 Productization
+## Current Phase: v2.0.0 Release Candidate
 
 The v1.9 end-to-end platform showcase is complete.
 
-The **v2.0 feature scope is frozen**. Productization completed so far:
+The **v2.0 feature scope is frozen**. The final v2.0-F regression has passed:
+
+```text
+73 stages
+All Zero-CPU tests passed.
+```
+
+Productization completed:
 
 ```text
 documentation consistency
@@ -414,11 +421,11 @@ design decisions and limitations
 v2.0.0 release notes
 ```
 
-Remaining release work:
+The verified release candidate is ready for publication:
 
 ```text
-final regression pass
-v2.0.0 tag and release
+tag this release commit as v2.0.0
+publish the GitHub Release
 ```
 
 Not planned for v2.0:
@@ -439,8 +446,9 @@ existing protected virtual-computer platform well.
 See [`docs/v2.0-design-decisions.md`](docs/v2.0-design-decisions.md) for the
 architectural tradeoffs and known limitations, and
 [`docs/release-notes-v2.0.0.md`](docs/release-notes-v2.0.0.md) for the prepared
-release notes. The `v2.0.0` tag is created only after the final v2.0-F
-regression pass.
+release notes. The final v2.0-F regression is complete; publication now
+consists only of tagging the verified release commit as `v2.0.0` and creating
+the GitHub Release.
 
 ---
 
@@ -457,3 +465,5 @@ MIT License. See [`LICENSE`](LICENSE).
 <!-- Patch: v2.0-demo-guide-r1 -->
 
 <!-- Patch: v2.0-release-docs-r1 -->
+
+<!-- Patch: v2.0-final-verification-r1 -->

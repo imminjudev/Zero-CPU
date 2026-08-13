@@ -168,7 +168,9 @@ v1.9 end-to-end protected showcase
 Current release phase:
 
 ```text
-v2.0 productization / feature-freeze preparation
+v2.0.0 verified release candidate
+final 73-stage regression PASS
+publication pending: tag + GitHub Release
 ```
 
 Current regression baseline:
@@ -208,3 +210,5 @@ future direction
 <!-- Patch: v2.0-demo-guide-r1 -->
 
 <!-- Patch: v2.0-release-docs-r1 -->
+
+<!-- Patch: v2.0-final-verification-r1 -->

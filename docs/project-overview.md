@@ -685,11 +685,18 @@ design decisions and limitations
 v2.0.0 release notes
 ```
 
-The remaining v2.0 work is final verification and release engineering:
+Final v2.0 verification is complete:
 
 ```text
-final regression pass
-v2.0.0 tag and release
+73-stage regression PASS
+public zero_cli showcase PASS as part of stage 73
+```
+
+Only publication remains:
+
+```text
+v2.0.0 tag
+GitHub Release
 ```
 
 The mock hardware path is the reproducible demonstration baseline. Physical
@@ -698,8 +705,8 @@ protected hardware architecture.
 
 The v2.0 architectural tradeoffs and explicit limitations are recorded in
 `docs/v2.0-design-decisions.md`. Prepared release notes are in
-`docs/release-notes-v2.0.0.md`; the actual tag/release remains gated on the final
-v2.0-F regression.
+`docs/release-notes-v2.0.0.md`. The final v2.0-F regression has passed, so
+the verified release commit is ready to be tagged and published.
 
 Potential future module boundaries remain:
 
@@ -726,3 +733,5 @@ v2.0 scope.
 <!-- Patch: v2.0-demo-guide-r1 -->
 
 <!-- Patch: v2.0-release-docs-r1 -->
+
+<!-- Patch: v2.0-final-verification-r1 -->
