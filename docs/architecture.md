@@ -1,500 +1,320 @@
-# Zero-CPU Architecture
+# Zero-CPU Current Architecture
 
-## 1. Architecture Overview
+Zero-CPU is a **verifiable and observable protected virtual computer platform**.
 
-Zero-CPU는 학습 및 분석 목적의 가상 CPU 아키텍처이다.
-이 아키텍처는 실제 x86 또는 ARM을 그대로 모방하지 않고, CPU의 핵심 동작 원리를 이해하기 위해 필요한 구성 요소를 단순화하여 설계한다.
+This document is the current architecture map for the v2.0 productization
+boundary. Older milestone-specific architecture notes may remain in the
+repository as history, but this document describes the current platform.
 
-Zero-CPU의 핵심 목표는 다음과 같다.
+## 1. Platform Architecture
 
-* 명령어가 CPU 상태를 어떻게 변화시키는지 관찰한다.
-* 레지스터, 메모리, 플래그, 스택, PC의 관계를 코드 수준에서 구현한다.
-* Fetch-Decode-Execute 사이클을 직접 구현한다.
-* 각 명령어 실행 전후의 상태 전이를 추적한다.
-* 어셈블리 코드가 CPU 내부 명령어로 변환되고 실행되는 과정을 구현한다.
+```mermaid
+flowchart TD
+    A[".zasm source"] --> B["Assembler"]
+    B --> C[".zbin executable"]
+    B --> D[".zsym debug symbols"]
 
-## 2. Core Components
+    C --> E["Binary / Process Loader"]
+    D --> Q["Source-aware Debugger"]
+    E --> F["ProcessImage + Address Space"]
 
-Zero-CPU는 다음 구성 요소로 이루어진다.
+    F --> G["Multi-Process Runtime"]
+    G --> H["Protected CPU<br/>fetch / decode / execute"]
+    G --> I["Round-Robin Scheduler"]
+    J["TimerDevice"] --> I
+    I --> G
+
+    H --> K["User / Kernel Privilege Boundary"]
+    K --> L["INT 80 ProtectedSyscallDispatcher"]
+    K --> M["Protection Faults"]
+    M --> N["Process Lifecycle / Fault Isolation"]
+    N --> I
+
+    L --> O["ZeroFS<br/>FS_STAT / FS_READ / FS_WRITE"]
+    L --> P["MMIOBus"]
+    P --> R["HardwareMMIODevice"]
+    R --> S["MockHardwareBus"]
+    R --> T["SerialHardwareBus"]
+    T --> U["Windows Serial / ESP32 path"]
+
+    G --> V["Semantic Execution Trace"]
+    V --> W["Invariant Verifier"]
+    V --> X["Trace JSON"]
+    X --> Y["Architectural / Strict Diff"]
+    Y --> Z["Golden Regression"]
+
+    G --> Q
+    Q --> AA["StudioMultiProcessDebugBackend"]
+    AA --> AB["Zero Studio"]
+
+    AC["zero_cli"] --> E
+    AC --> G
+    AC --> Q
+```
+
+The important architectural rule is that CLI and Studio are **consumers of the
+core runtime/debugger behavior**. They do not implement a second execution
+model.
+
+## 2. Canonical Executable Path
 
 ```text
-+----------------------+
-|       Program        |
-|      (.zasm)         |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|      Assembler       |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|    Instruction List  |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|         CPU          |
-|                      |
-|  +----------------+  |
-|  | Register File  |  |
-|  +----------------+  |
-|  | Memory         |  |
-|  +----------------+  |
-|  | Flags          |  |
-|  +----------------+  |
-|  | PC / SP        |  |
-|  +----------------+  |
-|  | ALU            |  |
-|  +----------------+  |
-|  | Decoder        |  |
-|  +----------------+  |
-|  | Execution Unit |  |
-|  +----------------+  |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|    Trace Logger      |
-+----------------------+
+.zasm
+  → Assembler
+  → .zbin
+  → Binary / Process Loader
+  → process memory image
+  → CPU fetch / decode / execute
 ```
 
-## 3. CPU State
+`.zsym` is a sidecar used for symbols and source-line mapping. It does not
+replace the executable path.
 
-CPU의 상태는 특정 시점에서 CPU 내부에 저장된 모든 실행 정보를 의미한다.
-Zero-CPU에서 CPU 상태는 다음 요소로 구성된다.
+The older in-memory instruction path remains useful for focused tests and
+compatibility, but `.zasm → .zbin → loader → CPU` is the canonical executable
+architecture.
 
-* General Purpose Registers
-* Program Counter
-* Stack Pointer
-* Flags Register
-* Memory
-* Halt State
+## 3. Protected Execution Boundary
 
-CPU 상태는 명령어가 실행될 때마다 변경될 수 있다.
-
-## 4. Register File
-
-Register File은 CPU가 연산에 사용할 값을 저장하는 공간이다.
-
-초기 설계에서는 다음 범위의 범용 레지스터를 사용한다.
+The protected machine has explicit `User` and `Kernel` privilege levels.
 
 ```text
-R0
-R1
-R2
-R3
-R4
-R5
-R6
-R7
+User process
+  │
+  ├─ normal RAM/code access ─────────────── allowed within its ranges
+  │
+  ├─ direct MMIO / Kernel-only access ──── protection fault
+  │
+  └─ INT 80
+       ↓
+     protected interrupt frame
+       ↓
+     Kernel mode
+       ↓
+     ProtectedSyscallDispatcher
+       ↓
+     validated runtime service
+       ↓
+     restore User frame OR terminate process
 ```
 
-각 레지스터는 정수 값을 저장한다.
-초기 구현에서는 단순성을 위해 고정 크기 정수 타입을 사용할 수 있으며, 이후 확장 단계에서 64-bit 또는 320-bit 레지스터 구조로 확장할 수 있다.
+The CPU owns the User→Kernel transition and protected interrupt frame. The
+dispatcher provides host-side protected services; it does not bypass CPU
+privilege semantics.
 
-### Register Usage
+## 4. Process and Scheduling Model
+
+Each process owns independent execution state:
 
 ```text
-R0 - General Purpose Register
-R1 - General Purpose Register
-R2 - General Purpose Register
-R3 - General Purpose Register
-R4 - General Purpose Register
-R5 - General Purpose Register
-R6 - General Purpose Register
-R7 - General Purpose Register
+registers
+PC / SP
+memory image
+code range
+lifecycle state
+exit / fault information
 ```
 
-## 5. Program Counter
-
-Program Counter, 즉 PC는 다음에 실행할 명령어의 위치를 가리킨다.
-
-CPU는 매 실행 사이클마다 PC가 가리키는 명령어를 가져온다.
-일반 명령어가 실행되면 PC는 다음 명령어를 가리키도록 증가한다.
+The multi-process runtime coordinates:
 
 ```text
-PC = PC + 1
+ProcessTable / PCB
+ProcessAddressSpace
+ProcessContext
+ProcessLifecycleManager
+RoundRobinScheduler
+TimerPreemptiveScheduler
 ```
 
-하지만 분기 명령어가 실행되면 PC는 특정 라벨 또는 주소로 변경된다.
+Timer-driven preemption and lifecycle handoff are observable in the same
+multi-process trace used by the debugger and regression tests.
+
+A faulted process is terminated in isolation. Another ready process can continue
+from its own address space and saved context.
+
+## 5. Protected Runtime Services
+
+The current protected host ABI uses `INT 80`.
 
 ```text
-JMP target
-PC = target
+3   process exit
+
+20  hardware write
+21  hardware read
+
+30  filesystem stat
+31  filesystem read
+32  filesystem write
 ```
 
-조건 분기 명령어의 경우 플래그 값에 따라 PC 변경 여부가 결정된다.
+Filesystem services use validated User-memory request blocks and buffers.
+ZeroFS is deterministic host-side storage and is separate from the guest's
+4 KiB RAM image.
 
-## 6. Stack Pointer
-
-Stack Pointer, 즉 SP는 스택의 현재 위치를 가리킨다.
-
-스택은 다음 기능을 위해 사용된다.
-
-* PUSH
-* POP
-* CALL
-* RET
-* 함수 호출 복귀 주소 저장
-
-초기 설계에서는 메모리의 일부 영역을 스택으로 사용한다.
-
-예시:
+Hardware services reach the shared hardware MMIO window only from protected
+Kernel context:
 
 ```text
-Memory[0 ... 255]      : General Memory
-Memory[256 ... 511]    : Stack Area
+User
+  → INT 80
+  → ProtectedSyscallDispatcher
+  → MMIOBus
+  → HardwareMMIODevice
+  → MockHardwareBus
+     or SerialHardwareBus
 ```
 
-스택은 높은 주소에서 낮은 주소로 자라거나, 낮은 주소에서 높은 주소로 자라도록 설계할 수 있다.
-초기 구현에서는 단순성을 위해 낮은 주소에서 높은 주소로 증가하는 스택을 사용할 수 있다.
+The mock path is the deterministic v2.0 baseline. The serial/ESP32 path is an
+optional physical extension.
 
-## 7. Flags Register
-
-Flags Register는 연산 결과에 대한 상태 정보를 저장한다.
-
-초기 구현 대상 플래그는 다음과 같다.
+## 6. Memory and Device Map
 
 ```text
-ZF - Zero Flag
-SF - Sign Flag
-OF - Overflow Flag
-CF - Carry Flag
+Guest RAM
+0x0000..0x01FF  User data / low memory
+0x0200..        loaded executable code
+0x0800..0x0F9F  User stack
+0x0FA0..0x0FFF  Kernel interrupt stack
+
+MMIO
+0xF000..0xF00F  DebugOutputDevice
+0xF100..0xF12F  TimerDevice
+0xF200..0xF22F  Hardware bridge
 ```
 
-### ZF: Zero Flag
-
-연산 결과가 0이면 설정된다.
+Hardware bridge offsets:
 
 ```text
-result == 0 -> ZF = 1
-result != 0 -> ZF = 0
++0   GPIO output
++8   GPIO input
++16  PWM output
++24  ADC input
++32  status
++40  command
 ```
 
-### SF: Sign Flag
+## 7. Observability and Verification
 
-연산 결과가 음수이면 설정된다.
+Observability is part of the correctness model.
+
+```mermaid
+flowchart LR
+    A["Execution"] --> B["Instruction Events"]
+    A --> C["Scheduler / Context Switch Events"]
+    A --> D["Protected Syscall Semantics"]
+    A --> E["Fault / Lifecycle Events"]
+
+    B --> F["Structured Multi-Process Trace"]
+    C --> F
+    D --> F
+    E --> F
+
+    F --> G["Debugger / Zero Studio"]
+    F --> H["Invariant Verifier"]
+    F --> I["JSON Export"]
+    I --> J["TraceJsonDiff"]
+    J --> K["Golden Regression"]
+```
+
+The system records semantic syscall fields such as service, status, result,
+disposition, and exit code. Verification therefore does not need to infer
+syscall meaning from console text or raw register changes.
+
+## 8. End-to-End Showcase Mapping
+
+The v1.9 showcase crosses the main architecture boundaries in one deterministic
+run:
 
 ```text
-result < 0 -> SF = 1
-result >= 0 -> SF = 0
+Process 1
+  FS_READ
+    ↓
+Process 2
+  HW_WRITE(GPIO=42)
+    ↓
+Process 2
+  illegal direct User MMIO
+    ↓
+protection fault
+    ↓
+lifecycle termination / scheduler handoff
+    ↓
+Process 1 survives
+    ↓
+FS_WRITE
+    ↓
+HELLOHELLO
+    ↓
+exit 0
+    ↓
+runtime Completed
 ```
 
-### OF: Overflow Flag
-
-연산 결과가 표현 가능한 범위를 초과하면 설정된다.
-
-초기 구현에서는 단순성을 위해 선택적으로 구현할 수 있다.
-
-### CF: Carry Flag
-
-부호 없는 연산에서 자리올림 또는 빌림이 발생하면 설정된다.
-
-초기 구현에서는 선택적으로 구현할 수 있다.
-
-## 8. Memory Model
-
-Zero-CPU의 메모리는 단순한 선형 메모리 구조를 사용한다.
+That execution is observed by:
 
 ```text
-Memory[0]
-Memory[1]
-Memory[2]
-...
-Memory[N-1]
+MultiProcessDebugSession
+Zero Studio
+semantic syscall history
+context-switch history
+trace JSON
+invariant verifier
+golden trace regression
 ```
 
-초기 메모리 크기는 다음과 같이 설정할 수 있다.
+The showcase therefore demonstrates **integration**, not a separate demo-only
+execution implementation.
+
+## 9. Frontend Boundary
 
 ```text
-Memory Size = 1024 cells
+Core machine/runtime
+  ├─ zero_cli
+  ├─ DebugSession
+  └─ MultiProcessDebugSession
+        ↓
+      StudioMultiProcessDebugBackend
+        ↓
+      Zero Studio
 ```
 
-각 메모리 셀은 정수 값을 저장한다.
+Zero Studio may add presentation state and controls, but execution semantics stay
+in the core/runtime/debugger layers.
 
-메모리는 다음 명령어를 통해 접근한다.
+## 10. v2.0 Boundary
 
-```asm
-LOAD R1, [100]
-STORE [100], R1
-```
+The architecture is feature-frozen for v2.0.
 
-### Memory Access
-
-* `LOAD`: 메모리 값을 레지스터로 가져온다.
-* `STORE`: 레지스터 값을 메모리에 저장한다.
-
-## 9. Instruction Format
-
-Zero-CPU의 내부 명령어는 다음 구조로 표현한다.
-
-```cpp
-struct Instruction {
-    Opcode opcode;
-    Operand dst;
-    Operand src;
-};
-```
-
-명령어는 크게 다음 요소로 구성된다.
-
-* Opcode
-* Destination Operand
-* Source Operand
-* Optional Immediate Value
-* Optional Label
-
-예시:
-
-```asm
-MOV R1, 10
-ADD R1, R2
-JMP loop
-HALT
-```
-
-## 10. Operand Types
-
-Zero-CPU의 피연산자는 다음과 같은 타입을 가진다.
+The release boundary includes:
 
 ```text
-REGISTER
-IMMEDIATE
-MEMORY_ADDRESS
-LABEL
-NONE
+custom ISA + assembler
+versioned .zbin executable
+protected User / Kernel CPU
+processes + independent address spaces
+timer-driven preemptive scheduling
+fault isolation
+protected hardware and filesystem syscalls
+MMIO / mock / serial hardware abstraction
+ZeroFS storage
+source-aware debugger
+multi-process debugger
+Zero Studio
+trace / invariant / diff / golden verification
+end-to-end showcase
 ```
 
-### REGISTER
-
-레지스터를 의미한다.
-
-```asm
-R1
-R2
-```
-
-### IMMEDIATE
-
-즉시값을 의미한다.
-
-```asm
-10
--5
-```
-
-### MEMORY_ADDRESS
-
-메모리 주소를 의미한다.
-
-```asm
-[100]
-```
-
-### LABEL
-
-분기 대상 라벨을 의미한다.
-
-```asm
-loop
-end
-```
-
-## 11. Fetch-Decode-Execute Cycle
-
-Zero-CPU는 다음 사이클을 반복한다.
+The following are deliberately outside v2.0:
 
 ```text
-1. Fetch
-2. Decode
-3. Execute
-4. Trace
-5. Update PC
+cache / pipeline / branch-prediction simulation
+network stack
+general-purpose filesystem expansion
+GPU / 3D
+Linux or x86 compatibility
 ```
 
-### 11.1 Fetch
+The v2.0 goal is not a wider feature set. It is a clear, reproducible, verified
+presentation of the protected virtual computer already implemented.
 
-PC가 가리키는 명령어를 가져온다.
-
-```text
-instruction = program[PC]
-```
-
-### 11.2 Decode
-
-가져온 명령어의 Opcode와 Operand를 해석한다.
-
-```text
-opcode = instruction.opcode
-dst = instruction.dst
-src = instruction.src
-```
-
-### 11.3 Execute
-
-명령어의 의미에 따라 CPU 상태를 변경한다.
-
-예시:
-
-```asm
-ADD R1, R2
-```
-
-실행 의미:
-
-```text
-R1 = R1 + R2
-Update Flags
-```
-
-### 11.4 Trace
-
-명령어 실행 전후의 CPU 상태를 기록한다.
-
-```text
-Before State
-Instruction
-After State
-Changed Registers
-Changed Flags
-Next PC
-```
-
-### 11.5 Update PC
-
-일반 명령어는 PC를 1 증가시킨다.
-
-```text
-PC = PC + 1
-```
-
-분기 명령어는 PC를 분기 대상으로 변경한다.
-
-```text
-PC = target
-```
-
-## 12. Execution Example
-
-다음과 같은 프로그램이 있다고 가정한다.
-
-```asm
-MOV R1, 10
-MOV R2, 20
-ADD R1, R2
-HALT
-```
-
-초기 상태:
-
-```text
-R1 = 0
-R2 = 0
-PC = 0
-ZF = 0
-SF = 0
-```
-
-실행 흐름:
-
-```text
-PC=0 -> MOV R1, 10
-PC=1 -> MOV R2, 20
-PC=2 -> ADD R1, R2
-PC=3 -> HALT
-```
-
-최종 상태:
-
-```text
-R1 = 30
-R2 = 20
-PC = 3
-HALT = true
-```
-
-## 13. Trace Example
-
-`ADD R1, R2` 명령어 실행 시 예상 트레이스는 다음과 같다.
-
-```text
-[PC=0002] ADD R1, R2
-
-Before:
-R1 = 10
-R2 = 20
-ZF = 0
-SF = 0
-
-After:
-R1 = 30
-R2 = 20
-ZF = 0
-SF = 0
-
-Changed:
-R1: 10 -> 30
-
-NextPC:
-0003
-```
-
-## 14. Design Principles
-
-Zero-CPU는 다음 설계 원칙을 따른다.
-
-### 14.1 Simplicity First
-
-처음부터 복잡한 실제 CPU 구조를 구현하지 않는다.
-CPU의 핵심 개념을 이해할 수 있도록 단순하고 명확한 구조를 우선한다.
-
-### 14.2 Traceable Execution
-
-모든 명령어 실행은 추적 가능해야 한다.
-실행 결과만 확인하는 것이 아니라, 실행 과정에서 어떤 상태가 변화했는지를 기록한다.
-
-### 14.3 Testable Semantics
-
-각 명령어는 테스트 가능한 실행 의미론을 가져야 한다.
-예를 들어 `ADD`, `SUB`, `CMP`, `JMP`는 입력 상태와 출력 상태를 비교하여 검증할 수 있어야 한다.
-
-### 14.4 Modular Design
-
-CPU, ISA, Assembler, Debugger, Trace 시스템은 서로 분리된 모듈로 구성한다.
-
-```text
-core/
-isa/
-assembler/
-debugger/
-trace/
-```
-
-### 14.5 Documentation-Driven Development
-
-구현 전에 문서로 구조와 명령어 의미를 먼저 정의한다.
-이후 코드는 문서에서 정의한 구조를 기준으로 작성한다.
-
-## 15. Future Expansion
-
-초기 구현이 완료된 이후 다음 기능을 확장할 수 있다.
-
-* 64-bit register mode
-* 320-bit experimental register mode
-* Interrupt simulation
-* Simple process model
-* Virtual memory model
-* Pipeline simulation
-* Cache simulation
-* Web-based visualizer
-* Compiler backend experiment
-
-## 16. Summary
-
-Zero-CPU는 가상 ISA, CPU 상태 모델, 명령어 실행 엔진, 어셈블러, 디버거, 트레이스 시스템으로 구성된 C++ 기반 CPU 에뮬레이터이다.
-
-이 아키텍처의 핵심은 명령어 실행을 단순히 처리하는 것이 아니라, 실행 전후의 CPU 상태 변화를 추적하고 분석하는 것이다.
-
-이를 통해 Zero-CPU는 컴퓨터 구조와 시스템 프로그래밍을 직접 구현하며 학습할 수 있는 연구형 포트폴리오 프로젝트로 발전할 수 있다.
+<!-- Patch: v2.0-current-architecture-diagram-r1 -->

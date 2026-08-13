@@ -9,6 +9,7 @@ This index separates current platform documentation from older milestone notes.
 ```text
 README.md
 docs/project-overview.md
+docs/architecture.md
 docs/syscall-convention.md
 ```
 
@@ -16,6 +17,8 @@ docs/syscall-convention.md
 
 `docs/project-overview.md` describes the current architecture, protected runtime,
 process model, hardware path, debugger, and verification layers.
+
+`docs/architecture.md` is the current rendered platform diagram and boundary map.
 
 `docs/syscall-convention.md` defines both syscall layers that currently coexist:
 
@@ -28,6 +31,7 @@ process model, hardware path, debugger, and verification layers.
 
 ```text
 docs/project-overview.md
+docs/architecture.md
 docs/architecture-roadmap.md
 docs/semantics.md
 docs/syscall-convention.md
@@ -186,3 +190,5 @@ future direction
 <!-- Patch: v1.8-zero-fs-core-r1 -->
 
 <!-- Patch: v2.0-productization-docs-r1 -->
+
+<!-- Patch: v2.0-current-architecture-diagram-r1 -->

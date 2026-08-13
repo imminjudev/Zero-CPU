@@ -49,6 +49,9 @@ The canonical executable path is:
 Studio and CLI tooling consume the same core execution/debugging behavior rather
 than implementing a second machine model.
 
+See the rendered current architecture map in
+[`docs/architecture.md`](docs/architecture.md).
+
 ---
 
 ## End-to-End Showcase
@@ -354,6 +357,7 @@ Start with:
 ```text
 docs/index.md
 docs/project-overview.md
+docs/architecture.md
 docs/architecture-roadmap.md
 docs/syscall-convention.md
 docs/end-to-end-showcase.md
@@ -370,12 +374,16 @@ source and current-state documentation take precedence.
 
 The v1.9 end-to-end platform showcase is complete.
 
-The **v2.0 feature scope is frozen**. Remaining work is productization rather
-than adding new execution subsystems:
+The **v2.0 feature scope is frozen**. Productization completed so far:
 
 ```text
 documentation consistency
 current architecture diagram
+```
+
+Remaining release work:
+
+```text
 single-command showcase entry point
 2–3 minute demo script
 portfolio screenshots
@@ -406,3 +414,5 @@ existing protected virtual-computer platform well.
 MIT License. See [`LICENSE`](LICENSE).
 
 <!-- Patch: v2.0-productization-docs-r1 -->
+
+<!-- Patch: v2.0-current-architecture-diagram-r1 -->
